@@ -107,7 +107,7 @@ project:
 
 analysis:
     # This is the name of the python class to use
-    analysis_pipeline: scilifelab.bcbio.BcbioAnalysis
+    analysis_pipeline: scilifelab.bcbio.launcher.BcbioLauncher
     analysis_launch_method: sbatch              # sbatch, command_line / default command_line
     ## not yet finalized
     #analysis_launch_host:                      # default localhost
