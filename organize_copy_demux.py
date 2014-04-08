@@ -15,6 +15,8 @@ import yaml
 
 ## TODO migrate this out of bcbio-specific code
 from scilifelab.bcbio.qc import FlowcellRunMetricsParser
+
+from scilifelab.utils.config import load_yaml_config_expand_vars
 from scilifelab.log import minimal_logger
 # Set up logging for this script
 LOG = minimal_logger(__name__)
@@ -38,8 +40,7 @@ def main(config_file_path, demux_fcid_dirs=None, restrict_to_projects=None, rest
         restrict_to_samples = []
     demux_fcid_dirs_set = set()
     dirs_to_analyze = set()
-    config = load_config(config_file_path)
-    import ipdb; ipdb.set_trace()
+    config = load_yaml_config_expand_vars(config_file_path)
     if demux_fcid_dirs:
         demux_fcid_dirs_set.update(demux_fcid_dirs)
     else:
@@ -51,13 +52,15 @@ def main(config_file_path, demux_fcid_dirs=None, restrict_to_projects=None, rest
                                                                   config_file_path,
                                                                   restrict_to_projects,
                                                                   restrict_to_samples))
-    analysis_pipeline = config.get("analysis_pipeline")
+    # The configuration file decides which pipeline class we use
+    analysis_pipeline = config.get("analysis", {}).get("analysis_pipeline")
     if not analysis_pipeline:
+        ## TODO Should we have a default?
         LOG.warn("Warning: No analysis pipeline specified in configuration file. "\
                  "Falling back to bcbio-nextgen.")
-        analysis_pipeline = "scilifelab.bcbio.BcbioLauncher"
-    # The configuration file decides which pipeline class we use
-    #AnalysisPipelineClass = get_class(analysis_pipeline)
+        ## TODO scilifelab.piper.launcher.PiperLauncher
+        analysis_pipeline = "scilifelab.bcbio.launcher.BcbioLauncher"
+    AnalysisPipelineClass = get_class(analysis_pipeline)
     for sample_directory in dirs_to_analyze:
         analysis_instance = AnalysisPipelineClass(sample_directory)
         analysis_instance.build_config_file()
@@ -67,7 +70,6 @@ def main(config_file_path, demux_fcid_dirs=None, restrict_to_projects=None, rest
         LOG.info("No directories found to process.")
 
 
-## TODO test me
 def get_class( kls ):
     """http://stackoverflow.com/questions/452969/does-python-have-an-equivalent-to-java-class-forname"""
     parts = kls.split('.')
@@ -111,7 +113,7 @@ def setup_analysis_directory_structure(fc_dir, config_file_path, restrict_to_pro
     """
     LOG.info("Setting up analysis for demultiplexed data in folder \"{}\"".format(fc_dir))
     # Load config, expanding shell variables in paths
-    config = load_config(config_file_path)
+    config = load_yaml_config_expand_vars(config_file_path)
     analysis_top_dir = os.path.abspath(config["analysis"]["top_dir"])
     if not os.path.exists(fc_dir):
         LOG.error("Error: Flowcell directory {} does not exist".format(fc_dir))
@@ -141,23 +143,29 @@ def setup_analysis_directory_structure(fc_dir, config_file_path, restrict_to_pro
 
     # Iterate over the projects in the flowcell directory
     sample_directories = []
+    if not fc_dir_structure.get('projects'):
+        LOG.warn("No projects found in specified flowcell directory \"{}\"".format(fc_dir))
     for project in fc_dir_structure.get('projects', []):
         # If specific projects are specified, skip those that do not match
         project_name = project['project_name']
         if len(restrict_to_projects) > 0 and project_name not in restrict_to_projects:
+            LOG.debug("Skipping project {}".format(project_name))
             continue
+        LOG.info("Setting up project {}".format(project.get("project_dir")))
         # Create a project directory if it doesn't already exist
         project_dir = os.path.join(analysis_top_dir, project_name)
         if not os.path.exists(project_dir):
             ## TODO change to mkdir -p
             os.mkdir(project_dir, 0770)
         # Iterate over the samples in the project
-        for sample_no, sample in enumerate(project.get('samples', [])):
+        for sample in project.get('samples', []):
             # If specific samples are specified, skip those that do not match
             ## this appears to be some scilifelab-specific naming process?
             sample_name = sample['sample_name'].replace('__','.')
             if len(restrict_to_samples) > 0 and sample_name not in restrict_to_samples:
+                LOG.debug("Skipping sample {}".format(sample_name))
                 continue
+            LOG.info("Setting up sample {}".format(sample.get("sample_dir")))
             # Create a directory for the sample if it doesn't already exist
             sample_dir = os.path.join(project_dir, sample_name)
             if not os.path.exists(sample_dir):
@@ -178,9 +186,8 @@ def setup_analysis_directory_structure(fc_dir, config_file_path, restrict_to_pro
             sample_files = do_rsync([os.path.join(src_sample_dir,f) for f in
                                     sample.get('files',[])],dst_sample_fcid_dir)
             sample_directories.append(dst_sample_fcid_dir)
-    else:
-        LOG.warn("No projects found in specified flowcell directory \"{}\"".format(fc_dir))
-    return fc_dir_structure.get("projects", [])
+
+    return sample_directories
 
 
 def parse_casava_directory(fc_dir):
@@ -365,35 +372,35 @@ def do_rsync(src_files, dst_dir):
     return [ os.path.join(dst_dir,os.path.basename(f)) for f in src_files ]
 
 
-def load_config(config_file_path):
-    """Load YAML config file, replacing environmental variables.
-
-    :param str config_file_path: The path to the (yaml-formatted) configuration file to be parsed.
-
-    :returns: A dict of the configuration file with shell variables expanded.
-    :rtype: dict
-    """
-    with open(config_file_path) as in_handle:
-        config = yaml.load(in_handle)
-    config = _expand_paths(config)
-    return config
-
-def _expand_paths(config):
-    for field, setting in config.items():
-        if isinstance(config[field], dict):
-            config[field] = _expand_paths(config[field])
-        else:
-            config[field] = expand_path(setting)
-    return config
-
-def expand_path(path):
-    """ Combines os.path.expandvars with replacing ~ with $HOME.
-    """
-    try:
-        return os.path.expandvars(path.replace("~", "$HOME"))
-    except AttributeError:
-        return path
-
+#def load_config(config_file_path):
+#    """Load YAML config file, replacing environmental variables.
+#
+#    :param str config_file_path: The path to the (yaml-formatted) configuration file to be parsed.
+#
+#    :returns: A dict of the configuration file with shell variables expanded.
+#    :rtype: dict
+#    """
+#    with open(config_file_path) as in_handle:
+#        config = yaml.load(in_handle)
+#    config = _expand_paths(config)
+#    return config
+#
+#def _expand_paths(config):
+#    for field, setting in config.items():
+#        if isinstance(config[field], dict):
+#            config[field] = _expand_paths(config[field])
+#        else:
+#            config[field] = expand_path(setting)
+#    return config
+#
+#def expand_path(path):
+#    """ Combines os.path.expandvars with replacing ~ with $HOME.
+#    """
+#    try:
+#        return os.path.expandvars(path.replace("~", "$HOME"))
+#    except AttributeError:
+#        return path
+#
 
 class OrganizeCopyTests(unittest.TestCase):
     """
@@ -402,21 +409,23 @@ class OrganizeCopyTests(unittest.TestCase):
 ## a cron job will run this periodically, passing only the config file;
 ## the script will check for newly-delivered flowcells and process them
 if __name__=="__main__":
-    parser = argparse.ArgumentParser("I bet you wish I had written a summary here.")
+    parser = argparse.ArgumentParser("Sort and transfer a demultiplxed illumina run.")
     parser.add_argument("--config", required=True,
             help="The path to the configuration file.")
-    parser.add_argument("--projects", action="store",
-            help="Restrict processing to these projects.")
-    parser.add_argument("--samples", action="store",
-            help="Restrict processing to these samples.")
-    parser.add_argument("demux_fcid_dirs", nargs='*', action="store",
+    parser.add_argument("--project", action="append",
+            help="Restrict processing to these projects. "\
+                 "Use flag multiple times for multiple projects.")
+    parser.add_argument("--sample", action="append",
+            help="Restrict processing to these samples. "\
+                 "Use flag multiple times for multiple projects.")
+    parser.add_argument("demux_fcid_dir", nargs='*', action="store",
             help="The path to the Illumina demultiplexed fc directories to process. "\
                  "If not specified, new data will be checked for in the "\
                  "\"INBOX\" directory specifiedin the configuration file.")
 
     args_ns = parser.parse_args()
     main(config_file_path=args_ns.config,
-         demux_fcid_dirs=args_ns.demux_fcid_dirs,
-         restrict_to_projects=args_ns.projects,
-         restrict_to_samples=args_ns.samples)
+         demux_fcid_dirs=args_ns.demux_fcid_dir,
+         restrict_to_projects=args_ns.project,
+         restrict_to_samples=args_ns.sample)
 
