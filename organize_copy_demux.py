@@ -7,7 +7,9 @@ project/sample/flowcell directory structure.
 from __future__ import print_function
 
 import argparse
+import glob
 import os
+import subprocess
 import unittest
 import yaml
 
@@ -37,25 +39,32 @@ def main(config_file_path, demux_fcid_dirs=None, restrict_to_projects=None, rest
     demux_fcid_dirs_set = set()
     dirs_to_analyze = set()
     config = load_config(config_file_path)
+    import ipdb; ipdb.set_trace()
     if demux_fcid_dirs:
         demux_fcid_dirs_set.update(demux_fcid_dirs)
     else:
         # Check for newly-delivered data in the INBOX
-        inbox_directory = config.get(['INBOX'])
+        inbox_directory = config.get('INBOX')
         demux_fcid_dirs_set.update(check_for_new_flowcells(inbox_directory))
     for demux_fcid_dir in demux_fcid_dirs_set:
         dirs_to_analyze.update(setup_analysis_directory_structure(demux_fcid_dir,
                                                                   config_file_path,
                                                                   restrict_to_projects,
                                                                   restrict_to_samples))
-    analysis_pipeline = config.get("analysis_pipeline") or "scilifelab.bcbio.Bcbio"
+    analysis_pipeline = config.get("analysis_pipeline")
+    if not analysis_pipeline:
+        LOG.warn("Warning: No analysis pipeline specified in configuration file. "\
+                 "Falling back to bcbio-nextgen.")
+        analysis_pipeline = "scilifelab.bcbio.BcbioLauncher"
     # The configuration file decides which pipeline class we use
-    AnalysisPipelineClass = get_class(analysis_pipeline)
+    #AnalysisPipelineClass = get_class(analysis_pipeline)
     for sample_directory in dirs_to_analyze:
         analysis_instance = AnalysisPipelineClass(sample_directory)
         analysis_instance.build_config_file()
         launch_method = config.get("analysis", {}).get("analysis_launch_method") or "localhost"
         analysis_instance.launch_pipeline(launch_method)
+    else:
+        LOG.info("No directories found to process.")
 
 
 ## TODO test me
@@ -100,21 +109,27 @@ def setup_analysis_directory_structure(fc_dir, config_file_path, restrict_to_pro
     :returns: A list of sample directories that need to be run through the analysis pipeline
     :rtype: list
     """
+    LOG.info("Setting up analysis for demultiplexed data in folder \"{}\"".format(fc_dir))
     # Load config, expanding shell variables in paths
     config = load_config(config_file_path)
     analysis_top_dir = os.path.abspath(config["analysis"]["top_dir"])
     if not os.path.exists(fc_dir):
-            LOG.error("Error: Flowcell directory {} does not exist".format(fc_dir))
-            return []
+        LOG.error("Error: Flowcell directory {} does not exist".format(fc_dir))
+        return []
     if not os.path.exists(analysis_top_dir):
-            LOG.error("Error: Analysis top directory {} does not exist".format(analysis_top_dir))
-            return []
+        LOG.error("Error: Analysis top directory {} does not exist".format(analysis_top_dir))
+        return []
     # Map the directory structure for this flowcell
     try:
         fc_dir_structure = parse_casava_directory(fc_dir)
     except RuntimeError as e:
         LOG.error("Error when processing flowcell dir \"{}\": e".format(fc_dir))
         return []
+
+    # Parse the flowcell dir
+    fc_dir_structure = parse_casava_directory(fc_dir)
+    fc_date, fc_name = [fc_dir_structure['fc_date'],fc_dir_structure['fc_name']]
+    fc_run_id = "{}_{}".format(fc_date,fc_name)
 
     # Copy the basecall stats directory.
     ## TODO I don't know what these extra two lines of comments refer to
@@ -158,9 +173,14 @@ def setup_analysis_directory_structure(fc_dir, config_file_path, restrict_to_pro
                                           project['data_dir'],
                                           project['project_dir'],
                                           sample['sample_dir'])
+            #LOG.info("Copying sample files from \"{}\" to \"{}\"...".format(
+            #                                src_sample_dir, dst_sample_fcid_dir))
             sample_files = do_rsync([os.path.join(src_sample_dir,f) for f in
                                     sample.get('files',[])],dst_sample_fcid_dir)
             sample_directories.append(dst_sample_fcid_dir)
+    else:
+        LOG.warn("No projects found in specified flowcell directory \"{}\"".format(fc_dir))
+    return fc_dir_structure.get("projects", [])
 
 
 def parse_casava_directory(fc_dir):
@@ -207,13 +227,19 @@ def parse_casava_directory(fc_dir):
     parser = FlowcellRunMetricsParser(fc_dir)
     run_info = parser.parseRunInfo()
     runparams = parser.parseRunParameters()
-    try:
-        fc_name = run_info.get('Flowcell', None)
-        fc_date = run_info.get('Date', None)
-        fc_pos = runparams.get('FCPosition','')
-    except KeyError:
-        raise RuntimeError("Could not parse flowcell information \"{}\" "\
-                       "from Flowcell RunMetrics in flowcell {}".format(e, fc_dir))
+
+    ## TODO how important is it to have this information? Should it cause processing to fail or just toss a warning?
+    fc_name = run_info.get('Flowcell', None)
+    fc_date = run_info.get('Date', None)
+    fc_pos = runparams.get('FCPosition','')
+    #try:
+    #    fc_name = run_info['Flowcell']
+    #    fc_date = run_info['Date']
+    #    fc_pos = runparams['FCPosition']
+    #except KeyError:
+    #    raise RuntimeError("Could not parse flowcell information \"{}\" "\
+    #                   "from Flowcell RunMetrics in flowcell {}".format(e, fc_dir))
+
     # "Unaligned*" because SciLifeLab dirs are called "Unaligned_Xbp"
     # (where "X" is the index length) and there is also an "Unaligned" folder
     unaligned_dir_pattern = os.path.join(fc_dir,"Unaligned*")
@@ -249,27 +275,80 @@ def parse_casava_directory(fc_dir):
             'projects': projects}
 
 
-def merge_samplesheets(samplesheets, merge_samplesheet_dest_loc):
+## is this used?
+def copy_undetermined_index_files(casava_data_dir, destination_dir):
+    """
+    Copy fastq files with "Undetermined" index reads to the destination directory.
+
+    :param str casava_data_dir: The directory containing 
+    :param str destination_dir:
+    """
+    # List of files to copy
+    copy_list = []
+    # List the directories containing the fastq files
+    fastq_dir_pattern = os.path.join(casava_data_dir,"Undetermined_indices","Sample_lane*")
+    # Pattern matching the fastq_files
+    fastq_file_pattern = "*.fastq.gz"
+    # Samplesheet name
+    samplesheet_pattern = "SampleSheet.csv"
+    samplesheets = []
+    for dir in glob.glob(fastq_dir_pattern):
+        copy_list += glob.glob(os.path.join(dir,fastq_file_pattern))
+        samplesheet = os.path.join(dir,samplesheet_pattern)
+        if os.path.exists(samplesheet):
+            samplesheets.append(samplesheet)
+    # Merge the samplesheets into one
+    new_samplesheet = os.path.join(destination_dir,samplesheet_pattern)
+    new_samplesheet = _merge_samplesheets(samplesheets,new_samplesheet)
+    # Rsync the fastq files to the destination directory
+    do_rsync(copy_list,destination_dir)
+
+def _merge_samplesheets(samplesheets, merged_samplesheet):
     """
     Merge multiple Illumina SampleSheet.csv files into one.
 
     :param list samplesheets: A list of the paths to the SampleSheet.csv files to merge.
-    :param str merge_samplesheet_dest_loc: The path <...>
+    :param str merge_samplesheet: The path <...>
 
     :returns: <...>
     :rtype: str
     """
-    pass
+    data = []
+    header = []
+    for samplesheet in samplesheets:
+        with open(samplesheet) as fh:
+            csvread = csv.DictReader(fh, dialect='excel')
+            header = csvread.fieldnames
+            for row in csvread:
+                data.append(row)
+    with open(merged_samplesheet, "w") as outh:
+        csvwrite = csv.DictWriter(outh, header)
+        csvwrite.writeheader()
+        csvwrite.writerows(sorted(data, key=lambda d: (d['Lane'],d['Index'])))
+    return merged_samplesheet
 
 
-def copy_undetermined_index_files():
+def _copy_basecall_stats(source_dirs, destination_dir):
+    """Copy relevant files from the Basecall_Stats_FCID directory
+       to the analysis directory
     """
-    Copy fastq files with "Undetermined" index reads to the destination directory.
-
-    :param str casava_data_dir:
-    :param str destination_dir:
-    """
-    pass
+    for source_dir in source_dirs:
+        # First create the directory in the destination
+        dirname = os.path.join(destination_dir,os.path.basename(source_dir))
+        try:
+            os.mkdir(dirname)
+        except:
+            pass
+        # List the files/directories to copy
+        files = glob.glob(os.path.join(source_dir,"*.htm"))
+        files += glob.glob(os.path.join(source_dir,"*.metrics"))
+        files += glob.glob(os.path.join(source_dir,"*.xml"))
+        files += glob.glob(os.path.join(source_dir,"*.xsl"))
+        for dir in ["Plots","css"]:
+            d = os.path.join(source_dir,dir)
+            if os.path.exists(d):
+                files += [d]
+        do_rsync(files,dirname)
 
 
 ##  this could also work remotely of course
@@ -339,6 +418,5 @@ if __name__=="__main__":
     main(config_file_path=args_ns.config,
          demux_fcid_dirs=args_ns.demux_fcid_dirs,
          restrict_to_projects=args_ns.projects,
-         restrict_to_samples=args_ns.samples,
-         restrict_to_fcids=args_ns.fcids)
+         restrict_to_samples=args_ns.samples)
 
