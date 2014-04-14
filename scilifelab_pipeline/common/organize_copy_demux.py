@@ -8,6 +8,7 @@ from __future__ import print_function
 
 import argparse
 import glob
+import importlib
 import os
 import subprocess
 import unittest
@@ -52,22 +53,28 @@ def main(config_file_path, demux_fcid_dirs=None, restrict_to_projects=None, rest
                                                                   config_file_path,
                                                                   restrict_to_projects,
                                                                   restrict_to_samples))
+    if not dirs_to_analyze:
+        LOG.info("No directories found to process.")
+
     # The configuration file decides which pipeline class we use
-    analysis_pipeline = config.get("analysis", {}).get("analysis_pipeline")
-    if not analysis_pipeline:
+    analysis_pipeline_module_name = config.get("analysis", {}).get("analysis_pipeline")
+    if not analysis_pipeline_module_name:
         ## TODO Should we have a default?
         LOG.warn("Warning: No analysis pipeline specified in configuration file. "\
                  "Falling back to bcbio-nextgen.")
-        ## TODO scilifelab.piper.launcher.PiperLauncher
-        analysis_pipeline = "scilifelab.bcbio.launcher.BcbioLauncher"
-    AnalysisPipelineClass = get_class(analysis_pipeline)
+        ## TODO implement scilifelab_pipeline.piper_sll
+        analysis_pipeline_module_name = "scilifelab_pipeline.bcbio_sll"
+    #AnalysisPipelineClass = get_class(analysis_pipeline)
+    analysis_module = importlib.import_module(analysis_pipeline_module_name)
+    launch_method = config.get("analysis", {}).get("analysis_launch_method") or "localhost"
     for sample_directory in dirs_to_analyze:
-        analysis_instance = AnalysisPipelineClass(sample_directory)
-        analysis_instance.build_config_file()
-        launch_method = config.get("analysis", {}).get("analysis_launch_method") or "localhost"
-        analysis_instance.launch_pipeline(launch_method)
-    else:
-        LOG.info("No directories found to process.")
+        for run_config in analysis_module.build_run_configs(samples_dir=sample_directory,
+                                                            config_path=config_file_path):
+            import ipdb; ipdb.set_trace()
+            analysis_module.launch_pipeline(run_config, launch_method)
+        #analysis_instance = AnalysisPipelineClass(sample_directory)
+        #analysis_instance.build_config_file()
+        #analysis_instance.launch_pipeline(launch_method)
 
 
 def get_class( kls ):
