@@ -46,6 +46,7 @@ def main(config_file_path, demux_fcid_dirs=None, restrict_to_projects=None, rest
         # Check for newly-delivered data in the INBOX
         inbox_directory = config.get('INBOX')
         demux_fcid_dirs_set.update(check_for_new_flowcells(inbox_directory))
+    # Sort each raw demux FC into project/sample/fcid format to prepare for analysis
     for demux_fcid_dir in demux_fcid_dirs_set:
         dirs_to_analyze.update(setup_analysis_directory_structure(demux_fcid_dir,
                                                                   config_file_path,
@@ -54,7 +55,7 @@ def main(config_file_path, demux_fcid_dirs=None, restrict_to_projects=None, rest
     if not dirs_to_analyze:
         LOG.info("No directories found to process.")
 
-    # The configuration file decides which pipeline class we use
+    # Build the run configuration
     analysis_pipeline_module_name = config.get("analysis", {}).get("analysis_pipeline")
     if not analysis_pipeline_module_name:
         ## TODO Should we have a default?
@@ -62,7 +63,6 @@ def main(config_file_path, demux_fcid_dirs=None, restrict_to_projects=None, rest
                  "Falling back to bcbio-nextgen.")
         ## TODO implement scilifelab_pipeline.piper_sll
         analysis_pipeline_module_name = "scilifelab_pipeline.bcbio_sll"
-    #AnalysisPipelineClass = get_class(analysis_pipeline)
     analysis_module = importlib.import_module(analysis_pipeline_module_name)
     launch_method = config.get("analysis", {}).get("analysis_launch_method") or "localhost"
     for sample_directory in dirs_to_analyze:
@@ -72,19 +72,15 @@ def main(config_file_path, demux_fcid_dirs=None, restrict_to_projects=None, rest
             analysis_module.launch_pipeline(sample_to_process['run_config'],
                                             sample_to_process['work_dir'],
                                             launch_method)
-        #analysis_instance = AnalysisPipelineClass(sample_directory)
-        #analysis_instance.build_config_file()
-        #analysis_instance.launch_pipeline(launch_method)
 
-
-def get_class( kls ):
-    """http://stackoverflow.com/questions/452969/does-python-have-an-equivalent-to-java-class-forname"""
-    parts = kls.split('.')
-    module = ".".join(parts[:-1])
-    m = __import__( module )
-    for comp in parts[1:]:
-        m = getattr(m, comp)            
-    return m
+#def get_class( kls ):
+#    """http://stackoverflow.com/questions/452969/does-python-have-an-equivalent-to-java-class-forname"""
+#    parts = kls.split('.')
+#    module = ".".join(parts[:-1])
+#    m = __import__( module )
+#    for comp in parts[1:]:
+#        m = getattr(m, comp)            
+#    return m
 
 
 ## SO! How to do this?
@@ -100,7 +96,7 @@ def check_for_new_flowcells(inbox_directory, num_days_ago=None):
     ensuring somehow that the data transfer has finished.
 
     :param str inbox_directory: The path to the directory to which new data is transferred after demultiplexing.
-    :param str num_days_ago: If a folder has not been modified more recently than this it is excluded. Default is no time limit.
+    :param int num_days_ago: If a folder has not been modified more recently than this it is excluded. Default is no time limit.
 
     :returns: A list of newly-delivered, demultiplexed flowcell directories.
     :rtype: list
@@ -123,10 +119,13 @@ def check_for_new_flowcells(inbox_directory, num_days_ago=None):
                         file_age = datetime.datetime.now() - \
                                    datetime.datetime.fromtimestamp(
                                                         os.path.getmtime(directory))
-                        if file_age.days > num_days_ago:
+                        if file_age.days > int(num_days_ago):
                             # Directory is too old for consideration
                             continue
-                    new_flowcell_directories.add(directory)
+                    # The presence of the file "second_read_processing_completed.txt" indicates
+                    # that both the demultiplexing and the data transfer are complete
+                    if os.path.exists(os.path.join(directory, "second_read_processing_completed.txt")):
+                        new_flowcell_directories.add(directory)
     return list(new_flowcell_directories)
 
 
@@ -221,9 +220,6 @@ def setup_analysis_directory_structure(fc_dir, config_file_path, restrict_to_pro
             sample_files = do_rsync([os.path.join(src_sample_dir,f) for f in
                                     sample.get('files',[])],dst_sample_fcid_dir)
             sample_directories.append(dst_sample_fcid_dir)
-    else:
-        # touch the file that shows that we've processed this flowcell so that check_for_new_flowcells will know we've finished this one
-        pass
 
     return sample_directories
 
