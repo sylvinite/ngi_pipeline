@@ -7,6 +7,7 @@ project/sample/flowcell directory structure.
 from __future__ import print_function
 
 import argparse
+import fnmatch
 import glob
 import importlib
 import os
@@ -22,9 +23,6 @@ from scilifelab.log import minimal_logger
 # Set up logging for this script
 LOG = minimal_logger(__name__)
 
-
-### TODO ###
-## Implement checking for unprocessed flowcells: check_for_new_flowcells()
 
 def main(config_file_path, demux_fcid_dirs=None, restrict_to_projects=None, restrict_to_samples=None):
     """
@@ -68,10 +66,12 @@ def main(config_file_path, demux_fcid_dirs=None, restrict_to_projects=None, rest
     analysis_module = importlib.import_module(analysis_pipeline_module_name)
     launch_method = config.get("analysis", {}).get("analysis_launch_method") or "localhost"
     for sample_directory in dirs_to_analyze:
-        for run_config in analysis_module.build_run_configs(samples_dir=sample_directory,
+        ## TODO this is not what is returned -- it's a dict! See ll.302-305
+        for sample_to_process in analysis_module.build_run_configs(samples_dir=sample_directory,
                                                             config_path=config_file_path):
-            import ipdb; ipdb.set_trace()
-            analysis_module.launch_pipeline(run_config, launch_method)
+            analysis_module.launch_pipeline(sample_to_process['run_config'],
+                                            sample_to_process['work_dir'],
+                                            launch_method)
         #analysis_instance = AnalysisPipelineClass(sample_directory)
         #analysis_instance.build_config_file()
         #analysis_instance.launch_pipeline(launch_method)
@@ -87,20 +87,47 @@ def get_class( kls ):
     return m
 
 
-def check_for_new_flowcells(inbox_directory):
+## SO! How to do this?
+# Easy to check for a flowcell that is finished transferring over: check for second_read_finished or whatever.
+# But how do we check if a flowcell has already begun processing?
+# We don't want to rebuild the config files and requeue the job if it's already in process.
+# We could touch a file that says, "processing begun" that contains the PID.
+# When finished, we could touch a file that says processing_complete with the PID.
+# But what if a project has been processed in one way (e.g. qc_pipeline) but needs more processing
+# (e.g. alignment or best-practice analysis).
+def check_for_new_flowcells(inbox_directory, num_days_ago=None):
     """Checks for newly-delivered data in the inbox_directory,
     ensuring somehow that the data transfer has finished.
 
     :param str inbox_directory: The path to the directory to which new data is transferred after demultiplexing.
+    :param str num_days_ago: If a folder has not been modified more recently than this it is excluded. Default is no time limit.
 
     :returns: A list of newly-delivered, demultiplexed flowcell directories.
     :rtype: list
     """
-    pass
     if not inbox_directory:
         return []
     else:
-        return new_flowcell_directories
+        new_flowcell_directories = set()
+        # Not sure what this will be because I don't know what Uppsala uses
+        project_dir_match_patterns = ("*",)
+        # Omit hidden directories
+        project_dir_filter_patterns = (".*",)
+        for directory in os.listdir(inbox_directory):
+            # This gets a little rough up ahead but I can't stand to nest this many if-fors
+            if os.path.isdir(directory) and \
+                any([ fnmatch.fnmatch(directory, ptn) for ptn in project_dir_match_patterns]) and \
+                not any([ fnmatch.fnmatch(directory, ptn) for ptn in project_dir_filter_patterns]):
+                    # Is there an age limit specified?
+                    if num_days_ago:
+                        file_age = datetime.datetime.now() - \
+                                   datetime.datetime.fromtimestamp(
+                                                        os.path.getmtime(directory))
+                        if file_age.days > num_days_ago:
+                            # Directory is too old for consideration
+                            continue
+                    new_flowcell_directories.add(directory)
+    return list(new_flowcell_directories)
 
 
 def setup_analysis_directory_structure(fc_dir, config_file_path, restrict_to_projects=None,
@@ -152,6 +179,7 @@ def setup_analysis_directory_structure(fc_dir, config_file_path, restrict_to_pro
     sample_directories = []
     if not fc_dir_structure.get('projects'):
         LOG.warn("No projects found in specified flowcell directory \"{}\"".format(fc_dir))
+    # for-else
     for project in fc_dir_structure.get('projects', []):
         # If specific projects are specified, skip those that do not match
         project_name = project['project_name']
@@ -193,6 +221,9 @@ def setup_analysis_directory_structure(fc_dir, config_file_path, restrict_to_pro
             sample_files = do_rsync([os.path.join(src_sample_dir,f) for f in
                                     sample.get('files',[])],dst_sample_fcid_dir)
             sample_directories.append(dst_sample_fcid_dir)
+    else:
+        # touch the file that shows that we've processed this flowcell so that check_for_new_flowcells will know we've finished this one
+        pass
 
     return sample_directories
 
