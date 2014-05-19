@@ -4,24 +4,31 @@ This script organizes demultiplexed (CASAVA 1.8) sequencing data into the releva
 project/sample/flowcell directory structure.
 """
 
+## For testing, use the top directory /pica/v3/a2010002/archive/131030_SN7001362_0103_BC2PUYACXX
+
 from __future__ import print_function
 
 import argparse
+import collections
 import fnmatch
+import functools
 import glob
 import importlib
 import os
+import re
 import subprocess
+import sys
 import unittest
 import yaml
 
 ## TODO migrate this out of bcbio-specific code
 from scilifelab.bcbio.qc import FlowcellRunMetricsParser
-
 from scilifelab.utils.config import load_yaml_config_expand_vars
 from scilifelab.log import minimal_logger
-# Set up logging for this script
-LOG = minimal_logger(__name__)
+
+LOG = minimal_logger(__name__,
+                     #debug=True
+                    )
 
 
 def main(config_file_path, demux_fcid_dirs=None, restrict_to_projects=None, restrict_to_samples=None):
@@ -53,25 +60,35 @@ def main(config_file_path, demux_fcid_dirs=None, restrict_to_projects=None, rest
                                                                   restrict_to_projects,
                                                                   restrict_to_samples))
     if not dirs_to_analyze:
-        LOG.info("No directories found to process.")
+        error_message = "No directories found to process."
+        LOG.info(error_message)
+        sys.exit("Quitting: " + error_message)
 
     # Build the run configuration
     analysis_pipeline_module_name = config.get("analysis", {}).get("analysis_pipeline")
     if not analysis_pipeline_module_name:
-        ## TODO Should we have a default?
         LOG.warn("Warning: No analysis pipeline specified in configuration file. "\
                  "Falling back to bcbio-nextgen.")
-        ## TODO implement scilifelab_pipeline.piper_sll
         analysis_pipeline_module_name = "scilifelab_pipeline.bcbio_sll"
+    # Import the module specified in the config file (e.g. bcbio, piper)
     analysis_module = importlib.import_module(analysis_pipeline_module_name)
-    launch_method = config.get("analysis", {}).get("analysis_launch_method") or "localhost"
-    for sample_directory in dirs_to_analyze:
-        ## TODO this is not what is returned -- it's a dict! See ll.302-305
-        for sample_to_process in analysis_module.build_run_configs(samples_dir=sample_directory,
-                                                            config_path=config_file_path):
-            analysis_module.launch_pipeline(sample_to_process['run_config'],
-                                            sample_to_process['work_dir'],
-                                            launch_method)
+    # Determine how to execute the pipeline (e.g. localhost, sbatch)
+    #launch_method = config.get("analysis", {}).get("analysis_launch_method") or "localhost"
+
+
+    analysis_module.main(flowcell_dirs_to_analyze=list(dirs_to_analyze), config_file_path=config_file_path)
+
+    #for sample_directory in dirs_to_analyze:
+    #    ## TODO here is a difference. With bcbio-nextgen, the workflow to execute is written in the config file;
+    #    ##      for Piper, you actually execute a different workflow binary.
+    #    samples_to_process = analysis_module.build_run_configs(samples_dir=sample_directory,
+    #                                                           config_path=config_file_path)
+    #    #for sample_to_process in analysis_module.build_run_configs(samples_dir=sample_directory,
+    #    #                                                    config_path=config_file_path):
+    #    for sample_to_process in samples_to_process:
+    #        analysis_module.launch_pipeline(sample_to_process['run_config'],
+    #                                        sample_to_process['work_dir'],
+    #                                        launch_method)
 
 #def get_class( kls ):
 #    """http://stackoverflow.com/questions/452969/does-python-have-an-equivalent-to-java-class-forname"""
@@ -79,18 +96,10 @@ def main(config_file_path, demux_fcid_dirs=None, restrict_to_projects=None, rest
 #    module = ".".join(parts[:-1])
 #    m = __import__( module )
 #    for comp in parts[1:]:
-#        m = getattr(m, comp)            
+#        m = getattr(m, comp)
 #    return m
 
 
-## SO! How to do this?
-# Easy to check for a flowcell that is finished transferring over: check for second_read_finished or whatever.
-# But how do we check if a flowcell has already begun processing?
-# We don't want to rebuild the config files and requeue the job if it's already in process.
-# We could touch a file that says, "processing begun" that contains the PID.
-# When finished, we could touch a file that says processing_complete with the PID.
-# But what if a project has been processed in one way (e.g. qc_pipeline) but needs more processing
-# (e.g. alignment or best-practice analysis).
 def check_for_new_flowcells(inbox_directory, num_days_ago=None):
     """Checks for newly-delivered data in the inbox_directory,
     ensuring somehow that the data transfer has finished.
@@ -197,6 +206,7 @@ def setup_analysis_directory_structure(fc_dir, config_file_path, restrict_to_pro
             ## this appears to be some scilifelab-specific naming process?
             sample_name = sample['sample_name'].replace('__','.')
             if len(restrict_to_samples) > 0 and sample_name not in restrict_to_samples:
+                LOG.info("Skipping sample {}".format(sample_name))
                 LOG.debug("Skipping sample {}".format(sample_name))
                 continue
             LOG.info("Setting up sample {}".format(sample.get("sample_dir")))
@@ -404,6 +414,137 @@ def do_rsync(src_files, dst_dir):
     #    open(os.path.join(dst_dir,os.path.basename(f)),"w").close()
     subprocess.check_call(cl)
     return [ os.path.join(dst_dir,os.path.basename(f)) for f in src_files ]
+
+
+
+class memoized(object):
+    """
+    Decorator, caches results of function calls.
+    """
+    def __init__(self, func):
+        self.func   = func
+        self.cached = {}
+    def __call__(self, *args):
+        if not isinstance(args, collections.Hashable):
+            return self.func(*args)
+        if args in self.cached:
+            return self.cached[args]
+        else:
+            return_val = self.func(*args)
+            self.cached[args] = return_val
+            return return_val
+    def __repr__(self):
+        return self.func.__doc__
+    # This ensures that attribute access (e.g. obj.attr)
+    # goes through the __call__ function I defined above
+    # functools is awesome
+    # descriptors are the raddest
+    # boy i love python
+    def __get__(self, obj, objtype):
+        return functools.partial(self.__call__, obj)
+
+
+@memoized
+def get_project_and_sample_ids_from_filename(sample_basename):
+    """Project and sample ids are pulled from the standard filename format, which is:
+       <lane_num>_<date>_<fcid>_<project>_<sample_num>_<read>.fastq[.gz]
+       e.g.
+       1_140220_AH8AMJADXX_P673_101_1.fastq.gz
+       (SciLifeLab Sthlm format)
+    OR
+       <project-number>_<sample-name>_<index>_<lane>_<read>_<group>.fastq.gz
+       e.g.
+       P567_102_AAAAAA_L001_R1_001.fastq.gz
+       (Standard Illumina format)
+
+    returns a tuple of (project_id, sample_id) or raises a ValueError if there is no match
+    (which shouldn't generally happen and probably indicates a larger issue).
+
+    :param str sample_basename: The name of the file from which to pull the project id
+    :returns: (project_id, sample_id)
+    :rtype: tuple
+    :raises ValueError: If the ids cannot be determined from the filename (no regex match)
+    """
+    match = re.match(r'\d_\d{6}_\w{10}_(P\d{3})_(\d{3})_.*', sample_basename) or \
+            re.match(r'(P\d{3})_(\d{3})_.*', sample_basename)
+
+    if match:
+        return (match.groups()[0], match.groups()[1])
+    else:
+        raise ValueError("Error: filename didn't match conventions, "
+                         "couldn't find project id for sample "
+                         "\"{}\"".format(sample_basename))
+
+
+@memoized
+def get_project_data_for_id(project_id, proj_db):
+    """Pulls all the data about a project from the StatusDB
+    given the project's id (e.g. "P602") and a couchdb view object.
+
+    :param str project_id: The project ID
+    :param proj_db: The project_db object
+    :returns: A dict of the project data
+    :rtype: dict
+    """
+    db_view = proj_db.view('project/project_id')
+    try:
+        return proj_db.get([proj.id for proj in db_view if proj.key == project_id][0])
+    except IndexError:
+        # TODO this will be logged and should be caught on the calling side
+        raise ValueError("Warning: project ID '{}' not found in Status DB".format(project_id))
+
+
+def find_fastq_read_pairs(file_list=None, directory=None):
+    """
+    Given a list of file names, finds read pairs (based on _R1_/_R2_ file naming)
+    and returns a dict of {base_name: [ file_read_one, file_read_two ]}
+    Filters out files not ending with .fastq[.gz] as well as non-files
+    E.g.
+        1_131129_BH7VPTADXX_P602_101_1.fastq.gz
+        1_131129_BH7VPTADXX_P602_101_2.fastq.gz
+    becomes
+        { "1_131129_BH7VPTADXX_P602_101":
+        [ "1_131129_BH7VPTADXX_P602_101_1.fastq.gz",
+          "1_131129_BH7VPTADXX_P602_101_2.fastq.gz"]}
+
+    :param list file_list: A list... of files
+    :param str dir: The directory to search for fastq file pairs.
+    :returns: A dict of file_basename -> [file1, file2]
+    :rtype: dict
+    """
+    if not directory or file_list:
+        raise RuntimeError("Must specify either a list of files or a directory path.")
+
+    ## TODO What exceptions can be thrown here? Permissions, dir not accessible, ...
+    if directory:
+        file_list = glob.glob(os.path.join(directory, "*"))
+    # We only want fastq files
+    file_list = set([ f for f in file_list if
+                     (fnmatch.fnmatch(f, "*.fastq*") and os.path.isfile(f)) ])
+    # --> This is the SciLifeLab-Sthlm-specific format
+    #     Format: <lane>_<date>_<flowcell>_<project-sample>_<read>.fastq.gz
+    #     Example: 1_140220_AH8AMJADXX_P673_101_1.fastq.gz
+    # --> This is the standard Illumina/Uppsala format:
+    #     Format: <sample-name>_<index>_<lane>_<read>_<group>.fastq.gz
+    #     Example: P567_102_CCCCCC_L001_R1_001.fastq.gz
+    suffix_pattern = re.compile(r'(.*)fastq')
+    file_format_pattern = re.compile(r'(.*)_(?:R\d|\d\.).*')
+    matches_dict = collections.defaultdict(list)
+    for file_pathname in file_list:
+        file_basename = os.path.basename(file_pathname)
+        try:
+            pair_base = file_format_pattern.match(file_basename).groups()[0]
+            matches_dict[pair_base].append(os.path.abspath(file_pathname))
+        except AttributeError:
+            LOG.warn("Warning: file doesn't match expected file format, "
+                      "cannot be paired: \"{}\"".format(file_fullname))
+            try:
+                file_basename_stripsuffix = suffix_pattern.split(file_basename)[0]
+                matches_dict[file_basename_stripsuffix].append(os.abspath(file_fullname))
+            except AttributeError:
+                # ??
+                continue
+    return dict(matches_dict)
 
 
 #def load_config(config_file_path):
