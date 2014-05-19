@@ -547,6 +547,35 @@ def find_fastq_read_pairs(file_list=None, directory=None):
     return dict(matches_dict)
 
 
+@memoized
+def get_flowcell_id_from_dirtree(path):
+    """Given the path to a file, tries to work out the flowcell ID.
+
+    Project directory structure is generally either:
+        <project>/<date>_<flowcell>/Sample_<project-sample-id>/
+        (Uppsala format)
+    or:
+        <project>/<project-sample-id>/<date>_<flowcell>/
+        (Sthlm format)
+    :param str path: The path to the file
+    :returns: The flowcell ID
+    :rtype: str
+    :raises ValueError: If the flowcell ID cannot be determined
+    """
+    flowcell_pattern = re.compile(r'\d{6}_([A-Z0-9]{10})')
+    try:
+        # SciLifeLab Sthlm tree format
+        path, dirname = os.path.split(path)
+        return flowcell_pattern.match(dirname).groups()[0]
+    except (IndexError, AttributeError):
+        try:
+            # SciLifeLab Uppsala tree format
+            _, dirname = os.path.split(path)
+            return flowcell_pattern.match(dirname).groups()[0]
+        except (IndexError, AttributeError):
+            raise ValueError("Could not determine flowcell ID from directory path.")
+
+
 #def load_config(config_file_path):
 #    """Load YAML config file, replacing environmental variables.
 #
