@@ -12,7 +12,7 @@ import os
 import re
 
 from scilifelab.utils.config import load_yaml_config_expand_vars
-from scilifelab_pipeline.common import get_project_and_sample_ids_from_filename, \
+from scilifelab_pipeline.common import parse_project_sample_lane_from_filename, \
                                        find_fastq_read_pairs, get_flowcell_id_from_dirtree
 
 def main(flowcell_dirs_to_analyze, config_file_path):
@@ -49,7 +49,7 @@ def create_report_tsv(flowcell_dirs_to_analyze):
         for fq_file in file_dict.keys():
             try:
                 import ipdb; ipdb.set_trace()
-                project, sample, lane = get_project_and_sample_ids_from_filename(fq_file)
+                project, sample, lane = parse_project_sample_lane_from_filename(fq_file)
                 ## TODO Need to figure out how to find the ReadLibrary -- I guess this is probably
                 ##      The "ReadLibrary" is the sequencing library that was sequenced (as you may know more than one library can be prepared from a sample)
                 ##      this allows us to track the sample back to the libraries sequenced and include it in the read group information in the bam files.

@@ -445,7 +445,7 @@ class memoized(object):
 
 
 @memoized
-def get_project_and_sample_ids_from_filename(sample_basename):
+def parse_project_sample_lane_from_filename(sample_basename):
     """Project id, sample id, and lane are pulled from the standard filename format,
      which is:
        <lane_num>_<date>_<fcid>_<project>_<sample_num>_<read>.fastq[.gz]
@@ -467,7 +467,6 @@ def get_project_and_sample_ids_from_filename(sample_basename):
     :raises ValueError: If the ids cannot be determined from the filename (no regex match)
     """
     # Stockholm or Illumina
-    import ipdb; ipdb.set_trace()
     match = re.match(r'(?P<lane>\d)_\d{6}_\w{10}_(?P<project>P\d{3})_(?P<sample>\d{3}).*', sample_basename) or \
             re.match(r'(?P<project>P\d{3})_(?P<sample>\w+)_.*_L(?P<lane>\d{3})', sample_basename)
 
