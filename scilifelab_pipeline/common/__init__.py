@@ -446,18 +446,19 @@ class memoized(object):
 
 @memoized
 def get_project_and_sample_ids_from_filename(sample_basename):
-    """Project and sample ids are pulled from the standard filename format, which is:
+    """Project id, sample id, and lane are pulled from the standard filename format,
+     which is:
        <lane_num>_<date>_<fcid>_<project>_<sample_num>_<read>.fastq[.gz]
        e.g.
        1_140220_AH8AMJADXX_P673_101_1.fastq.gz
        (SciLifeLab Sthlm format)
-    OR
+    or
        <project-number>_<sample-name>_<index>_<lane>_<read>_<group>.fastq.gz
        e.g.
        P567_102_AAAAAA_L001_R1_001.fastq.gz
        (Standard Illumina format)
 
-    returns a tuple of (project_id, sample_id) or raises a ValueError if there is no match
+    returns a tuple of (project_id, sample_id, lane) or raises a ValueError if there is no match
     (which shouldn't generally happen and probably indicates a larger issue).
 
     :param str sample_basename: The name of the file from which to pull the project id
@@ -465,11 +466,13 @@ def get_project_and_sample_ids_from_filename(sample_basename):
     :rtype: tuple
     :raises ValueError: If the ids cannot be determined from the filename (no regex match)
     """
-    match = re.match(r'\d_\d{6}_\w{10}_(P\d{3})_(\d{3})_.*', sample_basename) or \
-            re.match(r'(P\d{3})_(\d{3})_.*', sample_basename)
+    # Stockholm or Illumina
+    import ipdb; ipdb.set_trace()
+    match = re.match(r'(?P<lane>\d)_\d{6}_\w{10}_(?P<project>P\d{3})_(?P<sample>\d{3}).*', sample_basename) or \
+            re.match(r'(?P<project>P\d{3})_(?P<sample>\w+)_.*_L(?P<lane>\d{3})', sample_basename)
 
     if match:
-        return (match.groups()[0], match.groups()[1])
+        return match.group('project'), match.group('sample'), match.group('lane')
     else:
         raise ValueError("Error: filename didn't match conventions, "
                          "couldn't find project id for sample "
@@ -515,12 +518,21 @@ def find_fastq_read_pairs(file_list=None, directory=None):
     if not directory or file_list:
         raise RuntimeError("Must specify either a list of files or a directory path.")
 
+    # Can I do this? "is not"? It seems too easy
+    if file_list and type(file_list) is not list:
+        LOG.warn("file_list parameter passed is not a list; trying as a directory.")
+        directory = file_list
+        file_list = None
     ## TODO What exceptions can be thrown here? Permissions, dir not accessible, ...
     if directory:
         file_list = glob.glob(os.path.join(directory, "*"))
     # We only want fastq files
-    file_list = set([ f for f in file_list if
-                     (fnmatch.fnmatch(f, "*.fastq*") and os.path.isfile(f)) ])
+    if file_list:
+        file_list = set([ f for f in file_list if
+                         (fnmatch.fnmatch(f, "*.fastq*") and os.path.isfile(f)) ])
+    else:
+        # No files found
+        return {}
     # --> This is the SciLifeLab-Sthlm-specific format
     #     Format: <lane>_<date>_<flowcell>_<project-sample>_<read>.fastq.gz
     #     Example: 1_140220_AH8AMJADXX_P673_101_1.fastq.gz
@@ -553,9 +565,11 @@ def get_flowcell_id_from_dirtree(path):
 
     Project directory structure is generally either:
         <project>/<date>_<flowcell>/Sample_<project-sample-id>/
+        A.Wedell_13_01/130627_AH0JYUADXX/Sample_P567_102
         (Uppsala format)
     or:
         <project>/<project-sample-id>/<date>_<flowcell>/
+        G.Spong_13_03/P673_101/140220_AH8AMJADXX/
         (Sthlm format)
     :param str path: The path to the file
     :returns: The flowcell ID
