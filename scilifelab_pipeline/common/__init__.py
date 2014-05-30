@@ -23,6 +23,7 @@ import yaml
 
 ## TODO migrate this out of bcbio-specific code
 from scilifelab.bcbio.qc import FlowcellRunMetricsParser
+
 from scilifelab.utils.config import load_yaml_config_expand_vars
 from scilifelab.log import minimal_logger
 
@@ -52,8 +53,10 @@ def main(config_file_path, demux_fcid_dirs=None, restrict_to_projects=None, rest
     else:
         # Check for newly-delivered data in the INBOX
         inbox_directory = config.get('INBOX')
-        demux_fcid_dirs_set.update(check_for_new_flowcells(inbox_directory))
-    # Sort each raw demux FC into project/sample/fcid format to prepare for analysis
+        # Note that this is a list of flowcells, not all of which are necessarily
+        # part of the same project.
+        demux_fcid_dirs_set.update(check_for_new_flowcells(inbox_directory, num_days_time_limit=30))
+    # Sort/copy each raw demux FC into project/sample/fcid format -- "analysis-ready"
     for demux_fcid_dir in demux_fcid_dirs_set:
         dirs_to_analyze.update(setup_analysis_directory_structure(demux_fcid_dir,
                                                                   config_file_path,
@@ -76,6 +79,7 @@ def main(config_file_path, demux_fcid_dirs=None, restrict_to_projects=None, rest
     #launch_method = config.get("analysis", {}).get("analysis_launch_method") or "localhost"
 
 
+    # dirs_to_analyze is now a list of dicts representing flowcells to analyze
     analysis_module.main(flowcell_dirs_to_analyze=list(dirs_to_analyze), config_file_path=config_file_path)
 
     #for sample_directory in dirs_to_analyze:
@@ -100,12 +104,13 @@ def main(config_file_path, demux_fcid_dirs=None, restrict_to_projects=None, rest
 #    return m
 
 
-def check_for_new_flowcells(inbox_directory, num_days_ago=None):
+def check_for_new_flowcells(inbox_directory, num_days_time_limit=None):
     """Checks for newly-delivered data in the inbox_directory,
-    ensuring somehow that the data transfer has finished.
+    ensuring that the data transfer has finished (by the presence of the file
+    "second_read_processing_completed.txt").
 
     :param str inbox_directory: The path to the directory to which new data is transferred after demultiplexing.
-    :param int num_days_ago: If a folder has not been modified more recently than this it is excluded. Default is no time limit.
+    :param int num_days_time_limit: If a folder has not been modified more recently than this it is excluded. Default is no time limit.
 
     :returns: A list of newly-delivered, demultiplexed flowcell directories.
     :rtype: list
@@ -124,13 +129,17 @@ def check_for_new_flowcells(inbox_directory, num_days_ago=None):
                 any([ fnmatch.fnmatch(directory, ptn) for ptn in project_dir_match_patterns]) and \
                 not any([ fnmatch.fnmatch(directory, ptn) for ptn in project_dir_filter_patterns]):
                     # Is there an age limit specified?
-                    if num_days_ago:
-                        file_age = datetime.datetime.now() - \
-                                   datetime.datetime.fromtimestamp(
+                    if num_days_time_limit:
+                        try:
+                            num_days_time_limit = int(num_days_time_limit)
+                            file_age = datetime.datetime.now() - \
+                                       datetime.datetime.fromtimestamp(
                                                         os.path.getmtime(directory))
-                        if file_age.days > int(num_days_ago):
-                            # Directory is too old for consideration
-                            continue
+                            if file_age.days > int(num_days_time_limit):
+                                # Directory is too old for consideration
+                                continue
+                        except ValueError:
+                            LOG.warn("Time limit not a number (\"{}\"); ignoring.".format(num_days_time_limit))
                     # The presence of the file "second_read_processing_completed.txt" indicates
                     # that both the demultiplexing and the data transfer are complete
                     if os.path.exists(os.path.join(directory, "second_read_processing_completed.txt")):
@@ -142,7 +151,7 @@ def setup_analysis_directory_structure(fc_dir, config_file_path, restrict_to_pro
                                        restrict_to_samples=None):
     """
     Copy and sort files from their CASAVA-demultiplexed flowcell structure
-    into their respective project, sample, FCIDs. This collects samples
+    into their respective project/sample/FCIDs. This collects samples
     split across multiple flowcells.
 
     :param str fc_dir: The directory created by CASAVA for this flowcell.
@@ -150,7 +159,7 @@ def setup_analysis_directory_structure(fc_dir, config_file_path, restrict_to_pro
     :param list restrict_to_projects: Specific projects within the flowcell to process exclusively
     :param list restrict_to_samples: Specific projects within the flowcell to process exclusively
 
-    :returns: A list of sample directories that need to be run through the analysis pipeline
+    :returns: A list of flowcell directories that need to be run through the analysis pipeline
     :rtype: list
     """
     LOG.info("Setting up analysis for demultiplexed data in folder \"{}\"".format(fc_dir))
@@ -176,18 +185,18 @@ def setup_analysis_directory_structure(fc_dir, config_file_path, restrict_to_pro
     fc_run_id = "{}_{}".format(fc_date,fc_name)
 
     # Copy the basecall stats directory.
-    ## TODO I don't know what these extra two lines of comments refer to
-    #       This will be causing an issue when multiple directories are present...
+    ## TODO I don't know what these nexttwo lines of comments refer to!!
+    # This will be causing an issue when multiple directories are present...
     # syncing should be done from archive, preserving the Unaligned* structures
     _copy_basecall_stats([os.path.join(fc_dir_structure['fc_dir'], d) for d in
                                         fc_dir_structure['basecall_stats_dir']],
                                         analysis_top_dir)
 
-    # Iterate over the projects in the flowcell directory
-    sample_directories = []
+    sample_fcid_directories = []
     if not fc_dir_structure.get('projects'):
         LOG.warn("No projects found in specified flowcell directory \"{}\"".format(fc_dir))
-    # for-else
+
+    # Iterate over the projects in the flowcell directory
     for project in fc_dir_structure.get('projects', []):
         # If specific projects are specified, skip those that do not match
         project_name = project['project_name']
@@ -200,6 +209,7 @@ def setup_analysis_directory_structure(fc_dir, config_file_path, restrict_to_pro
         if not os.path.exists(project_dir):
             ## TODO change to mkdir -p
             os.mkdir(project_dir, 0770)
+
         # Iterate over the samples in the project
         for sample in project.get('samples', []):
             # If specific samples are specified, skip those that do not match
@@ -221,19 +231,21 @@ def setup_analysis_directory_structure(fc_dir, config_file_path, restrict_to_pro
                 ## TODO change to mkdir -p
                 os.mkdir(dst_sample_fcid_dir, 0770)
             # rsync the source files to the sample directory
+            # src: flowcell/data/project/sample
+            # dst: project/sample/flowcell_run
             src_sample_dir = os.path.join(fc_dir_structure['fc_dir'],
                                           project['data_dir'],
                                           project['project_dir'],
                                           sample['sample_dir'])
             #LOG.info("Copying sample files from \"{}\" to \"{}\"...".format(
             #                                src_sample_dir, dst_sample_fcid_dir))
-            sample_files = do_rsync([os.path.join(src_sample_dir,f) for f in
-                                    sample.get('files',[])],dst_sample_fcid_dir)
-            sample_directories.append(dst_sample_fcid_dir)
-
+            sample_files = do_rsync([ os.path.join(src_sample_dir, f) for f in
+                                      sample.get('files', [])], dst_sample_fcid_dir)
+            sample_fcid_directories.append(dst_sample_fcid_dir)
     return sample_directories
 
 
+## TODO this isn't all my code and I must review it
 def parse_casava_directory(fc_dir):
     """
     Traverse a CASAVA-1.8-generated directory structure and return a dictionary
@@ -267,7 +279,7 @@ def parse_casava_directory(fc_dir):
 
     :param str fc_dir: The directory created by CASAVA for this flowcell.
 
-    :returns: A dictionary of the flowcell directory tree.
+    :returns: A dictionary of the flowcell directory tree: {
     :rtype: dict
 
     :raises RuntimeError: If the fc_dir does not exist or cannot be accessed,
@@ -308,7 +320,7 @@ def parse_casava_directory(fc_dir):
             fastq_files = [os.path.basename(file) for file in glob.glob(fastq_file_pattern)]
             samplesheet = glob.glob(samplesheet_pattern)
             assert len(samplesheet) == 1, \
-                    "Error: could not unambiguously locate samplesheet in %s" % sample_dir
+                    "Error: could not unambiguously locate samplesheet in {}".format(sample_dir)
             sample_name = os.path.basename(sample_dir).replace("Sample_","").replace('__','.')
             project_samples.append({'sample_dir': os.path.basename(sample_dir),
                                     'sample_name': sample_name,
