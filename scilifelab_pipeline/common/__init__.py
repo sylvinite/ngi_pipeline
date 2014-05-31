@@ -46,7 +46,7 @@ def main(config_file_path, demux_fcid_dirs=None, restrict_to_projects=None, rest
     if not restrict_to_samples:
         restrict_to_samples = []
     demux_fcid_dirs_set = set()
-    dirs_to_analyze = set()
+    projects_to_analyze = []
     config = load_yaml_config_expand_vars(config_file_path)
     if demux_fcid_dirs:
         demux_fcid_dirs_set.update(demux_fcid_dirs)
@@ -58,16 +58,16 @@ def main(config_file_path, demux_fcid_dirs=None, restrict_to_projects=None, rest
         demux_fcid_dirs_set.update(check_for_new_flowcells(inbox_directory, num_days_time_limit=30))
     # Sort/copy each raw demux FC into project/sample/fcid format -- "analysis-ready"
     for demux_fcid_dir in demux_fcid_dirs_set:
-        dirs_to_analyze.update(setup_analysis_directory_structure(demux_fcid_dir,
+        projects_to_analyze.append(setup_analysis_directory_structure(demux_fcid_dir,
+        #dirs_to_analyze.update(setup_analysis_directory_structure(demux_fcid_dir,
                                                                   config_file_path,
                                                                   restrict_to_projects,
                                                                   restrict_to_samples))
-    if not dirs_to_analyze:
-        error_message = "No directories found to process."
+    if not projects_to_analyze:
+        error_message = "No projects found to process."
         LOG.info(error_message)
         sys.exit("Quitting: " + error_message)
 
-    # Build the run configuration
     analysis_pipeline_module_name = config.get("analysis", {}).get("analysis_pipeline")
     if not analysis_pipeline_module_name:
         LOG.warn("Warning: No analysis pipeline specified in configuration file. "\
@@ -75,12 +75,7 @@ def main(config_file_path, demux_fcid_dirs=None, restrict_to_projects=None, rest
         analysis_pipeline_module_name = "scilifelab_pipeline.bcbio_sll"
     # Import the module specified in the config file (e.g. bcbio, piper)
     analysis_module = importlib.import_module(analysis_pipeline_module_name)
-    # Determine how to execute the pipeline (e.g. localhost, sbatch)
-    #launch_method = config.get("analysis", {}).get("analysis_launch_method") or "localhost"
-
-
-    # dirs_to_analyze is now a list of dicts representing flowcells to analyze
-    analysis_module.main(flowcell_dirs_to_analyze=list(dirs_to_analyze), config_file_path=config_file_path)
+    analysis_module.main(projects_to_analyze=projects_to_analyze, config_file_path=config_file_path)
 
     #for sample_directory in dirs_to_analyze:
     #    ## TODO here is a difference. With bcbio-nextgen, the workflow to execute is written in the config file;
@@ -142,46 +137,70 @@ def main(config_file_path, demux_fcid_dirs=None, restrict_to_projects=None, rest
 #    return projects_dict
 
 
-class NGIProject(object):
-    def __init__(self, project_name, base_path):
-        self.project_name = project_name
-        self.samples = {}
+## TODO I'd like to be able to do project.sample.fcid to get the full path to this thing
+## TODO Add path checking, os.path.abspath / os.path.exists
+
+class NGIObject(object):
+    def __init__(self, name, dirname, subitem_type):
+        import ipdb; ipdb.set_trace()
+        self.name = name
+        self.dirname = dirname
+        self.subitems = {}
+        self.subitem_type = subitem_type
+
+    def __iter__(self):
+        return iter(self.subitems.values())
+
+    def __unicode__(self):
+        return self.name
+
+    def __repr__(self):
+        return "{}: \"{}\"".format(type(self), self.name)
+
+
+class NGIProject(NGIObject):
+    def __init__(self, name, dirname, base_path):
         self.base_path = base_path
+        super(NGIProject, self).__init__(name, dirname, subitem_type=NGISample)
+        self.samples = self.subitems
 
-    def __iter__(self):
-        return iter(self.samples.values())
-
-    def sample(self, sample_name):
+    ## Flytta
+    def add_sample(self, sample_name, sample_dirname):
         """Getter and adder."""
-        if not sample_name not in self.samples:
-            self.samples[sample_name] = NGISample(sample_name)
-        return self.samples[sample_name]
+        self.subitems[sample_name] = NGISample(sample_name, sample_dirname)
 
-    def __unicode__(self):
-        return self.project_name
+   # # So we can do NGIProject.samples
+   # def __getattribute__(self, attr):
+   #     if attr == "samples":
+   #         return self.subitems
+   #         #return self.subitems.values()
+   #     else:
+   #         return super(NGIProject, self).__getattribute__(attr)
 
-    def __repr__(self):
-        return self.__unicode__()
+
+class NGISample(NGIObject):
+    def __init__(self, *args, **kwargs):
+        super(NGISample, self).__init__(subitem_type=NGIFCID, *args, **kwargs)
+        self.fcids = self.subitems
+
+    ## Flytta
+    def add_fcid(self, name, dirname):
+        self.subitems[name] = NGIFCID(name, dirname)
 
 
-class NGISample(object):
-    def __init__(self, sample_name):
-        self.sample_name = sample_name
-        self.fcids = {}
+class NGIFCID(NGIObject):
+    def __init__(self, *args, **kwargs):
+        ## CHECK THIS I JUST WROTE IT WITHOUT CHECKING
+        super(NGIFCID, self).__init__(subitem_type=None, *args, **kwargs)
+        self.fastqs = self.subitems = []
 
-    def __iter__(self):
-        return iter(self.fcids)
-
-    def fcid(self, fcid_name):
-        if fcid not in self.fcids:
-            self.fcids[fcid_name] = []
-        return self.fcids[fcid_name]
-
-    def __unicode__(self):
-        return self.sample_name
-
-    def __repr__(self):
-        return self.__unicode__()
+    def add_fastq_files(self, fastq):
+        try:
+            # User passed in a list
+            self.subitems += fastq
+        except TypeError:
+            # User passed in a string
+            self.subitems.append(fastq)
 
 
 def check_for_new_flowcells(inbox_directory, num_days_time_limit=None):
@@ -282,6 +301,7 @@ def setup_analysis_directory_structure(fc_dir, config_file_path, restrict_to_pro
             LOG.debug("Skipping project {}".format(project_name))
             continue
         LOG.info("Setting up project {}".format(project.get("project_dir")))
+        project_obj = NGIProject(project_name=project_name, base_path=analysis_top_dir)
         # Create a project directory if it doesn't already exist
         project_dir = os.path.join(analysis_top_dir, project_name)
         if not os.path.exists(project_dir):
