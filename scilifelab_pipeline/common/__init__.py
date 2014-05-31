@@ -28,7 +28,7 @@ from scilifelab.utils.config import load_yaml_config_expand_vars
 from scilifelab.log import minimal_logger
 
 LOG = minimal_logger(__name__,
-                     #debug=True
+                     debug=True
                     )
 
 
@@ -104,6 +104,86 @@ def main(config_file_path, demux_fcid_dirs=None, restrict_to_projects=None, rest
 #    return m
 
 
+#def make_project_tree_dicts(fcid_list, format="Stockholm"):
+#    """Takes a list of analysis-ready flowcell ids and sorts them into a list of dict-trees:
+#
+#    Project directory structure is generally:
+#        <project>/<project-sample-id>/<date>_<flowcell>/
+#        G.Spong_13_03/P673_101/140220_AH8AMJADXX/
+#        (Sthlm format)
+#    or
+#        <date>_<flowcell>/Sample_<project-sample-id>/
+#         131018_D00118_0121_BC2NANACXX/Sample_NA10860_NR/
+#        (Uppsala format)
+#
+#    :param list fcid_list: The list of project/sample/fcid dirs.
+#    :returns: A list of {project: sample: fcid}-format dicts
+#    :rtype: list
+#    """
+#    ## TODO only works with Stockholm format
+#    projects_dict = {}
+#    #projects_dict = collections.defaultdict(dict)
+#    for fcid_path in fcid_list:
+#        path, fcid = os.path.split(fcid_path)
+#        if not fcid:
+#            # Trailing slash, if present, becomes ''
+#            path, fcid = os.path.split(fcid_path)
+#        path, sample = os.path.split(path)
+#        base, project = os.path.split(path)
+#
+#        if not projects_dict[project]:
+#            projects_dict[project] = Project(base_path=base)
+#            #projects_dict[project] = collections.defaultdict(list)
+#            #projects_dict[project]["base_path"] = base
+#        projects_dict[project].sample_add_flowcell(fcid)
+#        #Project.flowcell_add_files(list_of_files)
+#        #projects_dict[project][sample].append(fcid)
+#    import ipdb; ipdb.set_trace()
+#    return projects_dict
+
+
+class NGIProject(object):
+    def __init__(self, project_name, base_path):
+        self.project_name = project_name
+        self.samples = {}
+        self.base_path = base_path
+
+    def __iter__(self):
+        return iter(self.samples.values())
+
+    def sample(self, sample_name):
+        """Getter and adder."""
+        if not sample_name not in self.samples:
+            self.samples[sample_name] = NGISample(sample_name)
+        return self.samples[sample_name]
+
+    def __unicode__(self):
+        return self.project_name
+
+    def __repr__(self):
+        return self.__unicode__()
+
+
+class NGISample(object):
+    def __init__(self, sample_name):
+        self.sample_name = sample_name
+        self.fcids = {}
+
+    def __iter__(self):
+        return iter(self.fcids)
+
+    def fcid(self, fcid_name):
+        if fcid not in self.fcids:
+            self.fcids[fcid_name] = []
+        return self.fcids[fcid_name]
+
+    def __unicode__(self):
+        return self.sample_name
+
+    def __repr__(self):
+        return self.__unicode__()
+
+
 def check_for_new_flowcells(inbox_directory, num_days_time_limit=None):
     """Checks for newly-delivered data in the inbox_directory,
     ensuring that the data transfer has finished (by the presence of the file
@@ -119,7 +199,7 @@ def check_for_new_flowcells(inbox_directory, num_days_time_limit=None):
         return []
     else:
         new_flowcell_directories = set()
-        # Not sure what this will be because I don't know what Uppsala uses
+        ## TODO Not sure what this will be because I don't know what Uppsala uses
         project_dir_match_patterns = ("*",)
         # Omit hidden directories
         project_dir_filter_patterns = (".*",)
@@ -162,7 +242,7 @@ def setup_analysis_directory_structure(fc_dir, config_file_path, restrict_to_pro
     :returns: A list of flowcell directories that need to be run through the analysis pipeline
     :rtype: list
     """
-    LOG.info("Setting up analysis for demultiplexed data in folder \"{}\"".format(fc_dir))
+    LOG.info("Setting up analysis for demultiplexed data in source folder \"{}\"".format(fc_dir))
     # Load config, expanding shell variables in paths
     config = load_yaml_config_expand_vars(config_file_path)
     analysis_top_dir = os.path.abspath(config["analysis"]["top_dir"])
@@ -179,7 +259,7 @@ def setup_analysis_directory_structure(fc_dir, config_file_path, restrict_to_pro
         LOG.error("Error when processing flowcell dir \"{}\": e".format(fc_dir))
         return []
 
-    # Parse the flowcell dir
+    # Parse the source flowcell dir
     fc_dir_structure = parse_casava_directory(fc_dir)
     fc_date, fc_name = [fc_dir_structure['fc_date'],fc_dir_structure['fc_name']]
     fc_run_id = "{}_{}".format(fc_date,fc_name)
@@ -191,11 +271,9 @@ def setup_analysis_directory_structure(fc_dir, config_file_path, restrict_to_pro
     _copy_basecall_stats([os.path.join(fc_dir_structure['fc_dir'], d) for d in
                                         fc_dir_structure['basecall_stats_dir']],
                                         analysis_top_dir)
-
     sample_fcid_directories = []
     if not fc_dir_structure.get('projects'):
         LOG.warn("No projects found in specified flowcell directory \"{}\"".format(fc_dir))
-
     # Iterate over the projects in the flowcell directory
     for project in fc_dir_structure.get('projects', []):
         # If specific projects are specified, skip those that do not match
@@ -209,17 +287,15 @@ def setup_analysis_directory_structure(fc_dir, config_file_path, restrict_to_pro
         if not os.path.exists(project_dir):
             ## TODO change to mkdir -p
             os.mkdir(project_dir, 0770)
-
         # Iterate over the samples in the project
         for sample in project.get('samples', []):
             # If specific samples are specified, skip those that do not match
             ## this appears to be some scilifelab-specific naming process?
             sample_name = sample['sample_name'].replace('__','.')
             if len(restrict_to_samples) > 0 and sample_name not in restrict_to_samples:
-                LOG.info("Skipping sample {}".format(sample_name))
                 LOG.debug("Skipping sample {}".format(sample_name))
                 continue
-            LOG.info("Setting up sample {}".format(sample.get("sample_dir")))
+            LOG.info("Setting up sample {}".format(sample_name))
             # Create a directory for the sample if it doesn't already exist
             sample_dir = os.path.join(project_dir, sample_name)
             if not os.path.exists(sample_dir):
@@ -242,7 +318,7 @@ def setup_analysis_directory_structure(fc_dir, config_file_path, restrict_to_pro
             sample_files = do_rsync([ os.path.join(src_sample_dir, f) for f in
                                       sample.get('files', [])], dst_sample_fcid_dir)
             sample_fcid_directories.append(dst_sample_fcid_dir)
-    return sample_directories
+    return sample_fcid_directories
 
 
 ## TODO this isn't all my code and I must review it
@@ -287,6 +363,7 @@ def parse_casava_directory(fc_dir):
     """
     projects = []
     fc_dir = os.path.abspath(fc_dir)
+    LOG.info("Parsing directory \"{}\"...".format(fc_dir))
     parser = FlowcellRunMetricsParser(fc_dir)
     run_info = parser.parseRunInfo()
     runparams = parser.parseRunParameters()
@@ -548,8 +625,8 @@ def find_fastq_read_pairs(file_list=None, directory=None):
     #     Format: <lane>_<date>_<flowcell>_<project-sample>_<read>.fastq.gz
     #     Example: 1_140220_AH8AMJADXX_P673_101_1.fastq.gz
     # --> This is the standard Illumina/Uppsala format:
-    #     Format: <sample-name>_<index>_<lane>_<read>_<group>.fastq.gz
-    #     Example: P567_102_CCCCCC_L001_R1_001.fastq.gz
+    #     Format: <sample_name?>_<index>_<lane>_<read>_<group>.fastq.gz
+    #     Example: NA10860_NR_TAAGGC_L005_R1_001.fastq.gz
     suffix_pattern = re.compile(r'(.*)fastq')
     file_format_pattern = re.compile(r'(.*)_(?:R\d|\d\.).*')
     matches_dict = collections.defaultdict(list)
@@ -575,8 +652,8 @@ def get_flowcell_id_from_dirtree(path):
     """Given the path to a file, tries to work out the flowcell ID.
 
     Project directory structure is generally either:
-        <project>/<date>_<flowcell>/Sample_<project-sample-id>/
-        A.Wedell_13_01/130627_AH0JYUADXX/Sample_P567_102
+        <date>_<flowcell>/Sample_<project-sample-id>/
+         131018_D00118_0121_BC2NANACXX/Sample_NA10860_NR/
         (Uppsala format)
     or:
         <project>/<project-sample-id>/<date>_<flowcell>/
@@ -587,7 +664,9 @@ def get_flowcell_id_from_dirtree(path):
     :rtype: str
     :raises ValueError: If the flowcell ID cannot be determined
     """
-    flowcell_pattern = re.compile(r'\d{6}_([A-Z0-9]{10})')
+    ## TODO CHANGE THIS TO MATCH UPPSALA PATTERN
+    flowcell_pattern = re.compile(r'\d{4,6}_(?P=<fcid>[A-Z0-9]{10})')
+    #flowcell_pattern = re.compile(r'\d{6}_([A-Z0-9]{10})')
     try:
         # SciLifeLab Sthlm tree format
         path, dirname = os.path.split(path)
