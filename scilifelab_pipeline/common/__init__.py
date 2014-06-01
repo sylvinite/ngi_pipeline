@@ -22,13 +22,28 @@ import unittest
 import yaml
 
 ## TODO migrate this out of bcbio-specific code
-from scilifelab.bcbio.qc import FlowcellRunMetricsParser
+#from scilifelab.bcbio.qc import FlowcellRunMetricsParser
 
-from scilifelab.utils.config import load_yaml_config_expand_vars
-from scilifelab.log import minimal_logger
+#from scilifelab.utils.config import load_yaml_config_expand_vars
+#from scilifelab.log import minimal_logger
+
+
+## temporary hack because I haven't installed the scilifelab repo locally because it has 800000 dependencies
+class minimal_logger(object):
+    def __init__(self, name):
+        self.name = name
+
+    def warn(self, message):
+        print("{}: {}".format(self.name, message), file=sys.stderr)
+
+    def error(self, message):
+        self.warn(message)
+
+    def info(self, message):
+        self.warn(message)
 
 LOG = minimal_logger(__name__,
-                     debug=True
+                     #debug=True
                     )
 
 
@@ -58,6 +73,7 @@ def main(config_file_path, demux_fcid_dirs=None, restrict_to_projects=None, rest
         demux_fcid_dirs_set.update(check_for_new_flowcells(inbox_directory, num_days_time_limit=30))
     # Sort/copy each raw demux FC into project/sample/fcid format -- "analysis-ready"
     for demux_fcid_dir in demux_fcid_dirs_set:
+        # These will be a bunch of project objects each containing samples, fcids, fastq files
         projects_to_analyze.append(setup_analysis_directory_structure(demux_fcid_dir,
         #dirs_to_analyze.update(setup_analysis_directory_structure(demux_fcid_dir,
                                                                   config_file_path,
@@ -98,58 +114,20 @@ def main(config_file_path, demux_fcid_dirs=None, restrict_to_projects=None, rest
 #        m = getattr(m, comp)
 #    return m
 
-
-#def make_project_tree_dicts(fcid_list, format="Stockholm"):
-#    """Takes a list of analysis-ready flowcell ids and sorts them into a list of dict-trees:
-#
-#    Project directory structure is generally:
-#        <project>/<project-sample-id>/<date>_<flowcell>/
-#        G.Spong_13_03/P673_101/140220_AH8AMJADXX/
-#        (Sthlm format)
-#    or
-#        <date>_<flowcell>/Sample_<project-sample-id>/
-#         131018_D00118_0121_BC2NANACXX/Sample_NA10860_NR/
-#        (Uppsala format)
-#
-#    :param list fcid_list: The list of project/sample/fcid dirs.
-#    :returns: A list of {project: sample: fcid}-format dicts
-#    :rtype: list
-#    """
-#    ## TODO only works with Stockholm format
-#    projects_dict = {}
-#    #projects_dict = collections.defaultdict(dict)
-#    for fcid_path in fcid_list:
-#        path, fcid = os.path.split(fcid_path)
-#        if not fcid:
-#            # Trailing slash, if present, becomes ''
-#            path, fcid = os.path.split(fcid_path)
-#        path, sample = os.path.split(path)
-#        base, project = os.path.split(path)
-#
-#        if not projects_dict[project]:
-#            projects_dict[project] = Project(base_path=base)
-#            #projects_dict[project] = collections.defaultdict(list)
-#            #projects_dict[project]["base_path"] = base
-#        projects_dict[project].sample_add_flowcell(fcid)
-#        #Project.flowcell_add_files(list_of_files)
-#        #projects_dict[project][sample].append(fcid)
-#    import ipdb; ipdb.set_trace()
-#    return projects_dict
-
-
-## TODO I'd like to be able to do project.sample.fcid to get the full path to this thing
 ## TODO Add path checking, os.path.abspath / os.path.exists
-
 class NGIObject(object):
     def __init__(self, name, dirname, subitem_type):
-        import ipdb; ipdb.set_trace()
         self.name = name
         self.dirname = dirname
-        self.subitems = {}
-        self.subitem_type = subitem_type
+        self._subitems = {}
+        self._subitem_type = subitem_type
+
+    def _add_subitem(self, name, dirname):
+        self._subitems[name] = self._subitem_type(name, dirname)
+        return self._subitems[name]
 
     def __iter__(self):
-        return iter(self.subitems.values())
+        return iter(self._subitems.values())
 
     def __unicode__(self):
         return self.name
@@ -162,45 +140,32 @@ class NGIProject(NGIObject):
     def __init__(self, name, dirname, base_path):
         self.base_path = base_path
         super(NGIProject, self).__init__(name, dirname, subitem_type=NGISample)
-        self.samples = self.subitems
-
-    ## Flytta
-    def add_sample(self, sample_name, sample_dirname):
-        """Getter and adder."""
-        self.subitems[sample_name] = NGISample(sample_name, sample_dirname)
-
-   # # So we can do NGIProject.samples
-   # def __getattribute__(self, attr):
-   #     if attr == "samples":
-   #         return self.subitems
-   #         #return self.subitems.values()
-   #     else:
-   #         return super(NGIProject, self).__getattribute__(attr)
+        self.samples = self._subitems
+        self.add_sample = self._add_subitem
 
 
 class NGISample(NGIObject):
     def __init__(self, *args, **kwargs):
         super(NGISample, self).__init__(subitem_type=NGIFCID, *args, **kwargs)
-        self.fcids = self.subitems
-
-    ## Flytta
-    def add_fcid(self, name, dirname):
-        self.subitems[name] = NGIFCID(name, dirname)
+        self.fcids = self._subitems
+        self.add_fcid = self._add_subitem
 
 
 class NGIFCID(NGIObject):
     def __init__(self, *args, **kwargs):
-        ## CHECK THIS I JUST WROTE IT WITHOUT CHECKING
         super(NGIFCID, self).__init__(subitem_type=None, *args, **kwargs)
-        self.fastqs = self.subitems = []
+        self.fastqs = self._subitems = []
+        ## TODO why doesn't this work?
+        #delattr(self, "_add_subitem")
 
     def add_fastq_files(self, fastq):
-        try:
-            # User passed in a list
-            self.subitems += fastq
-        except TypeError:
-            # User passed in a string
-            self.subitems.append(fastq)
+        if type(fastq) == list:
+            self._subitems.extend(fastq)
+        elif type(fastq) == str:
+            self._subitems.append(fastq)
+        else:
+            raise TypeError("Fastq files must be passed as a list or a string: " \
+                            "got \"{}\"".format(fastq))
 
 
 def check_for_new_flowcells(inbox_directory, num_days_time_limit=None):
@@ -267,16 +232,16 @@ def setup_analysis_directory_structure(fc_dir, config_file_path, restrict_to_pro
     analysis_top_dir = os.path.abspath(config["analysis"]["top_dir"])
     if not os.path.exists(fc_dir):
         LOG.error("Error: Flowcell directory {} does not exist".format(fc_dir))
-        return []
+        yield []
     if not os.path.exists(analysis_top_dir):
         LOG.error("Error: Analysis top directory {} does not exist".format(analysis_top_dir))
-        return []
+        yield []
     # Map the directory structure for this flowcell
     try:
         fc_dir_structure = parse_casava_directory(fc_dir)
     except RuntimeError as e:
         LOG.error("Error when processing flowcell dir \"{}\": e".format(fc_dir))
-        return []
+        yield []
 
     # Parse the source flowcell dir
     fc_dir_structure = parse_casava_directory(fc_dir)
@@ -290,7 +255,7 @@ def setup_analysis_directory_structure(fc_dir, config_file_path, restrict_to_pro
     _copy_basecall_stats([os.path.join(fc_dir_structure['fc_dir'], d) for d in
                                         fc_dir_structure['basecall_stats_dir']],
                                         analysis_top_dir)
-    sample_fcid_directories = []
+    #sample_fcid_directories = []
     if not fc_dir_structure.get('projects'):
         LOG.warn("No projects found in specified flowcell directory \"{}\"".format(fc_dir))
     # Iterate over the projects in the flowcell directory
@@ -301,12 +266,14 @@ def setup_analysis_directory_structure(fc_dir, config_file_path, restrict_to_pro
             LOG.debug("Skipping project {}".format(project_name))
             continue
         LOG.info("Setting up project {}".format(project.get("project_dir")))
-        project_obj = NGIProject(project_name=project_name, base_path=analysis_top_dir)
         # Create a project directory if it doesn't already exist
         project_dir = os.path.join(analysis_top_dir, project_name)
         if not os.path.exists(project_dir):
             ## TODO change to mkdir -p
             os.mkdir(project_dir, 0770)
+
+        project_obj = NGIProject(name=project_name, dirname=project_name, base_path=analysis_top_dir)
+
         # Iterate over the samples in the project
         for sample in project.get('samples', []):
             # If specific samples are specified, skip those that do not match
@@ -321,11 +288,17 @@ def setup_analysis_directory_structure(fc_dir, config_file_path, restrict_to_pro
             if not os.path.exists(sample_dir):
                 ## TODO change to mkdir -p
                 os.mkdir(sample_dir, 0770)
+
+            sample_obj = project_obj.add_sample(name="sample_name", dirname="sample_name")
+
             # Create a directory for the flowcell if it does not exist
             dst_sample_fcid_dir = os.path.join(sample_dir, fc_run_id)
             if not os.path.exists(dst_sample_fcid_dir):
                 ## TODO change to mkdir -p
                 os.mkdir(dst_sample_fcid_dir, 0770)
+
+            fcid_obj = sample_obj.add_fcid(name="fc_run_id", dirname="fc_run_id")
+
             # rsync the source files to the sample directory
             # src: flowcell/data/project/sample
             # dst: project/sample/flowcell_run
@@ -337,8 +310,14 @@ def setup_analysis_directory_structure(fc_dir, config_file_path, restrict_to_pro
             #                                src_sample_dir, dst_sample_fcid_dir))
             sample_files = do_rsync([ os.path.join(src_sample_dir, f) for f in
                                       sample.get('files', [])], dst_sample_fcid_dir)
-            sample_fcid_directories.append(dst_sample_fcid_dir)
-    return sample_fcid_directories
+            #sample_fcid_directories.append(dst_sample_fcid_dir)
+
+            # Just want fastq files here
+            pt = re.compile(".*\.(fastq|fq)(\.gz|\.gzip|\.bz2)?$")
+            fastq_files = filter(pt.match, sample.get('files', []))
+            fcid_obj.add_fastq(fastq_files)
+
+        yield project_obj
 
 
 ## TODO this isn't all my code and I must review it
