@@ -203,7 +203,7 @@ def setup_analysis_directory_structure(fc_dir, config_file_path, restrict_to_pro
     :param list restrict_to_projects: Specific projects within the flowcell to process exclusively
     :param list restrict_to_samples: Specific projects within the flowcell to process exclusively
 
-    :returns: A list of flowcell directories that need to be run through the analysis pipeline
+    :returns: A list of NGIProject objects that need to be run through the analysis pipeline
     :rtype: list
     """
     LOG.info("Setting up analysis for demultiplexed data in source folder \"{}\"".format(fc_dir))
@@ -307,7 +307,7 @@ def setup_analysis_directory_structure(fc_dir, config_file_path, restrict_to_pro
     return projects_to_analyze
 
 
-## TODO this isn't all my code and I must review it
+## TODO this isn't all my code and I must review it -- I think we're duplicating work here
 def parse_casava_directory(fc_dir):
     """
     Traverse a CASAVA-1.8-generated directory structure and return a dictionary
@@ -341,7 +341,7 @@ def parse_casava_directory(fc_dir):
 
     :param str fc_dir: The directory created by CASAVA for this flowcell.
 
-    :returns: A dictionary of the flowcell directory tree: {
+    :returns: A dict of information about the flowcell, including project/sample info
     :rtype: dict
 
     :raises RuntimeError: If the fc_dir does not exist or cannot be accessed,
