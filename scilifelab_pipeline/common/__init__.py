@@ -71,9 +71,7 @@ def main(config_file_path, demux_fcid_dirs=None, restrict_to_projects=None, rest
     # Sort/copy each raw demux FC into project/sample/fcid format -- "analysis-ready"
     for demux_fcid_dir in demux_fcid_dirs_set:
         # These will be a bunch of Project objects each containing Samples, FCIDs, lists of fastq files
-        import ipdb; ipdb.set_trace()
         projects_to_analyze = setup_analysis_directory_structure(demux_fcid_dir,
-        #dirs_to_analyze.update(setup_analysis_directory_structure(demux_fcid_dir,
                                                                   config_file_path,
                                                                   restrict_to_projects,
                                                                   restrict_to_samples)
@@ -91,17 +89,6 @@ def main(config_file_path, demux_fcid_dirs=None, restrict_to_projects=None, rest
     analysis_module = importlib.import_module(analysis_pipeline_module_name)
     analysis_module.main(projects_to_analyze=projects_to_analyze, config_file_path=config_file_path)
 
-    #for sample_directory in dirs_to_analyze:
-    #    ## TODO here is a difference. With bcbio-nextgen, the workflow to execute is written in the config file;
-    #    ##      for Piper, you actually execute a different workflow binary.
-    #    samples_to_process = analysis_module.build_run_configs(samples_dir=sample_directory,
-    #                                                           config_path=config_file_path)
-    #    #for sample_to_process in analysis_module.build_run_configs(samples_dir=sample_directory,
-    #    #                                                    config_path=config_file_path):
-    #    for sample_to_process in samples_to_process:
-    #        analysis_module.launch_pipeline(sample_to_process['run_config'],
-    #                                        sample_to_process['work_dir'],
-    #                                        launch_method)
 
 #def get_class( kls ):
 #    """http://stackoverflow.com/questions/452969/does-python-have-an-equivalent-to-java-class-forname"""
@@ -538,7 +525,8 @@ class memoized(object):
 
 
 @memoized
-def parse_project_sample_lane_from_filename(sample_basename):
+#def parse_project_sample_lane_from_filename(sample_basename):
+def parse_lane_from_filename(sample_basename):
     """Project id, sample id, and lane are pulled from the standard filename format,
      which is:
        <lane_num>_<date>_<fcid>_<project>_<sample_num>_<read>.fastq[.gz]
@@ -559,12 +547,15 @@ def parse_project_sample_lane_from_filename(sample_basename):
     :rtype: tuple
     :raises ValueError: If the ids cannot be determined from the filename (no regex match)
     """
+    ## TODO so it turns out Uppsala doesn't do this project_sample thing with their sample naming which is a little sad for me
     # Stockholm or Illumina
     match = re.match(r'(?P<lane>\d)_\d{6}_\w{10}_(?P<project>P\d{3})_(?P<sample>\d{3}).*', sample_basename) or \
-            re.match(r'(?P<project>P\d{3})_(?P<sample>\w+)_.*_L(?P<lane>\d{3})', sample_basename)
+            re.match(r'.*_L(?P<lane>\d{3}).*', sample_basename)
+            #re.match(r'(?P<project>P\d{3})_(?P<sample>\w+)_.*_L(?P<lane>\d{3})', sample_basename)
 
     if match:
-        return match.group('project'), match.group('sample'), match.group('lane')
+        #return match.group('project'), match.group('sample'), match.group('lane')
+        return match.group('lane')
     else:
         raise ValueError("Error: filename didn't match conventions, "
                          "couldn't find project id for sample "
@@ -608,9 +599,9 @@ def find_fastq_read_pairs(file_list=None, directory=None):
     :rtype: dict
     """
     if not directory or file_list:
-        raise RuntimeError("Must specify either a list of files or a directory path.")
+        raise RuntimeError("Must specify either a list of files or a directory path (in kw format.")
 
-    # Can I do this? "is not"? It seems too easy
+    #` Can I do this? "is not"? It seems easy... a little TOO easy...
     if file_list and type(file_list) is not list:
         LOG.warn("file_list parameter passed is not a list; trying as a directory.")
         directory = file_list
