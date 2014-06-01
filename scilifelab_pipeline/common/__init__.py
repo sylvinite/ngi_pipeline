@@ -27,13 +27,13 @@ from scilifelab.bcbio.qc import FlowcellRunMetricsParser
 from scilifelab.utils.config import load_yaml_config_expand_vars
 from scilifelab.log import minimal_logger
 
-class minimal_logger(object):
-    def __init__(self, name):
-        self.name = name
-        self.error = self.info = self.warn
-
-    def warn(self, message):
-        print("{}: {}".format(self.name, message), file=sys.stderr)
+#class minimal_logger(object):
+#    def __init__(self, name):
+#        self.name = name
+#        self.error = self.info = self.warn
+#
+#    def warn(self, message):
+#        print("{}: {}".format(self.name, message), file=sys.stderr)
 
 LOG = minimal_logger(__name__,
                      #debug=True
