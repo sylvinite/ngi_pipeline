@@ -22,25 +22,23 @@ import unittest
 import yaml
 
 ## TODO migrate this out of bcbio-specific code
-#from scilifelab.bcbio.qc import FlowcellRunMetricsParser
+from scilifelab.bcbio.qc import FlowcellRunMetricsParser
 
-#from scilifelab.utils.config import load_yaml_config_expand_vars
-#from scilifelab.log import minimal_logger
+from scilifelab.utils.config import load_yaml_config_expand_vars
+from scilifelab.log import minimal_logger
 
-
-## temporary hack because I haven't installed the scilifelab repo locally because it has 800000 dependencies
-class minimal_logger(object):
-    def __init__(self, name):
-        self.name = name
-
-    def warn(self, message):
-        print("{}: {}".format(self.name, message), file=sys.stderr)
-
-    def error(self, message):
-        self.warn(message)
-
-    def info(self, message):
-        self.warn(message)
+#class minimal_logger(object):
+#    def __init__(self, name):
+#        self.name = name
+#
+#    def warn(self, message):
+#        print("{}: {}".format(self.name, message), file=sys.stderr)
+#
+#    def error(self, message):
+#        self.warn(message)
+#
+#    def info(self, message):
+#        self.warn(message)
 
 LOG = minimal_logger(__name__,
                      #debug=True
@@ -68,17 +66,17 @@ def main(config_file_path, demux_fcid_dirs=None, restrict_to_projects=None, rest
     else:
         # Check for newly-delivered data in the INBOX
         inbox_directory = config.get('INBOX')
-        # Note that this is a list of flowcells, not all of which are necessarily
-        # part of the same project.
+        # These flowcells can contain data from multiple projects
         demux_fcid_dirs_set.update(check_for_new_flowcells(inbox_directory, num_days_time_limit=30))
     # Sort/copy each raw demux FC into project/sample/fcid format -- "analysis-ready"
     for demux_fcid_dir in demux_fcid_dirs_set:
-        # These will be a bunch of project objects each containing samples, fcids, fastq files
-        projects_to_analyze.append(setup_analysis_directory_structure(demux_fcid_dir,
+        # These will be a bunch of Project objects each containing Samples, FCIDs, lists of fastq files
+        import ipdb; ipdb.set_trace()
+        projects_to_analyze = setup_analysis_directory_structure(demux_fcid_dir,
         #dirs_to_analyze.update(setup_analysis_directory_structure(demux_fcid_dir,
                                                                   config_file_path,
                                                                   restrict_to_projects,
-                                                                  restrict_to_samples))
+                                                                  restrict_to_samples)
     if not projects_to_analyze:
         error_message = "No projects found to process."
         LOG.info(error_message)
@@ -232,16 +230,16 @@ def setup_analysis_directory_structure(fc_dir, config_file_path, restrict_to_pro
     analysis_top_dir = os.path.abspath(config["analysis"]["top_dir"])
     if not os.path.exists(fc_dir):
         LOG.error("Error: Flowcell directory {} does not exist".format(fc_dir))
-        yield []
+        return []
     if not os.path.exists(analysis_top_dir):
         LOG.error("Error: Analysis top directory {} does not exist".format(analysis_top_dir))
-        yield []
+        return []
     # Map the directory structure for this flowcell
     try:
         fc_dir_structure = parse_casava_directory(fc_dir)
     except RuntimeError as e:
         LOG.error("Error when processing flowcell dir \"{}\": e".format(fc_dir))
-        yield []
+        return []
 
     # Parse the source flowcell dir
     fc_dir_structure = parse_casava_directory(fc_dir)
@@ -259,6 +257,7 @@ def setup_analysis_directory_structure(fc_dir, config_file_path, restrict_to_pro
     if not fc_dir_structure.get('projects'):
         LOG.warn("No projects found in specified flowcell directory \"{}\"".format(fc_dir))
     # Iterate over the projects in the flowcell directory
+    projects_to_analyze = []
     for project in fc_dir_structure.get('projects', []):
         # If specific projects are specified, skip those that do not match
         project_name = project['project_name']
@@ -272,8 +271,11 @@ def setup_analysis_directory_structure(fc_dir, config_file_path, restrict_to_pro
             ## TODO change to mkdir -p
             os.mkdir(project_dir, 0770)
 
-        ## TODO This should be the actual project name
+        ## TODO This should be the actual project name -- is it?
         project_obj = NGIProject(name=project_name, dirname=project_name, base_path=analysis_top_dir)
+        # This could in weird cases result in a project which has no samples or fcids or files
+        # but I'm okay with that on some levels. Acceptance.
+        projects_to_analyze.append(project_obj)
 
         # Iterate over the samples in the project
         for sample in project.get('samples', []):
@@ -290,8 +292,8 @@ def setup_analysis_directory_structure(fc_dir, config_file_path, restrict_to_pro
                 ## TODO change to mkdir -p
                 os.mkdir(sample_dir, 0770)
 
-            ## TODO This should be the actual sample name
-            sample_obj = project_obj.add_sample(name="sample_name", dirname="sample_name")
+            ## TODO This should be the actual sample name -- is it?
+            sample_obj = project_obj.add_sample(name=sample_name, dirname=sample_name)
 
             # Create a directory for the flowcell if it does not exist
             dst_sample_fcid_dir = os.path.join(sample_dir, fc_run_id)
@@ -299,8 +301,8 @@ def setup_analysis_directory_structure(fc_dir, config_file_path, restrict_to_pro
                 ## TODO change to mkdir -p
                 os.mkdir(dst_sample_fcid_dir, 0770)
 
-            ## TODO This should be the actual FCID name
-            fcid_obj = sample_obj.add_fcid(name="fc_run_id", dirname="fc_run_id")
+            ## TODO This should be the actual FCID name -- is it?
+            fcid_obj = sample_obj.add_fcid(name=fc_run_id, dirname=fc_run_id)
 
             # rsync the source files to the sample directory
             # src: flowcell/data/project/sample
@@ -318,9 +320,9 @@ def setup_analysis_directory_structure(fc_dir, config_file_path, restrict_to_pro
             # Just want fastq files here
             pt = re.compile(".*\.(fastq|fq)(\.gz|\.gzip|\.bz2)?$")
             fastq_files = filter(pt.match, sample.get('files', []))
-            fcid_obj.add_fastq(fastq_files)
+            fcid_obj.add_fastq_files(fastq_files)
 
-        yield project_obj
+    return projects_to_analyze
 
 
 ## TODO this isn't all my code and I must review it
