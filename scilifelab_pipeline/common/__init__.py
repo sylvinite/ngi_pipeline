@@ -406,7 +406,7 @@ def parse_casava_directory(fc_dir):
             'projects': projects}
 
 
-## is this used?
+# This isn't used?
 def copy_undetermined_index_files(casava_data_dir, destination_dir):
     """
     Copy fastq files with "Undetermined" index reads to the destination directory.
@@ -576,15 +576,16 @@ def get_project_data_for_id(project_id, proj_db):
     try:
         return proj_db.get([proj.id for proj in db_view if proj.key == project_id][0])
     except IndexError:
-        # TODO this will be logged and should be caught on the calling side
-        raise ValueError("Warning: project ID '{}' not found in Status DB".format(project_id))
+        error_msg = "Warning: project ID '{}' not found in Status DB".format(project_id)
+        LOG.error(error_msg)
+        raise ValueError(error_msg)
 
 
 def find_fastq_read_pairs(file_list=None, directory=None):
     """
     Given a list of file names, finds read pairs (based on _R1_/_R2_ file naming)
     and returns a dict of {base_name: [ file_read_one, file_read_two ]}
-    Filters out files not ending with .fastq[.gz] as well as non-files
+    Filters out files not ending with .fastq[.gz|.gzip|.bz2].
     E.g.
         1_131129_BH7VPTADXX_P602_101_1.fastq.gz
         1_131129_BH7VPTADXX_P602_101_2.fastq.gz
@@ -611,8 +612,8 @@ def find_fastq_read_pairs(file_list=None, directory=None):
         file_list = glob.glob(os.path.join(directory, "*"))
     # We only want fastq files
     if file_list:
-        file_list = set([ f for f in file_list if
-                         (fnmatch.fnmatch(f, "*.fastq*") and os.path.isfile(f)) ])
+        pt = re.compile(".*\.(fastq|fq)(\.gz|\.gzip|\.bz2)?$")
+        file_list = filter(pt.match, file_list)
     else:
         # No files found
         return {}
@@ -659,16 +660,14 @@ def get_flowcell_id_from_dirtree(path):
     :rtype: str
     :raises ValueError: If the flowcell ID cannot be determined
     """
-    ## TODO CHANGE THIS TO MATCH UPPSALA PATTERN
     flowcell_pattern = re.compile(r'\d{4,6}_(?P=<fcid>[A-Z0-9]{10})')
-    #flowcell_pattern = re.compile(r'\d{6}_([A-Z0-9]{10})')
     try:
-        # SciLifeLab Sthlm tree format
+        # SciLifeLab Sthlm tree format (3-dir)
         path, dirname = os.path.split(path)
         return flowcell_pattern.match(dirname).groups()[0]
     except (IndexError, AttributeError):
         try:
-            # SciLifeLab Uppsala tree format
+            # SciLifeLab Uppsala tree format (2-dir)
             _, dirname = os.path.split(path)
             return flowcell_pattern.match(dirname).groups()[0]
         except (IndexError, AttributeError):
@@ -705,9 +704,6 @@ def get_flowcell_id_from_dirtree(path):
 #        return path
 #
 
-class OrganizeCopyTests(unittest.TestCase):
-    """
-    """
 
 ## a cron job will run this periodically, passing only the config file;
 ## the script will check for newly-delivered flowcells and process them
