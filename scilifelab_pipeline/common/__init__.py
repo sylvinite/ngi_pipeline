@@ -272,6 +272,7 @@ def setup_analysis_directory_structure(fc_dir, config_file_path, restrict_to_pro
             ## TODO change to mkdir -p
             os.mkdir(project_dir, 0770)
 
+        ## TODO This should be the actual project name
         project_obj = NGIProject(name=project_name, dirname=project_name, base_path=analysis_top_dir)
 
         # Iterate over the samples in the project
@@ -289,6 +290,7 @@ def setup_analysis_directory_structure(fc_dir, config_file_path, restrict_to_pro
                 ## TODO change to mkdir -p
                 os.mkdir(sample_dir, 0770)
 
+            ## TODO This should be the actual sample name
             sample_obj = project_obj.add_sample(name="sample_name", dirname="sample_name")
 
             # Create a directory for the flowcell if it does not exist
@@ -297,6 +299,7 @@ def setup_analysis_directory_structure(fc_dir, config_file_path, restrict_to_pro
                 ## TODO change to mkdir -p
                 os.mkdir(dst_sample_fcid_dir, 0770)
 
+            ## TODO This should be the actual FCID name
             fcid_obj = sample_obj.add_fcid(name="fc_run_id", dirname="fc_run_id")
 
             # rsync the source files to the sample directory
