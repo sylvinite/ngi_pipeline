@@ -619,17 +619,21 @@ def find_fastq_read_pairs(file_list=None, directory=None):
     #     Format: <sample_name?>_<index>_<lane>_<read>_<group>.fastq.gz
     #     Example: NA10860_NR_TAAGGC_L005_R1_001.fastq.gz
     suffix_pattern = re.compile(r'(.*)fastq')
+    # Cut off at the read group
     file_format_pattern = re.compile(r'(.*)_(?:R\d|\d\.).*')
     matches_dict = collections.defaultdict(list)
     for file_pathname in file_list:
         file_basename = os.path.basename(file_pathname)
         try:
+            # See if there's a pair!
             pair_base = file_format_pattern.match(file_basename).groups()[0]
             matches_dict[pair_base].append(os.path.abspath(file_pathname))
         except AttributeError:
             LOG.warn("Warning: file doesn't match expected file format, "
                       "cannot be paired: \"{}\"".format(file_fullname))
             try:
+                # File could not be paired, but be the bigger person and include it in the group anyway
+                ## TODO Should we add files that don't match or drop them?
                 file_basename_stripsuffix = suffix_pattern.split(file_basename)[0]
                 matches_dict[file_basename_stripsuffix].append(os.abspath(file_fullname))
             except AttributeError:
