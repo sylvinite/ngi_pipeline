@@ -75,11 +75,12 @@ def main(config_file_path, demux_fcid_dirs=None, restrict_to_projects=None, rest
         LOG.info(error_message)
         sys.exit("Quitting: " + error_message)
 
+    ## TODO change this terminology from 'pipeline' to 'analysis_engine' or something similar
     analysis_pipeline_module_name = config.get("analysis", {}).get("analysis_pipeline")
     if not analysis_pipeline_module_name:
-        LOG.warn("Warning: No analysis pipeline specified in configuration file. "\
-                 "Falling back to bcbio-nextgen.")
-        analysis_pipeline_module_name = "scilifelab_pipeline.bcbio_sll"
+        error_msg = "No analysis engine specified in configuration file. Exiting."
+        LOG.error(error_msg)
+        raise RuntimeError(error_msg)
     # Import the module specified in the config file (e.g. bcbio, piper)
     analysis_module = importlib.import_module(analysis_pipeline_module_name)
     analysis_module.main(projects_to_analyze=projects_to_analyze, config_file_path=config_file_path)
