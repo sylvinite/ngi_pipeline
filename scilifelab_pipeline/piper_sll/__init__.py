@@ -12,6 +12,7 @@ import collections
 import os
 import re
 import shutil
+import subprocess
 import time
 
 from scilifelab.log import minimal_logger
@@ -31,12 +32,19 @@ def main(projects_to_analyze, config_file_path):
     config = load_yaml_config_expand_vars(config_file_path)
     report_paths = create_report_tsv(projects_to_analyze)
 
-    build_setup_xml(projects_to_analyze, config=config)
+    setup_xml_paths = build_setup_xml(projects_to_analyze, config=config)
 
-    # Fetch requisite info for automatic config builder
     # Run Johan's converter script if needed
     # sbatch relevant workflow
     # Decide how to track jobs that are running -- write to database?
+
+
+def launch_piper_workflow():
+    """
+    ./workflows/WholeGenome.sh --xml_input A.Wedell_13_01/a.wedell_runcfg.xml --run
+    """
+    pass
+
 
 
 def build_setup_xml(projects_to_analyze, config):
@@ -69,8 +77,8 @@ def build_setup_xml(projects_to_analyze, config):
         project_top_level_dir = os.path.join(project.base_path, project.dirname)
         cl_args = {}
 
-
         # Load needed data from database
+        ## Maybe write a separate function for this
         try:
             # Information we need from the database:
             # - species / reference genome that should be used (hg19, mm9)
@@ -78,21 +86,29 @@ def build_setup_xml(projects_to_analyze, config):
             # - adapters to be trimmed (?)
             #reference_genome = proj_db.get('species')
             reference_genome = 'hg19'
-            # prep_method = proj_db.get('Library Preparation Method')
-            prep_method = 'Standard DNA'
             # sequencing_center = proj_db.get('Sequencing Center')
             cl_args["sequencing_center"] = "NGI"
+
+            ###
+            # TO THE LAUNCH FUNCTION
+            # prep_method = proj_db.get('Library Preparation Method')
+            prep_method = 'Standard DNA'
+            ###
+
         except:
+            ## TODO Put some useful thing (code??) here
             pass
 
-
         # Load needed data from configuration file
+        ## maybe write a separate function for this
         try:
             cl_args["reference_path"] = config['supported_genomes'][reference_genome]
             cl_args["uppmax_proj"] = config['environment']['project_id']
             cl_args["path_to_piper_jar"] = config['environment']['path_to_piper_jar']
-            workflows = config['method_to_workflow_mappings'][prep_method]
 
+            ##
+            # ALL THIS GOES IN THE LAUNCH FUNCTION
+            workflows = config['method_to_workflow_mappings'][prep_method]
             workflow_templates = []
             for workflow in workflows:
                 try:
@@ -103,6 +119,7 @@ def build_setup_xml(projects_to_analyze, config):
                     error_msg = "No workflow template available for workflow \"{}\"; " \
                                 " skipping.".format(workflow)
                     LOG.error(error_msg)
+            ##
 
         except KeyError as e:
             error_msg = "Could not load required information from configuration file" \
@@ -110,10 +127,9 @@ def build_setup_xml(projects_to_analyze, config):
             LOG.error(error_msg)
             continue
 
-
-        cli_args["output_xml_filepath"] = os.path.join( project_top_level_dir,
+        cl_args["output_xml_filepath"] = os.path.join( project_top_level_dir,
                                                        "{}_setup.xml".format(project.name))
-        cli_args["sequencing_tech"] = "Illumina"
+        cl_args["sequencing_tech"] = "Illumina"
 
         ## TODO Needs java on path! Load from module?
         setupfilecreator_cl = "java -cp {path_to_piper_jar} molmed.apps.SetupFileCreator " \
@@ -122,12 +138,13 @@ def build_setup_xml(projects_to_analyze, config):
                               "-s {sequencing_tech} " \
                               "-c {sequencing_center} " \
                               "-a {uppmax_proj} " \
-                              "-r {reference_path}"
+                              "-r {reference_path}".format(**cl_args)
         for sample in projects.samples.values():
             sample_directory = os.path.join(project_top_level_dir, sample.dirname)
             setupfilecreator_cl += " -s {}".format(sample_directory)
 
         subprocess.check_call(setupfilecreator_cl)
+        ## TODO  Keep track of everything somehow
 
 
 
