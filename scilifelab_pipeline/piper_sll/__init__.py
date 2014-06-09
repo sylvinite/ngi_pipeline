@@ -31,48 +31,48 @@ def main(projects_to_analyze, config_file_path):
     """
     config = load_yaml_config_expand_vars(config_file_path)
     report_paths = create_report_tsv(projects_to_analyze)
-
     setup_xml_paths = build_setup_xml(projects_to_analyze, config=config)
 
     # Run Johan's converter script if needed
-    # sbatch relevant workflow
-    # Decide how to track jobs that are running -- write to database?
+    # Build command line
+    # Write sbatch file including command line
+    # Queue sbatch file
+
+    # Decide how to track jobs that are running -- write status files? A flat file?
 
 
-def launch_piper_workflow():
-    """
-    ./workflows/WholeGenome.sh --xml_input A.Wedell_13_01/a.wedell_runcfg.xml --run
-    """
+def build_piper_cl():
     pass
-
 
 
 def build_setup_xml(projects_to_analyze, config):
     """Build the setup.xml file for each project using the CLI-interface of
     Piper's SetupFileCreator.
 
+      -x | --interactive
+            This is a optional argument.
+      -o Output xml file. | --output Output xml file.
+            This is a required argument.
+      -p The name of this project. | --project_name The name of this project.
+            This is a required argument if you are not using interactive mode.
+      -s The technology used for sequencing, e.g. Illumina | --sequencing_platform The technology used for sequencing, e.g. Illumina
+            This is a required argument if you are not using interactive mode.
+      -c Where the sequencing was carried out, e.g. NGI | --sequencing_center Where the sequencing was carried out, e.g. NGI
+            This is a required argument if you are not using interactive mode.
+      -a The uppnex project id to charge the core hours to. | --uppnex_project_id The uppnex project id to charge the core hours to.
+            This is a required argument if you are not using interactive mode.
+      -i Input path to sample directory. | --input_sample Input path to sample directory.
+            his is a required argument if you are not using interactive mode. Can be specified multiple times.
+      -r Reference fasta file to use. | --reference Reference fasta file to use.
+            This is a required argument if you are not using interactive mode.
 
     :param list projects_to_analyze: A list of Project objects to analyze
     :param dict config: The (parsed) configuration file for this machine/environment.
 
-  -x | --interactive
-        This is a optional argument.
-  -o Output xml file. | --output Output xml file.
-        This is a required argument.
-  -p The name of this project. | --project_name The name of this project.
-        This is a required argument if you are not using interactive mode.
-  -s The technology used for sequencing, e.g. Illumina | --sequencing_platform The technology used for sequencing, e.g. Illumina
-        This is a required argument if you are not using interactive mode.
-  -c Where the sequencing was carried out, e.g. NGI | --sequencing_center Where the sequencing was carried out, e.g. NGI
-        This is a required argument if you are not using interactive mode.
-  -a The uppnex project id to charge the core hours to. | --uppnex_project_id The uppnex project id to charge the core hours to.
-        This is a required argument if you are not using interactive mode.
-  -i Input path to sample directory. | --input_sample Input path to sample directory.
-        his is a required argument if you are not using interactive mode. Can be specified multiple times.
-  -r Reference fasta file to use. | --reference Reference fasta file to use.
-        This is a required argument if you are not using interactive mode.
-
+    :returns: A list of paths to the setup.xml files.
+    :rtype: list
     """
+    setup_xml_files = []
     for project in projects_to_analyze:
         project_top_level_dir = os.path.join(project.base_path, project.dirname)
         cl_args = {}
@@ -104,7 +104,7 @@ def build_setup_xml(projects_to_analyze, config):
         try:
             cl_args["reference_path"] = config['supported_genomes'][reference_genome]
             cl_args["uppmax_proj"] = config['environment']['project_id']
-            cl_args["path_to_piper_jar"] = config['environment']['path_to_piper_jar']
+            cl_args["path_to_sfc"] = config['environment']['path_to_setupfilecreator']
 
             ##
             # ALL THIS GOES IN THE LAUNCH FUNCTION
@@ -122,8 +122,9 @@ def build_setup_xml(projects_to_analyze, config):
             ##
 
         except KeyError as e:
-            error_msg = "Could not load required information from configuration file" \
-                        " and cannot continue with project {}: \"{}\"".format(project.name, e.message)
+            error_msg = "Could not load required information from " \
+                        " configuration file and cannot continue with project {}:" \
+                        " value \"{}\" missing".format(project.name, e.message)
             LOG.error(error_msg)
             continue
 
@@ -131,8 +132,8 @@ def build_setup_xml(projects_to_analyze, config):
                                                        "{}_setup.xml".format(project.name))
         cl_args["sequencing_tech"] = "Illumina"
 
-        ## TODO Needs java on path! Load from module?
-        setupfilecreator_cl = "java -cp {path_to_piper_jar} molmed.apps.SetupFileCreator " \
+        # Needs java on path? Load java 1.7 module
+        setupfilecreator_cl = "{path_to_sfc} " \
                               "-o {output_xml_filepath} " \
                               "-p {project.name} " \
                               "-s {sequencing_tech} " \
@@ -143,8 +144,15 @@ def build_setup_xml(projects_to_analyze, config):
             sample_directory = os.path.join(project_top_level_dir, sample.dirname)
             setupfilecreator_cl += " -s {}".format(sample_directory)
 
-        subprocess.check_call(setupfilecreator_cl)
-        ## TODO  Keep track of everything somehow
+        try:
+            subprocess.check_call(shlex.split(setupfilecreator_cl))
+            setup_xml_files.append(output_xml_filepath)
+        except (subprocess.CalledProcessError, OSError, ValueError) as e:
+            error_msg = "Unable to produce setup XML file: \"{}\"".format(e.message)
+            LOG.error(error_msg)
+            continue
+    return setup_xml_files
+
 
 
 

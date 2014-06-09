@@ -520,7 +520,6 @@ class memoized(object):
         return functools.partial(self.__call__, obj)
 
 
-@memoized
 #def parse_project_sample_lane_from_filename(sample_basename):
 def parse_lane_from_filename(sample_basename):
     """Project id, sample id, and lane are pulled from the standard filename format,
