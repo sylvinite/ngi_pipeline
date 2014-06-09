@@ -59,12 +59,20 @@ def main(config_file_path, demux_fcid_dirs=None, restrict_to_projects=None, rest
     if demux_fcid_dirs:
         demux_fcid_dirs_set.update(demux_fcid_dirs)
     else:
+        ## TODO change name from INBOX to something else
         # Check for newly-delivered data in the INBOX
         inbox_directory = config.get('INBOX')
         # These flowcells can contain data from multiple projects
+        ## TODO change this to use Celery / RabbitMQ
+        ##      otherwise need to ensure we don't reprocess directories that haven't got new data
+        ##      as this would propagate all the way down the pipeline
         demux_fcid_dirs_set.update(check_for_new_flowcells(inbox_directory, num_days_time_limit=30))
     # Sort/copy each raw demux FC into project/sample/fcid format -- "analysis-ready"
     for demux_fcid_dir in demux_fcid_dirs_set:
+        ### TODO ### GIANT BUG
+        ## This for loop overwrites the projects each iteration
+        ## and will only keep the results from the final FCID. Need to pass the object along with it
+        ## and update it as we go along.
         # These will be a bunch of Project objects each containing Samples, FCIDs, lists of fastq files
         projects_to_analyze = setup_analysis_directory_structure(demux_fcid_dir,
                                                                   config_file_path,
