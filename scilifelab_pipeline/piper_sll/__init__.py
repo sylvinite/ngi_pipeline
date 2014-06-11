@@ -31,7 +31,11 @@ def main(projects_to_analyze, config_file_path):
     """
     config = load_yaml_config_expand_vars(config_file_path)
     report_paths = create_report_tsv(projects_to_analyze)
-    setup_xml_paths = build_setup_xml(projects_to_analyze, config=config)
+    #setup_xml_paths = build_setup_xml(projects_to_analyze, config=config)
+    # This is actually an unnecessary namespace assignment as the original
+    # list will be edited inside the function, but it's clearer this way
+    projects_to_analyze = build_setup_xml(projects_to_analyze, config)
+    projects_to_analyze = build_piper_cl(projects_to_analyze, config)
 
     # Run Johan's converter script if needed
     # Build command line
@@ -41,8 +45,70 @@ def main(projects_to_analyze, config_file_path):
     # Decide how to track jobs that are running -- write status files? A flat file?
 
 
-def build_piper_cl():
+def piper_launch(cl_list):
+    ### Need to load modules:
+    ## module load java/sun_jdk1.7.0_25
+    ## module load R/2.15.0
+    ### Also need to source globalConfig.sh
     pass
+
+
+def build_piper_cl(projects_to_analyze, config):
+    """Determine which workflow to run for a project and build the appropriate command line.
+    :param list projects_to_analyze: A list of Project objects to analyze.
+    :param dict config: The (parsed) configuration file for this machine/environment.
+
+    :returns: A list of Project objects with command lines to execute attached.
+    :rtype: list
+    :raises RuntimeError: If a fatal error occurs (missing config value, unreadable files)
+    """
+    try:
+        path_to_qscripts = config['environment']['path_to_qscripts']
+        path_to_piper_topdir = config['environment']['path_to_piper_topdir']
+    except KeyError as e:
+        error_msg = "Could not load key \"{}\" from config file; " \
+                    "cannot continue.".format(e)
+        LOG.error(error_msg)
+        raise RuntimeError(error_msg)
+
+    # Default is the file globalConfig.sh in the piper root dir
+    path_to_piper_globalconfig = config.get("environment", {}).get("path_to_piper_globalconfig") \
+                                 or os.path.join(path_to_piper_topdir, "globalConfig.sh")
+    if not os.path.isfile(path_to_piper_globalconfig):
+        raise IOError("\"{}\" is not a file (need global configuration file).".format(path_to_piper_globalconfig))
+
+    for project in projects_to_analyze:
+        ## For NGI, all projects will go through the same workflows;
+        ## later, we'll want to let some database values determine this.
+
+        ## Once the coverage is high enough (check database), we'll also
+        ## need to put them through e.g. the GATK
+        
+        ## Need QC Pipeline
+        ## We'll want to make this a generic value in the database ("QC", "DNAAlign", "VariantCalling", etc.)
+        ##  and then map to the correct script in the config file. This way we can execute the same pipelines
+        ##  for any of the engines
+
+        ## --> Later we'll probably want to move this step farther up in the command flow and the
+        ##      workflow chosen will decide which engine to use!!!
+        # workflows_for_project = proj_db.get("workflows") or something like that
+        workflow_generic_names_for_project = ("dna_alignonly")
+        proj_workflow_qscripts = {}
+        for workflow_name in workflow_generic_names_for_project:
+            try:
+                # Translate generic workflow names to Piper-specific qscript paths
+                qscript_path = config["piper_qscripts"][workflow]
+                workflow_qscripts
+                project.add_workflow(workflow_name, qscript_path)
+            except KeyError:
+                error_msg = "Could not get QScript path for workflow {} " \
+                            "in project {}; skipping.".format(workflow_name, project)
+                LOG.error(error_msg)
+                continue
+
+
+        for workflow_name, qscript_path in project.workflows.items():
+            cl = "source {
 
 
 def build_setup_xml(projects_to_analyze, config):
@@ -66,13 +132,13 @@ def build_setup_xml(projects_to_analyze, config):
       -r Reference fasta file to use. | --reference Reference fasta file to use.
             This is a required argument if you are not using interactive mode.
 
-    :param list projects_to_analyze: A list of Project objects to analyze
+    :param list projects_to_analyze: A list of Project objects to analyze.
     :param dict config: The (parsed) configuration file for this machine/environment.
 
-    :returns: A list of paths to the setup.xml files.
+    :returns: A list of Project objects with setup.xml paths as attributes.
     :rtype: list
     """
-    setup_xml_files = []
+    #setup_xml_files = []
     for project in projects_to_analyze:
         project_top_level_dir = os.path.join(project.base_path, project.dirname)
         cl_args = {}
@@ -84,6 +150,7 @@ def build_setup_xml(projects_to_analyze, config):
             # - species / reference genome that should be used (hg19, mm9)
             # - analysis workflows to run (QC, DNA alignment, RNA alignment, variant calling, etc.)
             # - adapters to be trimmed (?)
+            ## <open connection to project database>
             #reference_genome = proj_db.get('species')
             reference_genome = 'hg19'
             # sequencing_center = proj_db.get('Sequencing Center')
@@ -124,18 +191,18 @@ def build_setup_xml(projects_to_analyze, config):
         except KeyError as e:
             error_msg = "Could not load required information from " \
                         " configuration file and cannot continue with project {}:" \
-                        " value \"{}\" missing".format(project.name, e.message)
+                        " value \"{}\" missing".format(project, e.message)
             LOG.error(error_msg)
             continue
 
         cl_args["output_xml_filepath"] = os.path.join( project_top_level_dir,
-                                                       "{}_setup.xml".format(project.name))
+                                                       "{}_setup.xml".format(project))
         cl_args["sequencing_tech"] = "Illumina"
 
         # Needs java on path? Load java 1.7 module
         setupfilecreator_cl = "{path_to_sfc} " \
                               "-o {output_xml_filepath} " \
-                              "-p {project.name} " \
+                              "-p {project} " \
                               "-s {sequencing_tech} " \
                               "-c {sequencing_center} " \
                               "-a {uppmax_proj} " \
@@ -146,14 +213,14 @@ def build_setup_xml(projects_to_analyze, config):
 
         try:
             subprocess.check_call(shlex.split(setupfilecreator_cl))
-            setup_xml_files.append(output_xml_filepath)
+            project.setup_xml = output_xml_filepath
+            #setup_xml_files.append(output_xml_filepath)
         except (subprocess.CalledProcessError, OSError, ValueError) as e:
-            error_msg = "Unable to produce setup XML file: \"{}\"".format(e.message)
+            error_msg = "Unable to produce setup XML file for project {}: \"{}\"".format(project, e.message)
             LOG.error(error_msg)
             continue
-    return setup_xml_files
-
-
+    #return setup_xml_files
+    return projects_to_analyze
 
 
 def create_report_tsv(projects_to_analyze):
