@@ -36,21 +36,21 @@ def main(projects_to_analyze, config_file_path):
     # list will be edited inside the function, but it's clearer this way
     projects_to_analyze = build_setup_xml(projects_to_analyze, config)
     projects_to_analyze = build_piper_cl(projects_to_analyze, config)
-
-    # Run Johan's converter script if needed
-    # Build command line
-    # Write sbatch file including command line
-    # Queue sbatch file
-
-    # Decide how to track jobs that are running -- write status files? A flat file?
+    ## Run Johan's converter script if needed
+    ## Decide how to track jobs that are running -- write status files? A flat file?
+    launch_piper(projects_to_analyze)
 
 
-def piper_launch(cl_list):
-    ### Need to load modules:
-    ## module load java/sun_jdk1.7.0_25
-    ## module load R/2.15.0
-    ### Also need to source globalConfig.sh
-    pass
+
+def launch_piper_projects(projects_to_analyze):
+    for project in projects_to_analyze:
+        for command_line in projects.command_lines:
+            parsed_cl = shlex.split(command_line)
+            p_handle = subprocess.Popen(parsed_cl, stdin = subprocess.PIPE, stdout = subprocess.PIPE)
+            ## I guess because I'm executing a bash script I need the script to print the job number
+            ## or PID of the process that is launched
+            p_stdin, p_stdout = p_handle.communicate()
+            ## TODO parse output for SLURM job ID
 
 
 def build_piper_cl(projects_to_analyze, config):
@@ -63,7 +63,6 @@ def build_piper_cl(projects_to_analyze, config):
     :raises RuntimeError: If a fatal error occurs (missing config value, unreadable files)
     """
     try:
-        path_to_qscripts = config['environment']['path_to_qscripts']
         path_to_piper_topdir = config['environment']['path_to_piper_topdir']
     except KeyError as e:
         error_msg = "Could not load key \"{}\" from config file; " \
@@ -83,32 +82,30 @@ def build_piper_cl(projects_to_analyze, config):
 
         ## Once the coverage is high enough (check database), we'll also
         ## need to put them through e.g. the GATK
-        
-        ## Need QC Pipeline
+
         ## We'll want to make this a generic value in the database ("QC", "DNAAlign", "VariantCalling", etc.)
         ##  and then map to the correct script in the config file. This way we can execute the same pipelines
         ##  for any of the engines
-
-        ## --> Later we'll probably want to move this step farther up in the command flow and the
-        ##      workflow chosen will decide which engine to use!!!
         # workflows_for_project = proj_db.get("workflows") or something like that
-        workflow_generic_names_for_project = ("dna_alignonly")
-        proj_workflow_qscripts = {}
+        generic_workflow_names_for_project = ("dna_alignonly")
+        workflow_script_paths_for_project = {}
+        ## Later it probably makes more sense to have this be the branch point for which engine to run
         for workflow_name in workflow_generic_names_for_project:
             try:
                 # Translate generic workflow names to Piper-specific qscript paths
-                qscript_path = config["piper_qscripts"][workflow]
-                workflow_qscripts
-                project.add_workflow(workflow_name, qscript_path)
+                workflow_script_path = config["piper_workflows"][workflow]
             except KeyError:
                 error_msg = "Could not get QScript path for workflow {} " \
                             "in project {}; skipping.".format(workflow_name, project)
                 LOG.error(error_msg)
                 continue
+            workflow_script_paths_for_project[workflow_name] = workflow_script_path
 
-
-        for workflow_name, qscript_path in project.workflows.items():
-            cl = "source {
+        for workflow_name, workflow_script_path in workflow_script_paths_for_project:
+            cl = "bash {workflow_script_path} " \
+                 "--xml_input {setup_xml_path} " \
+                 "--run".format(workflow_script_path, project.setup_xml_path)
+            project.command_lines.append(cl)
 
 
 def build_setup_xml(projects_to_analyze, config):
@@ -138,13 +135,11 @@ def build_setup_xml(projects_to_analyze, config):
     :returns: A list of Project objects with setup.xml paths as attributes.
     :rtype: list
     """
-    #setup_xml_files = []
     for project in projects_to_analyze:
         project_top_level_dir = os.path.join(project.base_path, project.dirname)
         cl_args = {}
 
         # Load needed data from database
-        ## Maybe write a separate function for this
         try:
             # Information we need from the database:
             # - species / reference genome that should be used (hg19, mm9)
@@ -155,39 +150,15 @@ def build_setup_xml(projects_to_analyze, config):
             reference_genome = 'hg19'
             # sequencing_center = proj_db.get('Sequencing Center')
             cl_args["sequencing_center"] = "NGI"
-
-            ###
-            # TO THE LAUNCH FUNCTION
-            # prep_method = proj_db.get('Library Preparation Method')
-            prep_method = 'Standard DNA'
-            ###
-
         except:
             ## TODO Put some useful thing (code??) here
             pass
 
         # Load needed data from configuration file
-        ## maybe write a separate function for this
         try:
             cl_args["reference_path"] = config['supported_genomes'][reference_genome]
             cl_args["uppmax_proj"] = config['environment']['project_id']
             cl_args["path_to_sfc"] = config['environment']['path_to_setupfilecreator']
-
-            ##
-            # ALL THIS GOES IN THE LAUNCH FUNCTION
-            workflows = config['method_to_workflow_mappings'][prep_method]
-            workflow_templates = []
-            for workflow in workflows:
-                try:
-                    # Map the workflow name to the location of the workflow sbatch file
-                    workflow_templates.append(config['workflow_templates'][workflow])
-                except KeyError:
-                    # This will automatically continue to the next workflow in the list after printing
-                    error_msg = "No workflow template available for workflow \"{}\"; " \
-                                " skipping.".format(workflow)
-                    LOG.error(error_msg)
-            ##
-
         except KeyError as e:
             error_msg = "Could not load required information from " \
                         " configuration file and cannot continue with project {}:" \
@@ -213,13 +184,11 @@ def build_setup_xml(projects_to_analyze, config):
 
         try:
             subprocess.check_call(shlex.split(setupfilecreator_cl))
-            project.setup_xml = output_xml_filepath
-            #setup_xml_files.append(output_xml_filepath)
+            project.setup_xml_path = output_xml_filepath
         except (subprocess.CalledProcessError, OSError, ValueError) as e:
             error_msg = "Unable to produce setup XML file for project {}: \"{}\"".format(project, e.message)
             LOG.error(error_msg)
             continue
-    #return setup_xml_files
     return projects_to_analyze
 
 

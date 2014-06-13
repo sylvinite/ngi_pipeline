@@ -64,14 +64,11 @@ def main(config_file_path, demux_fcid_dirs=None, restrict_to_projects=None, rest
         inbox_directory = config.get('INBOX')
         # These flowcells can contain data from multiple projects
         ## TODO change this to use Celery / RabbitMQ
-        ##      otherwise need to ensure we don't reprocess directories that haven't got new data
-        ##      as this would propagate all the way down the pipeline
-        ## At this point it might be better to just jam the whole thing into a for loop
         demux_fcid_dirs_set.update(check_for_new_flowcells(inbox_directory, num_days_time_limit=30))
     # Sort/copy each raw demux FC into project/sample/fcid format -- "analysis-ready"
     projects_to_analyze = set()
     for demux_fcid_dir in demux_fcid_dirs_set:
-        ### TODO ### GIANT BUG
+        ### TODO ### BUG!!
         ## This for loop overwrites the projects each iteration
         ## and will only keep the results from the final FCID. Need to pass the object along with it
         ## and update it as we go along.
@@ -136,13 +133,7 @@ class NGIProject(NGIObject):
         super(NGIProject, self).__init__(name, dirname, subitem_type=NGISample)
         self.samples = self._subitems
         self.add_sample = self._add_subitem
-        self.workflows = {}
-
-    def add_workflow(self, workflow_name, workflow_cl):
-        if self.workflows.get("workflow_name"):
-            LOG.warn("Warning: overwriting existing workflow \"{}\" command-line " \
-                     "string for project {}.".format(workflow_name, self))
-            self.workflows["workflow_name"] = workflow_cl
+        self.command_lines = []
 
 
 class NGISample(NGIObject):
@@ -212,6 +203,7 @@ def check_for_new_flowcells(inbox_directory, num_days_time_limit=None):
     return list(new_flowcell_directories)
 
 
+## TODO This needs to be changed so it will update preexisting Project objects
 def setup_analysis_directory_structure(fc_dir, config_file_path, restrict_to_projects=None,
                                        restrict_to_samples=None):
     """
