@@ -5,9 +5,11 @@ import sys
 import logging
 import logbook
 
+## TODO verify
 from scilifelab_pipeline.utils import config as cf
 from logbook.queues import RedisHandler
 
+## TODO remove bcbio dependency
 try:
     import bcbio.pipeline.config_utils as cl
 except ImportError:
