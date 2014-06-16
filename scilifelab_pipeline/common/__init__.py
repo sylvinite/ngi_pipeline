@@ -24,8 +24,8 @@ import yaml
 ## TODO MIGRATE THIS OUT OF BCBIO-SPECIFIC CODE
 from scilifelab.bcbio.qc import FlowcellRunMetricsParser
 
-from scilifelab.utils.config import load_yaml_config_expand_vars
-from scilifelab.log import minimal_logger
+from scilifelab_pipeline.log import minimal_logger
+from scilifelab_pipeline.utils.config import load_yaml_config_expand_vars
 
 #class minimal_logger(object):
 #    def __init__(self, name):

@@ -15,8 +15,8 @@ import shutil
 import subprocess
 import time
 
-from scilifelab.log import minimal_logger
-from scilifelab.utils.config import load_yaml_config_expand_vars
+from scilifelab_pipeline.log import minimal_logger
+from scilifelab_pipeline.utils.config import load_yaml_config_expand_vars
 from scilifelab_pipeline.common import parse_lane_from_filename, \
                                        find_fastq_read_pairs, \
                                        get_flowcell_id_from_dirtree
@@ -31,26 +31,21 @@ def main(projects_to_analyze, config_file_path):
     """
     config = load_yaml_config_expand_vars(config_file_path)
     report_paths = create_report_tsv(projects_to_analyze)
-    #setup_xml_paths = build_setup_xml(projects_to_analyze, config=config)
     # This is actually an unnecessary namespace assignment as the original
     # list will be edited inside the function, but it's clearer this way
     projects_to_analyze = build_setup_xml(projects_to_analyze, config)
     projects_to_analyze = build_piper_cl(projects_to_analyze, config)
     ## Run Johan's converter script if needed
     ## Decide how to track jobs that are running -- write status files? A flat file?
-    launch_piper(projects_to_analyze)
+    launch_piper_jobs(projects_to_analyze)
 
 
-
-def launch_piper_projects(projects_to_analyze):
+def launch_piper_jobs(projects_to_analyze):
     for project in projects_to_analyze:
         for command_line in projects.command_lines:
             parsed_cl = shlex.split(command_line)
             p_handle = subprocess.Popen(parsed_cl, stdin = subprocess.PIPE, stdout = subprocess.PIPE)
-            ## I guess because I'm executing a bash script I need the script to print the job number
-            ## or PID of the process that is launched
             p_stdin, p_stdout = p_handle.communicate()
-            ## TODO parse output for SLURM job ID
 
 
 def build_piper_cl(projects_to_analyze, config):
@@ -60,21 +55,25 @@ def build_piper_cl(projects_to_analyze, config):
 
     :returns: A list of Project objects with command lines to execute attached.
     :rtype: list
-    :raises RuntimeError: If a fatal error occurs (missing config value, unreadable files)
+    :raises ValueError: If a required configuration value is missing.
     """
     try:
-        path_to_piper_topdir = config['environment']['path_to_piper_topdir']
+        path_to_piper_topdir = config['piper']['path_to_piper_topdir']
+        path_to_piper_globalconfig = config['piper']['path_to_piper_globalconfig']
+        path_to_piper_qscripts = config['piper']['path_to_piper_qscripts']
     except KeyError as e:
         error_msg = "Could not load key \"{}\" from config file; " \
                     "cannot continue.".format(e)
         LOG.error(error_msg)
-        raise RuntimeError(error_msg)
+        raise ValueError(error_msg)
 
-    # Default is the file globalConfig.sh in the piper root dir
-    path_to_piper_globalconfig = config.get("environment", {}).get("path_to_piper_globalconfig") \
-                                 or os.path.join(path_to_piper_topdir, "globalConfig.sh")
-    if not os.path.isfile(path_to_piper_globalconfig):
-        raise IOError("\"{}\" is not a file (need global configuration file).".format(path_to_piper_globalconfig))
+    # Default is the file globalConfig.yaml in the piper root dir
+    piper_globalconfig_path = config.get("piper", {}).get("path_to_piper_globalconfig") \
+                                 or os.path.join(path_to_piper_topdir, "globalConfig.yaml")
+    if not os.path.isfile(piper_globalconfig_path):
+        raise IOError("\"{}\" is not a file (need global configuration file).".format(piper_globalconfig_path))
+    else:
+        piper_globalconfig = load_yaml_config_expand_vars(piper_globalconfig_path)
 
     for project in projects_to_analyze:
         ## For NGI, all projects will go through the same workflows;
@@ -88,46 +87,19 @@ def build_piper_cl(projects_to_analyze, config):
         ##  for any of the engines
         # workflows_for_project = proj_db.get("workflows") or something like that
         generic_workflow_names_for_project = ("dna_alignonly")
-        workflow_script_paths_for_project = {}
-        ## Later it probably makes more sense to have this be the branch point for which engine to run
-        for workflow_name in workflow_generic_names_for_project:
-            try:
-                # Translate generic workflow names to Piper-specific qscript paths
-                workflow_script_path = config["piper_workflows"][workflow]
-            except KeyError:
-                error_msg = "Could not get QScript path for workflow {} " \
-                            "in project {}; skipping.".format(workflow_name, project)
-                LOG.error(error_msg)
-                continue
-            workflow_script_paths_for_project[workflow_name] = workflow_script_path
 
-        for workflow_name, workflow_script_path in workflow_script_paths_for_project:
-            cl = "bash {workflow_script_path} " \
-                 "--xml_input {setup_xml_path} " \
-                 "--run".format(workflow_script_path, project.setup_xml_path)
+        setup_xml_path = project.setup_xml_path
+        for workflow_name in generic_workflow_names_for_project:
+            workflows.return_cl_for_workflow(workflow_name=workflow_name,
+                                             path_to_qscripts=path_to_piper_qscripts,
+                                             setup_xml_path=setup_xml_path,
+                                             global_config=piper_globalconfig)
             project.command_lines.append(cl)
 
 
 def build_setup_xml(projects_to_analyze, config):
     """Build the setup.xml file for each project using the CLI-interface of
     Piper's SetupFileCreator.
-
-      -x | --interactive
-            This is a optional argument.
-      -o Output xml file. | --output Output xml file.
-            This is a required argument.
-      -p The name of this project. | --project_name The name of this project.
-            This is a required argument if you are not using interactive mode.
-      -s The technology used for sequencing, e.g. Illumina | --sequencing_platform The technology used for sequencing, e.g. Illumina
-            This is a required argument if you are not using interactive mode.
-      -c Where the sequencing was carried out, e.g. NGI | --sequencing_center Where the sequencing was carried out, e.g. NGI
-            This is a required argument if you are not using interactive mode.
-      -a The uppnex project id to charge the core hours to. | --uppnex_project_id The uppnex project id to charge the core hours to.
-            This is a required argument if you are not using interactive mode.
-      -i Input path to sample directory. | --input_sample Input path to sample directory.
-            his is a required argument if you are not using interactive mode. Can be specified multiple times.
-      -r Reference fasta file to use. | --reference Reference fasta file to use.
-            This is a required argument if you are not using interactive mode.
 
     :param list projects_to_analyze: A list of Project objects to analyze.
     :param dict config: The (parsed) configuration file for this machine/environment.
