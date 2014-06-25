@@ -1,19 +1,12 @@
 """
 log module
 """
-import sys
-import logging
 import logbook
+import logging
+import sys
 
-## TODO verify
-from scilifelab_pipeline.utils import config as cf
 from logbook.queues import RedisHandler
-
-## TODO remove bcbio dependency
-try:
-    import bcbio.pipeline.config_utils as cl
-except ImportError:
-    import bcbio.pipeline.config_loader as cl
+from scilifelab_pipeline.utils import config as cl
 
 def minimal_logger(namespace, extra_fields=None, debug=False):
     """Make and return a minimal console logger.
@@ -27,7 +20,7 @@ def minimal_logger(namespace, extra_fields=None, debug=False):
 
     :param namespace: namspace of logger
     """
-    config = cf.load_config()
+    config = cl.load_pm_config()
     log = logbook.Logger(namespace, level=logbook.INFO)
     s_h = logbook.StreamHandler(sys.stdout, level = logbook.INFO, bubble=True)
     log.handlers.append(s_h)
@@ -59,7 +52,6 @@ def minimal_logger(namespace, extra_fields=None, debug=False):
             pass
         s_h.level = logbook.DEBUG
         log.level = logbook.DEBUG
-
     return log
 
 
