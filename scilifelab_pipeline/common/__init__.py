@@ -21,23 +21,11 @@ import sys
 import unittest
 import yaml
 
-## TODO MIGRATE THIS OUT OF BCBIO-SPECIFIC CODE
-from scilifelab.bcbio.qc import FlowcellRunMetricsParser
-
+from scilifelab_pipeline.common.parsers import FlowcellRunMetricsParser
 from scilifelab_pipeline.log import minimal_logger
-from scilifelab_pipeline.utils.config import load_yaml_config_expand_vars
+from scilifelab_pipeline.utils.config import load_yaml_config
 
-#class minimal_logger(object):
-#    def __init__(self, name):
-#        self.name = name
-#        self.error = self.info = self.warn
-#
-#    def warn(self, message):
-#        print("{}: {}".format(self.name, message), file=sys.stderr)
-
-LOG = minimal_logger(__name__,
-                     #debug=True
-                    )
+LOG = minimal_logger(__name__)
 
 
 def main(config_file_path, demux_fcid_dirs=None, restrict_to_projects=None, restrict_to_samples=None):
@@ -55,7 +43,7 @@ def main(config_file_path, demux_fcid_dirs=None, restrict_to_projects=None, rest
         restrict_to_samples = []
     demux_fcid_dirs_set = set()
     projects_to_analyze = []
-    config = load_yaml_config_expand_vars(config_file_path)
+    config = load_yaml_config(config_file_path)
     if demux_fcid_dirs:
         demux_fcid_dirs_set.update(demux_fcid_dirs)
     else:
@@ -84,6 +72,9 @@ def main(config_file_path, demux_fcid_dirs=None, restrict_to_projects=None, rest
         error_message = "No projects found to process."
         LOG.info(error_message)
         sys.exit("Quitting: " + error_message)
+    else:
+        # Don't need the dict functionality anymore; revert to list
+        projects_to_analyze = projects_to_analyze.values()
 
     ## change this terminology from 'pipeline' to 'analysis_engine' or something similar
     analysis_pipeline_module_name = config.get("analysis", {}).get("analysis_pipeline")
@@ -233,7 +224,7 @@ def setup_analysis_directory_structure(fc_dir, config_file_path, projects_to_ana
     """
     LOG.info("Setting up analysis for demultiplexed data in source folder \"{}\"".format(fc_dir))
     # Load config, expanding shell variables in paths
-    config = load_yaml_config_expand_vars(config_file_path)
+    config = load_yaml_config(config_file_path)
     analysis_top_dir = os.path.abspath(config["analysis"]["top_dir"])
     if not os.path.exists(fc_dir):
         LOG.error("Error: Flowcell directory {} does not exist".format(fc_dir))
