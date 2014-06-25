@@ -2,21 +2,22 @@
 
 For each project directory, this script needs to:
     1. Build a report.tsv file detailing all the files
-    2. Build a runconfig.xml file using the automated 
-    3. Poossssibly build a new sbatch file for the samples
-    4. Launch the Piper job via the sbatch file
+    2. Build a runconfig.xml file using the automated thinger
+    3. Launch the Piper job via the sbatch file
+    4. Track the jobs somehow
 """
 from __future__ import print_function
 
 import collections
 import os
 import re
+import shlex
 import shutil
 import subprocess
 import time
 
 from scilifelab_pipeline.log import minimal_logger
-from scilifelab_pipeline.utils.config import load_yaml_config_expand_vars
+from scilifelab_pipeline.utils.config import load_yaml_config
 from scilifelab_pipeline.common import parse_lane_from_filename, \
                                        find_fastq_read_pairs, \
                                        get_flowcell_id_from_dirtree
@@ -29,12 +30,10 @@ def main(projects_to_analyze, config_file_path):
     :param list flowcell_dirs_to_analyze: A lst of flowcell directories containing fastq files to analyze.
     :param str config_file_path: The path to the configuration file.
     """
-    config = load_yaml_config_expand_vars(config_file_path)
-    report_paths = create_report_tsv(projects_to_analyze)
-    # This is actually an unnecessary namespace assignment as the original
-    # list will be edited inside the function, but it's clearer this way
-    projects_to_analyze = build_setup_xml(projects_to_analyze, config)
-    projects_to_analyze = build_piper_cl(projects_to_analyze, config)
+    config = load_yaml_config(config_file_path)
+    create_report_tsv(projects_to_analyze)
+    build_setup_xml(projects_to_analyze, config)
+    build_piper_cl(projects_to_analyze, config)
     ## Run Johan's converter script if needed
     ## Decide how to track jobs that are running -- write status files? A flat file?
     launch_piper_jobs(projects_to_analyze)
@@ -44,8 +43,10 @@ def launch_piper_jobs(projects_to_analyze):
     for project in projects_to_analyze:
         for command_line in projects.command_lines:
             parsed_cl = shlex.split(command_line)
-            p_handle = subprocess.Popen(parsed_cl, stdin = subprocess.PIPE, stdout = subprocess.PIPE)
+            p_handle = subprocess.Popen(parsed_cl, stdin = subprocess.PIPE,
+                                                  stdout = subprocess.PIPE)
             p_stdin, p_stdout = p_handle.communicate()
+            ## TODO more stuff
 
 
 def build_piper_cl(projects_to_analyze, config):
@@ -58,7 +59,7 @@ def build_piper_cl(projects_to_analyze, config):
     :raises ValueError: If a required configuration value is missing.
     """
     try:
-        path_to_piper_topdir = config['piper']['path_to_piper_topdir']
+        path_to_piper_rootdir = config['piper']['path_to_piper_rootdir']
         path_to_piper_globalconfig = config['piper']['path_to_piper_globalconfig']
         path_to_piper_qscripts = config['piper']['path_to_piper_qscripts']
     except KeyError as e:
@@ -67,13 +68,14 @@ def build_piper_cl(projects_to_analyze, config):
         LOG.error(error_msg)
         raise ValueError(error_msg)
 
-    # Default is the file globalConfig.yaml in the piper root dir
+    # Default is the file globalConfig.xml in the piper root dir
     piper_globalconfig_path = config.get("piper", {}).get("path_to_piper_globalconfig") \
-                                 or os.path.join(path_to_piper_topdir, "globalConfig.yaml")
+                                 or os.path.join(path_to_piper_rootdir, "globalConfig.xml")
     if not os.path.isfile(piper_globalconfig_path):
         raise IOError("\"{}\" is not a file (need global configuration file).".format(piper_globalconfig_path))
     else:
-        piper_globalconfig = load_yaml_config_expand_vars(piper_globalconfig_path)
+        ## Change this to read XML configs (after changing config to XML)
+        piper_globalconfig = load_yaml_config(piper_globalconfig_path)
 
     for project in projects_to_analyze:
         ## For NGI, all projects will go through the same workflows;
@@ -90,6 +92,8 @@ def build_piper_cl(projects_to_analyze, config):
 
         setup_xml_path = project.setup_xml_path
         for workflow_name in generic_workflow_names_for_project:
+            LOG.info("Building command line for project {}, " \
+                     "workflow {}".format(project, workflow_name))
             workflows.return_cl_for_workflow(workflow_name=workflow_name,
                                              path_to_qscripts=path_to_piper_qscripts,
                                              setup_xml_path=setup_xml_path,
@@ -108,8 +112,9 @@ def build_setup_xml(projects_to_analyze, config):
     :rtype: list
     """
     for project in projects_to_analyze:
+        LOG.info("Building Piper setup.xml file for project {}".format(project))
         project_top_level_dir = os.path.join(project.base_path, project.dirname)
-        cl_args = {}
+        cl_args = {'project': project.name}
 
         # Load needed data from database
         try:
@@ -138,27 +143,28 @@ def build_setup_xml(projects_to_analyze, config):
             LOG.error(error_msg)
             continue
 
-        cl_args["output_xml_filepath"] = os.path.join( project_top_level_dir,
-                                                       "{}_setup.xml".format(project))
+        output_xml_filepath = os.path.join( project_top_level_dir,
+                                            "{}_setup.xml".format(project))
+        cl_args["output_xml_filepath"] = output_xml_filepath
         cl_args["sequencing_tech"] = "Illumina"
 
         # Needs java on path? Load java 1.7 module
         setupfilecreator_cl = "{path_to_sfc} " \
-                              "-o {output_xml_filepath} " \
-                              "-p {project} " \
-                              "-s {sequencing_tech} " \
-                              "-c {sequencing_center} " \
-                              "-a {uppmax_proj} " \
-                              "-r {reference_path}".format(**cl_args)
-        for sample in projects.samples.values():
+                              "--output {output_xml_filepath} " \
+                              "--project_name {project} " \
+                              "--sequencing_platform {sequencing_tech} " \
+                              "--sequencing_center {sequencing_center} " \
+                              "--uppnex_project_id {uppmax_proj} " \
+                              "--reference {reference_path}".format(**cl_args)
+        for sample in project.samples.values():
             sample_directory = os.path.join(project_top_level_dir, sample.dirname)
-            setupfilecreator_cl += " -s {}".format(sample_directory)
+            setupfilecreator_cl += " --input_sample {}".format(sample_directory)
 
         try:
             subprocess.check_call(shlex.split(setupfilecreator_cl))
             project.setup_xml_path = output_xml_filepath
         except (subprocess.CalledProcessError, OSError, ValueError) as e:
-            error_msg = "Unable to produce setup XML file for project {}: \"{}\"".format(project, e.message)
+            error_msg = "Unable to produce setup XML file for project {}: \"{}\". Skipping project analysis.".format(project, e.message)
             LOG.error(error_msg)
             continue
     return projects_to_analyze
