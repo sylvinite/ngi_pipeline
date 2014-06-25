@@ -59,30 +59,33 @@ def main(config_file_path, demux_fcid_dirs=None, restrict_to_projects=None, rest
     if demux_fcid_dirs:
         demux_fcid_dirs_set.update(demux_fcid_dirs)
     else:
-        ## TODO change name from INBOX to something else
+        ## change name from INBOX to something else
         # Check for newly-delivered data in the INBOX
         inbox_directory = config.get('INBOX')
         # These flowcells can contain data from multiple projects
+
         ## TODO change this to use Celery / RabbitMQ
         demux_fcid_dirs_set.update(check_for_new_flowcells(inbox_directory, num_days_time_limit=30))
+
     # Sort/copy each raw demux FC into project/sample/fcid format -- "analysis-ready"
-    projects_to_analyze = set()
+    ## TODO need to make these objects hashable (__hash__, __eq__)
+    #projects_to_analyze = collections.defaultdict(NGIProject)
+    projects_to_analyze = dict()
     for demux_fcid_dir in demux_fcid_dirs_set:
-        ### TODO ### BUG!!
-        ## This for loop overwrites the projects each iteration
-        ## and will only keep the results from the final FCID. Need to pass the object along with it
-        ## and update it as we go along.
         # These will be a bunch of Project objects each containing Samples, FCIDs, lists of fastq files
+        # Reassignment of name is unnecessary but useful for clarity -- this
+        # continually updates the projects_to_analyze dict and its objects
         projects_to_analyze = setup_analysis_directory_structure(demux_fcid_dir,
-                                                                  config_file_path,
-                                                                  restrict_to_projects,
-                                                                  restrict_to_samples)
+                                                                 config_file_path,
+                                                                 projects_to_analyze,
+                                                                 restrict_to_projects,
+                                                                 restrict_to_samples)
     if not projects_to_analyze:
         error_message = "No projects found to process."
         LOG.info(error_message)
         sys.exit("Quitting: " + error_message)
 
-    ## TODO change this terminology from 'pipeline' to 'analysis_engine' or something similar
+    ## change this terminology from 'pipeline' to 'analysis_engine' or something similar
     analysis_pipeline_module_name = config.get("analysis", {}).get("analysis_pipeline")
     if not analysis_pipeline_module_name:
         error_msg = "No analysis engine specified in configuration file. Exiting."
@@ -102,6 +105,8 @@ def main(config_file_path, demux_fcid_dirs=None, restrict_to_projects=None, rest
 #        m = getattr(m, comp)
 #    return m
 
+
+## TODO make these hashable (__hash__, __eq__) in some meaningful way
 ## TODO Add path checking, os.path.abspath / os.path.exists
 class NGIObject(object):
     def __init__(self, name, dirname, subitem_type):
@@ -111,8 +116,14 @@ class NGIObject(object):
         self._subitem_type = subitem_type
 
     def _add_subitem(self, name, dirname):
-        self._subitems[name] = self._subitem_type(name, dirname)
-        return self._subitems[name]
+        ## It SHOULD be okay to use name instead of dirname... right? Right??
+        ## E.g. G.Spong_13_03 instead of /proj/a2010002/.../G.Spong_13_03 ??
+        # Only add a new item if the same item doesn't already exist
+        try:
+            subitem = self._subitems[name]
+        except KeyError:
+            subitem = self._subitems[name] = self._subitem_type(name, dirname)
+        return subitem
 
     def __iter__(self):
         return iter(self._subitems.values())
@@ -204,8 +215,8 @@ def check_for_new_flowcells(inbox_directory, num_days_time_limit=None):
 
 
 ## TODO This needs to be changed so it will update preexisting Project objects
-def setup_analysis_directory_structure(fc_dir, config_file_path, restrict_to_projects=None,
-                                       restrict_to_samples=None):
+def setup_analysis_directory_structure(fc_dir, config_file_path, projects_to_analyze,
+                                       restrict_to_projects=None, restrict_to_samples=None):
     """
     Copy and sort files from their CASAVA-demultiplexed flowcell structure
     into their respective project/sample/FCIDs. This collects samples
@@ -213,6 +224,7 @@ def setup_analysis_directory_structure(fc_dir, config_file_path, restrict_to_pro
 
     :param str fc_dir: The directory created by CASAVA for this flowcell.
     :param str config_file_path: The location of the configuration file.
+    :param set projects_to_analyze: A dict (of Project objects, or empty)
     :param list restrict_to_projects: Specific projects within the flowcell to process exclusively
     :param list restrict_to_samples: Specific projects within the flowcell to process exclusively
 
@@ -252,29 +264,32 @@ def setup_analysis_directory_structure(fc_dir, config_file_path, restrict_to_pro
     if not fc_dir_structure.get('projects'):
         LOG.warn("No projects found in specified flowcell directory \"{}\"".format(fc_dir))
     # Iterate over the projects in the flowcell directory
-    projects_to_analyze = []
     for project in fc_dir_structure.get('projects', []):
+
         # If specific projects are specified, skip those that do not match
         project_name = project['project_name']
         if len(restrict_to_projects) > 0 and project_name not in restrict_to_projects:
             LOG.debug("Skipping project {}".format(project_name))
             continue
         LOG.info("Setting up project {}".format(project.get("project_dir")))
+
         # Create a project directory if it doesn't already exist
         project_dir = os.path.join(analysis_top_dir, project_name)
         if not os.path.exists(project_dir):
             ## TODO change to mkdir -p
             os.mkdir(project_dir, 0770)
 
-        ## TODO This should be the actual project name -- is it?
-        project_obj = NGIProject(name=project_name, dirname=project_name, base_path=analysis_top_dir)
-        # This could in weird cases result in a project which has no samples or fcids or files
-        # but I'm okay with that on some levels. Acceptance.
-        projects_to_analyze.append(project_obj)
+        try:
+            project_obj = projects_to_analyze[project_dir]
+        except KeyError:
+            ## TODO This should be the actual project name -- is it?
+            project_obj = NGIProject(name=project_name, dirname=project_name, base_path=analysis_top_dir)
+            projects_to_analyze[project_dir] = project_obj
 
         # Iterate over the samples in the project
         for sample in project.get('samples', []):
             # If specific samples are specified, skip those that do not match
+            ## Ask Guilermo about this substitution -- I suspect we can remove it later
             ## this appears to be some scilifelab-specific naming process?
             sample_name = sample['sample_name'].replace('__','.')
             if len(restrict_to_samples) > 0 and sample_name not in restrict_to_samples:
@@ -287,7 +302,9 @@ def setup_analysis_directory_structure(fc_dir, config_file_path, restrict_to_pro
                 ## TODO change to mkdir -p
                 os.mkdir(sample_dir, 0770)
 
+
             ## TODO This should be the actual sample name -- is it?
+            # This will only create a new sample object if it doesn't already exist in the project
             sample_obj = project_obj.add_sample(name=sample_name, dirname=sample_name)
 
             # Create a directory for the flowcell if it does not exist
@@ -297,6 +314,7 @@ def setup_analysis_directory_structure(fc_dir, config_file_path, restrict_to_pro
                 os.mkdir(dst_sample_fcid_dir, 0770)
 
             ## TODO This should be the actual FCID name -- is it?
+            # This will only create a new FCID object if it doesn't already exist in the project
             fcid_obj = sample_obj.add_fcid(name=fc_run_id, dirname=fc_run_id)
 
             # rsync the source files to the sample directory
