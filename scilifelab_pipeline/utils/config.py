@@ -1,4 +1,27 @@
-def load_config(config_file):
+import ConfigParser
+import os
+import yaml
+
+# Why do we need pm.conf again?
+def load_pm_config(config_file=None):
+    """Loads a configuration file.
+
+    By default it assumes ~/.pm/pm.conf
+    """
+    try:
+        if not config_file:
+            config_file = os.path.join(os.environ.get('HOME'), '.pm', 'pm.conf')
+        config = ConfigParser.SafeConfigParser()
+        with open(config_file) as f:
+            config.readfp(f)
+        return config
+    except IOError:
+        raise IOError('There was a problem loading the configuration file. \
+                Please make sure that ~/.pm/pm.conf exists and that you have \
+                read permissions')
+
+## TODO implement for XML
+def load_yaml_config(config_file):
     """Load YAML config file, replacing environmental variables."""
     with open(config_file) as in_handle:
         config = yaml.load(in_handle)
