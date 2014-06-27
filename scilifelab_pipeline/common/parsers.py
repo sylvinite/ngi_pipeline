@@ -3,6 +3,7 @@
 import collections
 import os
 import re
+## TODO do we need these xml thingers? what about xmltodict instead?
 import xml.etree.cElementTree as ET
 import xml.parsers.expat
 
@@ -280,6 +281,7 @@ class FlowcellRunMetricsParser(RunMetricsParser):
         if not os.path.exists(infile):
             self.log.warn("No such file {}".format(infile))
             return {}
+        ## TODO revert this try-except later but try to restrict the except a bit
         #try:
         fp = open(infile)
         parser = RunInfoParser()
@@ -303,6 +305,7 @@ class FlowcellRunMetricsParser(RunMetricsParser):
         if not os.path.exists(infile):
             self.log.warn("No such files {}".format(infile))
             return {}
+        ## TODO revert this try-except later but try to restrict the except a bit
         #try:
         with open(infile) as fh:
             parser = RunParametersParser()
