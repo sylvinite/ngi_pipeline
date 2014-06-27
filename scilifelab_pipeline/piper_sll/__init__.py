@@ -71,9 +71,6 @@ def build_piper_cl(projects_to_analyze, config):
     # Default is the file globalConfig.xml in the piper root dir
     piper_globalconfig_path = config.get("piper", {}).get("path_to_piper_globalconfig") \
                                  or os.path.join(path_to_piper_rootdir, "globalConfig.xml")
-    #if not os.path.isfile(piper_globalconfig_path):
-    #    raise IOError("\"{}\" is not a file (need global configuration file).".format(piper_globalconfig_path))
-    #else:
     ## Change this to read XML configs (after changing config to XML)
     piper_globalconfig = load_xml_config(piper_globalconfig_path)
 
