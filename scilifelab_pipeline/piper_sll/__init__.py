@@ -17,7 +17,7 @@ import subprocess
 import time
 
 from scilifelab_pipeline.log import minimal_logger
-from scilifelab_pipeline.utils.config import load_yaml_config
+from scilifelab_pipeline.utils.config import load_xml_config, load_yaml_config
 from scilifelab_pipeline.common import parse_lane_from_filename, \
                                        find_fastq_read_pairs, \
                                        get_flowcell_id_from_dirtree
@@ -71,11 +71,11 @@ def build_piper_cl(projects_to_analyze, config):
     # Default is the file globalConfig.xml in the piper root dir
     piper_globalconfig_path = config.get("piper", {}).get("path_to_piper_globalconfig") \
                                  or os.path.join(path_to_piper_rootdir, "globalConfig.xml")
-    if not os.path.isfile(piper_globalconfig_path):
-        raise IOError("\"{}\" is not a file (need global configuration file).".format(piper_globalconfig_path))
-    else:
-        ## Change this to read XML configs (after changing config to XML)
-        piper_globalconfig = load_yaml_config(piper_globalconfig_path)
+    #if not os.path.isfile(piper_globalconfig_path):
+    #    raise IOError("\"{}\" is not a file (need global configuration file).".format(piper_globalconfig_path))
+    #else:
+    ## Change this to read XML configs (after changing config to XML)
+    piper_globalconfig = load_xml_config(piper_globalconfig_path)
 
     for project in projects_to_analyze:
         ## For NGI, all projects will go through the same workflows;
@@ -137,7 +137,7 @@ def build_setup_xml(projects_to_analyze, config):
             cl_args["uppmax_proj"] = config['environment']['project_id']
             cl_args["path_to_sfc"] = config['environment']['path_to_setupfilecreator']
         except KeyError as e:
-            error_msg = "Could not load required information from " \
+            error_msg = "Could not load required information from" \
                         " configuration file and cannot continue with project {}:" \
                         " value \"{}\" missing".format(project, e.message)
             LOG.error(error_msg)
@@ -148,7 +148,6 @@ def build_setup_xml(projects_to_analyze, config):
         cl_args["output_xml_filepath"] = output_xml_filepath
         cl_args["sequencing_tech"] = "Illumina"
 
-        # Needs java on path? Load java 1.7 module
         setupfilecreator_cl = "{path_to_sfc} " \
                               "--output {output_xml_filepath} " \
                               "--project_name {project} " \
@@ -178,12 +177,10 @@ def create_report_tsv(projects_to_analyze):
     This file has the format:
 
         #SampleName     Lane    ReadLibrary     FlowcellID
-        P567_102        1       WGS     AH0JYUADXX
-        P567_102        2       WGS     AH0JYUADXX
+        P567_102        1       A               AH0JYUADXX
+        P567_102        2       B               AH0JYUADXY
 
     :param list projects_to_analyze: The list of flowcell directories
-    :returns: The path to the report.tsv files.
-    :rtype: list
     """
     report_header = ("#SampleName", "Lane", "ReadLibrary", "FlowcellID")
 
@@ -191,8 +188,12 @@ def create_report_tsv(projects_to_analyze):
     for project in projects_to_analyze:
         report_tsv_path = os.path.join(project.base_path, project.name, "report.tsv")
         report_xml_path = os.path.join(project.base_path, project.name, "report.xml")
+        ## TODO I think we might need to replace this file if the project changes
+        ##      -- might be cheapest to just generate a new one every time
         if os.path.exists(report_xml_path):
             report_paths.append(report_xml_path)
+            LOG.info("Found preexisting report.xml file for project {project}: " \
+                     "{report_xml}".format(project, report_xml_path))
             continue
 
         ## TODO Activate this check/move thing later
@@ -218,4 +219,3 @@ def create_report_tsv(projects_to_analyze):
                         lane = parse_lane_from_filename(fq_pairname)
                         read_library = "Get this from the database somehow"
                         print("\t".join([sample.name, lane, read_library, fcid.name]), file=rtsv_fh)
-    return report_paths
