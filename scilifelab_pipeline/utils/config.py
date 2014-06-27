@@ -23,18 +23,12 @@ def load_pm_config(config_file=None):
 
 def load_xml_config(config_file):
     """Load XML config file, expanding environmental variables."""
+    # Could use functools.partial but I guess that's just being fancy
     return load_generic_config(config_file, config_format="xml")
 
 
 def load_yaml_config(config_file):
     """Load YAML config file, expanding environmental variables."""
-    #try:
-    #    with open(config_file) as in_handle:
-    #        config = yaml.load(in_handle)
-    #    config = _expand_paths(config)
-    #    return config
-    #except IOError as e:
-    #    raise IOError("Could not open configuration file \"{}\".".format(config_file))
     return load_generic_config(config_file, config_format="yaml")
 
 ## TODO verify that this works as expected, drinking too much coffee to test code
