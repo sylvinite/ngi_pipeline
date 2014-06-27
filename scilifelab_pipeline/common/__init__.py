@@ -56,7 +56,6 @@ def main(config_file_path, demux_fcid_dirs=None, restrict_to_projects=None, rest
         demux_fcid_dirs_set.update(check_for_new_flowcells(inbox_directory, num_days_time_limit=30))
 
     # Sort/copy each raw demux FC into project/sample/fcid format -- "analysis-ready"
-    ## TODO need to make these objects hashable (__hash__, __eq__)
     #projects_to_analyze = collections.defaultdict(NGIProject)
     projects_to_analyze = dict()
     for demux_fcid_dir in demux_fcid_dirs_set:
@@ -217,13 +216,14 @@ def setup_analysis_directory_structure(fc_dir, config_file_path, projects_to_ana
     :param str config_file_path: The location of the configuration file.
     :param set projects_to_analyze: A dict (of Project objects, or empty)
     :param list restrict_to_projects: Specific projects within the flowcell to process exclusively
-    :param list restrict_to_samples: Specific projects within the flowcell to process exclusively
+    :param list restrict_to_samples: Specific samples within the flowcell to process exclusively
 
     :returns: A list of NGIProject objects that need to be run through the analysis pipeline
     :rtype: list
     """
     LOG.info("Setting up analysis for demultiplexed data in source folder \"{}\"".format(fc_dir))
     # Load config, expanding shell variables in paths
+    ## TODO consider passing in parsed config file
     config = load_yaml_config(config_file_path)
     analysis_top_dir = os.path.abspath(config["analysis"]["top_dir"])
     if not os.path.exists(fc_dir):
@@ -238,11 +238,9 @@ def setup_analysis_directory_structure(fc_dir, config_file_path, projects_to_ana
     except RuntimeError as e:
         LOG.error("Error when processing flowcell dir \"{}\": e".format(fc_dir))
         return []
-
-    # Parse the source flowcell dir
-    fc_dir_structure = parse_casava_directory(fc_dir)
-    fc_date, fc_name = [fc_dir_structure['fc_date'],fc_dir_structure['fc_name']]
-    fc_run_id = "{}_{}".format(fc_date,fc_name)
+    fc_date = fc_dir_structure['fc_date']
+    fc_name = fc_dir_structure['fc_name']
+    fc_run_id = "{}_{}".format(fc_date, fc_name)
 
     # Copy the basecall stats directory.
     ## TODO I don't know what these nexttwo lines of comments refer to!!
@@ -251,6 +249,7 @@ def setup_analysis_directory_structure(fc_dir, config_file_path, projects_to_ana
     _copy_basecall_stats([os.path.join(fc_dir_structure['fc_dir'], d) for d in
                                         fc_dir_structure['basecall_stats_dir']],
                                         analysis_top_dir)
+
     #sample_fcid_directories = []
     if not fc_dir_structure.get('projects'):
         LOG.warn("No projects found in specified flowcell directory \"{}\"".format(fc_dir))
@@ -273,15 +272,12 @@ def setup_analysis_directory_structure(fc_dir, config_file_path, projects_to_ana
         try:
             project_obj = projects_to_analyze[project_dir]
         except KeyError:
-            ## TODO This should be the actual project name -- is it?
             project_obj = NGIProject(name=project_name, dirname=project_name, base_path=analysis_top_dir)
             projects_to_analyze[project_dir] = project_obj
 
         # Iterate over the samples in the project
         for sample in project.get('samples', []):
             # If specific samples are specified, skip those that do not match
-            ## Ask Guilermo about this substitution -- I suspect we can remove it later
-            ## this appears to be some scilifelab-specific naming process?
             sample_name = sample['sample_name'].replace('__','.')
             if len(restrict_to_samples) > 0 and sample_name not in restrict_to_samples:
                 LOG.debug("Skipping sample {}".format(sample_name))
@@ -294,7 +290,6 @@ def setup_analysis_directory_structure(fc_dir, config_file_path, projects_to_ana
                 os.mkdir(sample_dir, 0770)
 
 
-            ## TODO This should be the actual sample name -- is it?
             # This will only create a new sample object if it doesn't already exist in the project
             sample_obj = project_obj.add_sample(name=sample_name, dirname=sample_name)
 
@@ -304,8 +299,7 @@ def setup_analysis_directory_structure(fc_dir, config_file_path, projects_to_ana
                 ## TODO change to mkdir -p
                 os.mkdir(dst_sample_fcid_dir, 0770)
 
-            ## TODO This should be the actual FCID name -- is it?
-            # This will only create a new FCID object if it doesn't already exist in the project
+            # This will only create a new FCID object if it doesn't already exist in the sample
             fcid_obj = sample_obj.add_fcid(name=fc_run_id, dirname=fc_run_id)
 
             # rsync the source files to the sample directory
@@ -329,7 +323,6 @@ def setup_analysis_directory_structure(fc_dir, config_file_path, projects_to_ana
     return projects_to_analyze
 
 
-## TODO this isn't all my code and I must review it -- I think we're duplicating work here
 def parse_casava_directory(fc_dir):
     """
     Traverse a CASAVA-1.8-generated directory structure and return a dictionary
@@ -371,22 +364,18 @@ def parse_casava_directory(fc_dir):
     """
     projects = []
     fc_dir = os.path.abspath(fc_dir)
-    LOG.info("Parsing directory \"{}\"...".format(fc_dir))
+    LOG.info("Parsing flowcell directory \"{}\"...".format(fc_dir))
     parser = FlowcellRunMetricsParser(fc_dir)
     run_info = parser.parseRunInfo()
     runparams = parser.parseRunParameters()
 
-    ## TODO how important is it to have this information? Should it cause processing to fail or just toss a warning?
-    fc_name = run_info.get('Flowcell', None)
-    fc_date = run_info.get('Date', None)
-    fc_pos = runparams.get('FCPosition','')
-    #try:
-    #    fc_name = run_info['Flowcell']
-    #    fc_date = run_info['Date']
-    #    fc_pos = runparams['FCPosition']
-    #except KeyError:
-    #    raise RuntimeError("Could not parse flowcell information \"{}\" "\
-    #                   "from Flowcell RunMetrics in flowcell {}".format(e, fc_dir))
+    try:
+        fc_name = run_info['Flowcell']
+        fc_date = run_info['Date']
+        fc_pos = runparams['FCPosition']
+    except KeyError:
+        raise RuntimeError("Could not parse flowcell information \"{}\" "\
+                       "from Flowcell RunMetrics in flowcell {}".format(e, fc_dir))
 
     # "Unaligned*" because SciLifeLab dirs are called "Unaligned_Xbp"
     # (where "X" is the index length) and there is also an "Unaligned" folder
@@ -396,10 +385,12 @@ def parse_casava_directory(fc_dir):
     # e.g. 131030_SN7001362_0103_BC2PUYACXX/Unaligned_16bp/Project_J__Bjorkegren_13_02/
     project_dir_pattern = os.path.join(unaligned_dir_pattern,"Project_*")
     for project_dir in glob.glob(project_dir_pattern):
+        LOG.info("Parsing project directory \"{}\"...".format(project_dir.split(os.path.split(fc_dir)[0] + "/")[1]))
         project_samples = []
         sample_dir_pattern = os.path.join(project_dir,"Sample_*")
         # e.g. <Project_dir>/Sample_P680_356F_dual56/
         for sample_dir in glob.glob(sample_dir_pattern):
+            LOG.info("Parsing samples directory \"{}\"...".format(sample_dir.split(os.path.split(fc_dir)[0] + "/")[1]))
             fastq_file_pattern = os.path.join(sample_dir,"*.fastq.gz")
             samplesheet_pattern = os.path.join(sample_dir,"*.csv")
             fastq_files = [os.path.basename(file) for file in glob.glob(fastq_file_pattern)]
@@ -423,13 +414,13 @@ def parse_casava_directory(fc_dir):
             'projects': projects}
 
 
-# This isn't used?
+# This isn't used at the moment
 def copy_undetermined_index_files(casava_data_dir, destination_dir):
     """
     Copy fastq files with "Undetermined" index reads to the destination directory.
 
-    :param str casava_data_dir: The directory containing 
-    :param str destination_dir:
+    :param str casava_data_dir: The Unaligned directory (e.g. "<FCID>/Unaligned_16bp")
+    :param str destination_dir: Eponymous
     """
     # List of files to copy
     copy_list = []
@@ -451,6 +442,7 @@ def copy_undetermined_index_files(casava_data_dir, destination_dir):
     # Rsync the fastq files to the destination directory
     do_rsync(copy_list,destination_dir)
 
+# Also not used at the moment
 def _merge_samplesheets(samplesheets, merged_samplesheet):
     """
     Merge multiple Illumina SampleSheet.csv files into one.
@@ -485,6 +477,7 @@ def _copy_basecall_stats(source_dirs, destination_dir):
         dirname = os.path.join(destination_dir,os.path.basename(source_dir))
         try:
             os.mkdir(dirname)
+        ## TODO wtf
         except:
             pass
         # List the files/directories to copy
@@ -502,7 +495,7 @@ def _copy_basecall_stats(source_dirs, destination_dir):
 ##  this could also work remotely of course
 def do_rsync(src_files, dst_dir):
     ## TODO check parameters here
-    cl = ["rsync","-car"]
+    cl = ["rsync", "-car"]
     cl.extend(src_files)
     cl.append(dst_dir)
     cl = map(str, cl)
@@ -511,7 +504,6 @@ def do_rsync(src_files, dst_dir):
     #    open(os.path.join(dst_dir,os.path.basename(f)),"w").close()
     subprocess.check_call(cl)
     return [ os.path.join(dst_dir,os.path.basename(f)) for f in src_files ]
-
 
 
 class memoized(object):
@@ -533,15 +525,11 @@ class memoized(object):
     def __repr__(self):
         return self.func.__doc__
     # This ensures that attribute access (e.g. obj.attr)
-    # goes through the __call__ function I defined above
-    # functools is awesome
-    # descriptors are the raddest
-    # boy i love python
+    # goes through the __call__ function defined above
     def __get__(self, obj, objtype):
         return functools.partial(self.__call__, obj)
 
 
-#def parse_project_sample_lane_from_filename(sample_basename):
 def parse_lane_from_filename(sample_basename):
     """Project id, sample id, and lane are pulled from the standard filename format,
      which is:
@@ -550,7 +538,7 @@ def parse_lane_from_filename(sample_basename):
        1_140220_AH8AMJADXX_P673_101_1.fastq.gz
        (SciLifeLab Sthlm format)
     or
-       <project-number>_<sample-name>_<index>_<lane>_<read>_<group>.fastq.gz
+       <sample-name>_<index>_<lane>_<read>_<group>.fastq.gz
        e.g.
        P567_102_AAAAAA_L001_R1_001.fastq.gz
        (Standard Illumina format)
@@ -694,39 +682,6 @@ def get_flowcell_id_from_dirtree(path):
             raise ValueError("Could not determine flowcell ID from directory path.")
 
 
-#def load_config(config_file_path):
-#    """Load YAML config file, replacing environmental variables.
-#
-#    :param str config_file_path: The path to the (yaml-formatted) configuration file to be parsed.
-#
-#    :returns: A dict of the configuration file with shell variables expanded.
-#    :rtype: dict
-#    """
-#    with open(config_file_path) as in_handle:
-#        config = yaml.load(in_handle)
-#    config = _expand_paths(config)
-#    return config
-#
-#def _expand_paths(config):
-#    for field, setting in config.items():
-#        if isinstance(config[field], dict):
-#            config[field] = _expand_paths(config[field])
-#        else:
-#            config[field] = expand_path(setting)
-#    return config
-#
-#def expand_path(path):
-#    """ Combines os.path.expandvars with replacing ~ with $HOME.
-#    """
-#    try:
-#        return os.path.expandvars(path.replace("~", "$HOME"))
-#    except AttributeError:
-#        return path
-#
-
-
-## a cron job will run this periodically, passing only the config file;
-## the script will check for newly-delivered flowcells and process them
 if __name__=="__main__":
     parser = argparse.ArgumentParser("Sort and transfer a demultiplxed illumina run.")
     parser.add_argument("--config", required=True,
