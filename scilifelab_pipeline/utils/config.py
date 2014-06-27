@@ -1,8 +1,31 @@
 import ConfigParser
+import json
 import os
+import xmltodict
 import yaml
 
-# Why do we need pm.conf again?
+## This import fails and I don't understand why
+#from scilifelab_pipeline.log import minimal_logger
+
+## Temporary until I resolve import issue
+class minimal_logger(object):
+    def __init__(self, name):
+        self.name = name
+
+    def info(self, message):
+        print("INFO ({}): {}".format(self.name, message))
+
+    def warn(self, message):
+        self.info(message)
+
+    def error(self, message):
+        self.info(message)
+
+
+LOG = minimal_logger(__name__)
+
+
+## Can we eliminate pm.conf or is it still needed on the user side?
 def load_pm_config(config_file=None):
     """Loads a configuration file.
 
@@ -20,13 +43,61 @@ def load_pm_config(config_file=None):
                 Please make sure that ~/.pm/pm.conf exists and that you have \
                 read permissions')
 
-## TODO implement for XML
+def load_xml_config(config_file):
+    """Load XML config file, expanding environmental variables."""
+    return load_generic_config(config_file, config_format="xml")
+
+
 def load_yaml_config(config_file):
-    """Load YAML config file, replacing environmental variables."""
-    with open(config_file) as in_handle:
-        config = yaml.load(in_handle)
-    config = _expand_paths(config)
-    return config
+    """Load YAML config file, expanding environmental variables."""
+    #try:
+    #    with open(config_file) as in_handle:
+    #        config = yaml.load(in_handle)
+    #    config = _expand_paths(config)
+    #    return config
+    #except IOError as e:
+    #    raise IOError("Could not open configuration file \"{}\".".format(config_file))
+    return load_generic_config(config_file, config_format="yaml")
+
+## TODO verify that this works as expected, drinking too much coffee to test code
+def load_generic_config(config_file_path, config_format="yaml"):
+    """Parse a configuration file, returning a dict. Supports yaml, xml, and json.
+
+    :param str config_file_path: The path to the configuration file.
+    :param str config_format: The format of the config file; default yaml.
+    :returns: A dict of the configuration file with environment variables expanded.
+    :rtype: dict
+    """
+    parsers_dict = {"json": json.load,
+                    "xml": xmltodict.parse,
+                    "yaml": yaml.load,}
+    try:
+        file_ext = os.path.splitext(config_file_path)[1].replace(".", "")
+        if not file_ext.lower() == config_format.lower():
+            LOG.warn("Warning: configuration file extension \"{}\" does not " \
+                     "match supplied argument \"{}\"".format(config_format, file_ext))
+    except:
+    #except (IndexError, AttributeError):
+        file_ext = None
+    ## TODO Does this work? Coffee coffee
+    try:
+        parser_fn = parsers_dict[config_format.lower()]
+    except KeyError:
+        try:
+            # If the user-supplied format fails, try parsing using the format
+            # specified by the file extension
+            parser_fn = parsers_dict[file_ext.lower()]
+        except:
+            raise IOError("Cannot parse config files in format specified "
+                          "(not supported): \"{}\"".format(config_format))
+    try:
+        with open(config_file_path) as in_handle:
+            config = parser_fn(in_handle)
+        config = _expand_paths(config)
+        return config
+    except IOError as e:
+        raise IOError("Could not open configuration file \"{}\".".format(config_file_path))
+
 
 def _expand_paths(config):
     for field, setting in config.items():
