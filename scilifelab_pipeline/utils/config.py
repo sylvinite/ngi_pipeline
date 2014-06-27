@@ -4,28 +4,6 @@ import os
 import xmltodict
 import yaml
 
-## This import fails and I don't understand why
-#from scilifelab_pipeline.log import minimal_logger
-
-## Temporary until I resolve import issue
-class minimal_logger(object):
-    def __init__(self, name):
-        self.name = name
-
-    def info(self, message):
-        print("INFO ({}): {}".format(self.name, message))
-
-    def warn(self, message):
-        self.info(message)
-
-    def error(self, message):
-        self.info(message)
-
-
-LOG = minimal_logger(__name__)
-
-
-## Can we eliminate pm.conf or is it still needed on the user side?
 def load_pm_config(config_file=None):
     """Loads a configuration file.
 
@@ -73,11 +51,7 @@ def load_generic_config(config_file_path, config_format="yaml"):
                     "yaml": yaml.load,}
     try:
         file_ext = os.path.splitext(config_file_path)[1].replace(".", "")
-        if not file_ext.lower() == config_format.lower():
-            LOG.warn("Warning: configuration file extension \"{}\" does not " \
-                     "match supplied argument \"{}\"".format(config_format, file_ext))
-    except:
-    #except (IndexError, AttributeError):
+    except (IndexError, AttributeError):
         file_ext = None
     ## TODO Does this work? Coffee coffee
     try:
