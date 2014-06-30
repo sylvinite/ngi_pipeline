@@ -2,8 +2,7 @@
 """Piper workflow-specific code."""
 
 
-from scilifelab_pipeline.log import minimal_logger
-from scilifelab_pipeline.utils import load_yaml_config
+from ngi_pipeline.log import minimal_logger
 
 LOG = minimal_logger(__name__)
 

@@ -16,9 +16,9 @@ import shutil
 import subprocess
 import time
 
-from scilifelab_pipeline.log import minimal_logger
-from scilifelab_pipeline.utils.config import load_xml_config, load_yaml_config
-from scilifelab_pipeline.common import parse_lane_from_filename, \
+from ngi_pipeline.log import minimal_logger
+from ngi_pipeline.utils.config import load_xml_config, load_yaml_config
+from ngi_pipeline.common import parse_lane_from_filename, \
                                        find_fastq_read_pairs, \
                                        get_flowcell_id_from_dirtree
 

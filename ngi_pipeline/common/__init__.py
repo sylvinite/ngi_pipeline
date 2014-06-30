@@ -21,9 +21,9 @@ import sys
 import unittest
 import yaml
 
-from scilifelab_pipeline.common.parsers import FlowcellRunMetricsParser
-from scilifelab_pipeline.log import minimal_logger
-from scilifelab_pipeline.utils.config import load_yaml_config
+from ngi_pipeline.common.parsers import FlowcellRunMetricsParser
+from ngi_pipeline.log import minimal_logger
+from ngi_pipeline.utils.config import load_yaml_config
 
 LOG = minimal_logger(__name__)
 

@@ -6,7 +6,7 @@ import logging
 import sys
 
 from logbook.queues import RedisHandler
-from scilifelab_pipeline.utils import config as cl
+from ngi_pipeline.utils import config as cl
 
 def minimal_logger(namespace, extra_fields=None, debug=False):
     """Make and return a minimal console logger.
