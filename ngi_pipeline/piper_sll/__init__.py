@@ -71,7 +71,6 @@ def build_piper_cl(projects_to_analyze, config):
     # Default is the file globalConfig.xml in the piper root dir
     piper_globalconfig_path = config.get("piper", {}).get("path_to_piper_globalconfig") \
                                  or os.path.join(path_to_piper_rootdir, "globalConfig.xml")
-    piper_globalconfig = load_xml_config(piper_globalconfig_path)
 
     for project in projects_to_analyze:
         ## For NGI, all projects will go through the same workflows;
@@ -83,17 +82,24 @@ def build_piper_cl(projects_to_analyze, config):
         ## We'll want to make this a generic value in the database ("QC", "DNAAlign", "VariantCalling", etc.)
         ##  and then map to the correct script in the config file. This way we can execute the same pipelines
         ##  for any of the engines
+
+        ## This key will probably exist on the project level, and may have multiple values.
+        ## Workflows may imply a number of substeps (e.g. qc, alignment, etc.)
         # workflows_for_project = proj_db.get("workflows") or something like that
         generic_workflow_names_for_project = ("dna_alignonly")
 
-        setup_xml_path = project.setup_xml_path
+        try:
+            setup_xml_path = project.setup_xml_path
+        except AttributeError:
+            LOG.warn("Project {} has no setup.xml file. Skipping project "
+                     "command-line generation.".format(project))
         for workflow_name in generic_workflow_names_for_project:
             LOG.info("Building command line for project {}, " \
                      "workflow {}".format(project, workflow_name))
             workflows.return_cl_for_workflow(workflow_name=workflow_name,
-                                             path_to_qscripts=path_to_piper_qscripts,
+                                             qscripts_dir_path=path_to_piper_qscripts,
                                              setup_xml_path=setup_xml_path,
-                                             global_config=piper_globalconfig)
+                                             global_config_path=piper_globalconfig)
             project.command_lines.append(cl)
 
 
