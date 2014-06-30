@@ -7,7 +7,7 @@ import re
 import xml.etree.cElementTree as ET
 import xml.parsers.expat
 
-from scilifelab_pipeline.log import minimal_logger
+from ngi_pipeline.log import minimal_logger
 LOG = minimal_logger(__name__)
 
 class MetricsParser():
