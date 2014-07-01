@@ -37,10 +37,8 @@ def main(config_file_path, demux_fcid_dirs=None, restrict_to_projects=None, rest
     :param list restrict_to_projects: A list of projects; analysis will be restricted to these. Optional.
     :param list restrict_to_samples: A list of samples; analysis will be restricted to these. Optional.
     """
-    if not restrict_to_projects:
-        restrict_to_projects = []
-    if not restrict_to_samples:
-        restrict_to_samples = []
+    if not restrict_to_projects: restrict_to_projects = []
+    if not restrict_to_samples: restrict_to_samples = []
     demux_fcid_dirs_set = set()
     projects_to_analyze = []
     config = load_yaml_config(config_file_path)
@@ -51,7 +49,6 @@ def main(config_file_path, demux_fcid_dirs=None, restrict_to_projects=None, rest
         # Check for newly-delivered data in the INBOX
         inbox_directory = config.get('INBOX')
         # These flowcells can contain data from multiple projects
-
         ## TODO change this to use Celery / RabbitMQ
         demux_fcid_dirs_set.update(check_for_new_flowcells(inbox_directory, num_days_time_limit=30))
 
@@ -63,7 +60,7 @@ def main(config_file_path, demux_fcid_dirs=None, restrict_to_projects=None, rest
         # Reassignment of name is unnecessary but useful for clarity -- this
         # continually updates the projects_to_analyze dict and its objects
         projects_to_analyze = setup_analysis_directory_structure(demux_fcid_dir,
-                                                                 config_file_path,
+                                                                 config,
                                                                  projects_to_analyze,
                                                                  restrict_to_projects,
                                                                  restrict_to_samples)
@@ -205,7 +202,7 @@ def check_for_new_flowcells(inbox_directory, num_days_time_limit=None):
 
 
 ## TODO This needs to be changed so it will update preexisting Project objects
-def setup_analysis_directory_structure(fc_dir, config_file_path, projects_to_analyze,
+def setup_analysis_directory_structure(fc_dir, config, projects_to_analyze,
                                        restrict_to_projects=None, restrict_to_samples=None):
     """
     Copy and sort files from their CASAVA-demultiplexed flowcell structure
@@ -213,7 +210,7 @@ def setup_analysis_directory_structure(fc_dir, config_file_path, projects_to_ana
     split across multiple flowcells.
 
     :param str fc_dir: The directory created by CASAVA for this flowcell.
-    :param str config_file_path: The location of the configuration file.
+    :param dict config: The parsed configuration file.
     :param set projects_to_analyze: A dict (of Project objects, or empty)
     :param list restrict_to_projects: Specific projects within the flowcell to process exclusively
     :param list restrict_to_samples: Specific samples within the flowcell to process exclusively
@@ -222,13 +219,12 @@ def setup_analysis_directory_structure(fc_dir, config_file_path, projects_to_ana
     :rtype: list
     """
     LOG.info("Setting up analysis for demultiplexed data in source folder \"{}\"".format(fc_dir))
-    # Load config, expanding shell variables in paths
-    ## TODO consider passing in parsed config file
-    config = load_yaml_config(config_file_path)
-    analysis_top_dir = os.path.abspath(config["analysis"]["top_dir"])
+    if not restrict_to_projects: restrict_to_projects = []
+    if not restrict_to_samples: restrict_to_samples = []
     if not os.path.exists(fc_dir):
         LOG.error("Error: Flowcell directory {} does not exist".format(fc_dir))
         return []
+    analysis_top_dir = os.path.abspath(config["analysis"]["top_dir"])
     if not os.path.exists(analysis_top_dir):
         LOG.error("Error: Analysis top directory {} does not exist".format(analysis_top_dir))
         return []
@@ -241,85 +237,66 @@ def setup_analysis_directory_structure(fc_dir, config_file_path, projects_to_ana
     fc_date = fc_dir_structure['fc_date']
     fc_name = fc_dir_structure['fc_name']
     fc_run_id = "{}_{}".format(fc_date, fc_name)
-
     # Copy the basecall stats directory.
-    ## TODO I don't know what these nexttwo lines of comments refer to!!
     # This will be causing an issue when multiple directories are present...
     # syncing should be done from archive, preserving the Unaligned* structures
     _copy_basecall_stats([os.path.join(fc_dir_structure['fc_dir'], d) for d in
                                         fc_dir_structure['basecall_stats_dir']],
                                         analysis_top_dir)
-
-    #sample_fcid_directories = []
     if not fc_dir_structure.get('projects'):
         LOG.warn("No projects found in specified flowcell directory \"{}\"".format(fc_dir))
     # Iterate over the projects in the flowcell directory
     for project in fc_dir_structure.get('projects', []):
-
-        # If specific projects are specified, skip those that do not match
         project_name = project['project_name']
-        if len(restrict_to_projects) > 0 and project_name not in restrict_to_projects:
+        # If specific projects are specified, skip those that do not match
+        if restrict_to_projects and project_name not in restrict_to_projects:
             LOG.debug("Skipping project {}".format(project_name))
             continue
         LOG.info("Setting up project {}".format(project.get("project_dir")))
-
         # Create a project directory if it doesn't already exist
         project_dir = os.path.join(analysis_top_dir, project_name)
-        if not os.path.exists(project_dir):
-            ## TODO change to mkdir -p
-            os.mkdir(project_dir, 0770)
-
+        ## TODO change to mkdir -p
+        if not os.path.exists(project_dir): os.mkdir(project_dir, 0770)
         try:
             project_obj = projects_to_analyze[project_dir]
         except KeyError:
             project_obj = NGIProject(name=project_name, dirname=project_name, base_path=analysis_top_dir)
             projects_to_analyze[project_dir] = project_obj
-
         # Iterate over the samples in the project
         for sample in project.get('samples', []):
             # If specific samples are specified, skip those that do not match
             sample_name = sample['sample_name'].replace('__','.')
-            if len(restrict_to_samples) > 0 and sample_name not in restrict_to_samples:
+            if restrict_to_samples and sample_name not in restrict_to_samples:
                 LOG.debug("Skipping sample {}".format(sample_name))
                 continue
             LOG.info("Setting up sample {}".format(sample_name))
             # Create a directory for the sample if it doesn't already exist
             sample_dir = os.path.join(project_dir, sample_name)
-            if not os.path.exists(sample_dir):
-                ## TODO change to mkdir -p
-                os.mkdir(sample_dir, 0770)
-
-
+            ## TODO change to mkdir -p
+            if not os.path.exists(sample_dir): os.mkdir(sample_dir, 0770)
             # This will only create a new sample object if it doesn't already exist in the project
             sample_obj = project_obj.add_sample(name=sample_name, dirname=sample_name)
-
             # Create a directory for the flowcell if it does not exist
             dst_sample_fcid_dir = os.path.join(sample_dir, fc_run_id)
-            if not os.path.exists(dst_sample_fcid_dir):
-                ## TODO change to mkdir -p
-                os.mkdir(dst_sample_fcid_dir, 0770)
-
+            ## TODO change to mkdir -p
+            if not os.path.exists(dst_sample_fcid_dir): os.mkdir(dst_sample_fcid_dir, 0770)
             # This will only create a new FCID object if it doesn't already exist in the sample
             fcid_obj = sample_obj.add_fcid(name=fc_run_id, dirname=fc_run_id)
-
             # rsync the source files to the sample directory
-            # src: flowcell/data/project/sample
-            # dst: project/sample/flowcell_run
+            #    src: flowcell/data/project/sample
+            #    dst: project/sample/flowcell_run
             src_sample_dir = os.path.join(fc_dir_structure['fc_dir'],
                                           project['data_dir'],
                                           project['project_dir'],
                                           sample['sample_dir'])
             #LOG.info("Copying sample files from \"{}\" to \"{}\"...".format(
             #                                src_sample_dir, dst_sample_fcid_dir))
-            sample_files = do_rsync([ os.path.join(src_sample_dir, f) for f in
-                                      sample.get('files', [])], dst_sample_fcid_dir)
-            #sample_fcid_directories.append(dst_sample_fcid_dir)
-
+            sample_files = do_rsync([os.path.join(src_sample_dir, f) for f in
+                                     sample.get('files', [])], dst_sample_fcid_dir)
             # Just want fastq files here
-            pt = re.compile(".*\.(fastq|fq)(\.gz|\.gzip|\.bz2)?$")
-            fastq_files = filter(pt.match, sample.get('files', []))
+            pattern = re.compile(".*\.(fastq|fq)(\.gz|\.gzip|\.bz2)?$")
+            fastq_files = filter(pattern.match, sample.get('files', []))
             fcid_obj.add_fastq_files(fastq_files)
-
     return projects_to_analyze
 
 
@@ -368,7 +345,6 @@ def parse_casava_directory(fc_dir):
     parser = FlowcellRunMetricsParser(fc_dir)
     run_info = parser.parseRunInfo()
     runparams = parser.parseRunParameters()
-
     try:
         fc_name = run_info['Flowcell']
         fc_date = run_info['Date']
@@ -376,7 +352,6 @@ def parse_casava_directory(fc_dir):
     except KeyError:
         raise RuntimeError("Could not parse flowcell information \"{}\" "\
                        "from Flowcell RunMetrics in flowcell {}".format(e, fc_dir))
-
     # "Unaligned*" because SciLifeLab dirs are called "Unaligned_Xbp"
     # (where "X" is the index length) and there is also an "Unaligned" folder
     unaligned_dir_pattern = os.path.join(fc_dir,"Unaligned*")
@@ -408,7 +383,7 @@ def parse_casava_directory(fc_dir):
                          'project_name': project_name,
                          'samples': project_samples})
     return {'fc_dir': fc_dir,
-            'fc_name': '{}{}'.format(fc_pos,fc_name),
+            'fc_name': '{}{}'.format(fc_pos, fc_name),
             'fc_date': fc_date,
             'basecall_stats_dir': basecall_stats_dir,
             'projects': projects}

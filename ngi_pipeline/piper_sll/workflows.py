@@ -1,6 +1,8 @@
 #!/bin/env python
 """Piper workflow-specific code."""
 
+import os
+import sys
 
 from ngi_pipeline.log import minimal_logger
 
@@ -21,7 +23,7 @@ def return_cl_for_workflow(workflow_name, qscripts_dir_path, setup_xml_path, glo
     workflow_fn_name = "workflow_{}".format(workflow_name)
     # Get the local function if it exists
     try:
-        workflow_function = sys.modules[__name__].workflow_fn_name
+        workflow_function = getattr(sys.modules[__name__], workflow_fn_name)
     except AttributeError as e:
         error_msg = "Workflow \"{}\" has no associated function.".format(workflow_fn_name)
         LOG.error(error_msg)
@@ -31,15 +33,16 @@ def return_cl_for_workflow(workflow_name, qscripts_dir_path, setup_xml_path, glo
     ##          R/2.15.0
     ##      to command line, or deal with this in the calling function.
     ## TODO need tmp, logging directory
+    LOG.info("Building command line for workflow {}".format(workflow_name))
     return workflow_function(qscripts_dir_path, setup_xml_path, global_config_path)
 
 
 def workflow_dna_alignonly(*args, **kwargs):
     """Return the command line for basic DNA Alignment.
 
-    :param strs qscripts: The path to the Piper qscripts directory.
+    :param strs qscripts_dir_path: The path to the Piper qscripts directory.
     :param str setup_xml_path: The path to the setup.xml file.
-    :param dict global_config: The parsed Piper-specific globalConfig file.
+    :param dict global_config_path: The path to the Piper-specific globalConfig file.
 
     :returns: The Piper command to be executed.
     :rtype: str
@@ -53,15 +56,17 @@ def workflow_dna_variantcalling(qscripts_dir_path, setup_xml_path, global_config
 
     :param strs qscripts_dir_path: The path to the Piper qscripts directory.
     :param str setup_xml_path: The path to the setup.xml file.
-    :param dict global_config_path: The parsed Piper-specific globalConfig file.
+    :param dict global_config_path: The path to the Piper-specific globalConfig file.
 
     :returns: The Piper command to be executed.
     :rtype: str
     """
-    workflow_qscript_path = os.path.join(qscripts, "DNABestPracticeVariantCalling.scala")
+    workflow_qscript_path = os.path.join(qscripts_dir_path, "DNABestPracticeVariantCalling.scala")
     ## Should be able to figure this out dynamically I suppose
     #job_walltime = str(calculate_job_time(workflow, ...))
     job_walltime = "345600"
+    # Pull from config file
+    num_threads = 16
 
             #piper -S ${SCRIPTS_DIR}/DNABestPracticeVariantCalling.scala \
             #--xml_input ${PIPELINE_SETUP} \
