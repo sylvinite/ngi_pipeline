@@ -30,7 +30,7 @@ LOG = minimal_logger(__name__)
 
 def main(demux_fcid_dirs, config_file_path=None, restrict_to_projects=None, restrict_to_samples=None):
     """
-    The main launcher method. 
+    The main launcher method.
 
     :param str demux_fcid_dirs: The CASAVA-produced demux directory/directories.
     :param str config_file_path: The path to the configuration file; can also be
