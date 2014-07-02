@@ -28,15 +28,27 @@ from ngi_pipeline.utils.config import load_yaml_config
 LOG = minimal_logger(__name__)
 
 
-def main(demux_fcid_dirs, config_file_path, restrict_to_projects=None, restrict_to_samples=None):
+def main(demux_fcid_dirs, config_file_path=None, restrict_to_projects=None, restrict_to_samples=None):
     """
-    The main launcher method.
+    The main launcher method. 
 
-    :param str config_file_path: The path to the configuration file.
-    :param str demux_fcid_dirs: The CASAVA-produced demux directory(s). Optional.
-    :param list restrict_to_projects: A list of projects; analysis will be restricted to these. Optional.
-    :param list restrict_to_samples: A list of samples; analysis will be restricted to these. Optional.
+    :param str demux_fcid_dirs: The CASAVA-produced demux directory/directories.
+    :param str config_file_path: The path to the configuration file; can also be
+                                 specified via environmental variable "NGI_CONFIG"
+    :param list restrict_to_projects: A list of projects; analysis will be
+                                      restricted to these. Optional.
+    :param list restrict_to_samples: A list of samples; analysis will be
+                                     restricted to these. Optional.
     """
+    if not config_file_path:
+        try:
+            config_file_path = os.environ['NGI_CONFIG']
+        except KeyError:
+            error_msg = ("Configuration file not passed as argument and "
+                         "NGI_CONFIG environment variable not defined. "
+                         "Cannot proceed.")
+            LOG.error(error_msg)
+            raise RuntimeError(error_msg)
     if not restrict_to_projects: restrict_to_projects = []
     if not restrict_to_samples: restrict_to_samples = []
     demux_fcid_dirs_set = set(demux_fcid_dirs)
@@ -47,8 +59,6 @@ def main(demux_fcid_dirs, config_file_path, restrict_to_projects=None, restrict_
     projects_to_analyze = dict()
     for demux_fcid_dir in demux_fcid_dirs_set:
         # These will be a bunch of Project objects each containing Samples, FCIDs, lists of fastq files
-        # Reassignment of name is unnecessary but useful for clarity -- this
-        # continually updates the projects_to_analyze dict and its objects
         projects_to_analyze = setup_analysis_directory_structure(demux_fcid_dir,
                                                                  config,
                                                                  projects_to_analyze,
@@ -62,14 +72,13 @@ def main(demux_fcid_dirs, config_file_path, restrict_to_projects=None, restrict_
         # Don't need the dict functionality anymore; revert to list
         projects_to_analyze = projects_to_analyze.values()
 
-    ## change this terminology from 'pipeline' to 'analysis_engine' or something similar
-    analysis_pipeline_module_name = config.get("analysis", {}).get("analysis_pipeline")
-    if not analysis_pipeline_module_name:
+    analysis_engine_module_name = config.get("analysis", {}).get("analysis_engine")
+    if not analysis_engine_module_name:
         error_msg = "No analysis engine specified in configuration file. Exiting."
         LOG.error(error_msg)
         raise RuntimeError(error_msg)
     # Import the module specified in the config file (e.g. bcbio, piper)
-    analysis_module = importlib.import_module(analysis_pipeline_module_name)
+    analysis_module = importlib.import_module(analysis_engine_module_name)
     analysis_module.main(projects_to_analyze=projects_to_analyze, config_file_path=config_file_path)
 
 
