@@ -217,17 +217,20 @@ def setup_analysis_directory_structure(fc_dir, config, projects_to_analyze,
 
     :returns: A list of NGIProject objects that need to be run through the analysis pipeline
     :rtype: list
+
+    :raises OSError: If the analysis destination directory does not exist or if there are permissions errors.
     """
     LOG.info("Setting up analysis for demultiplexed data in source folder \"{}\"".format(fc_dir))
     if not restrict_to_projects: restrict_to_projects = []
     if not restrict_to_samples: restrict_to_samples = []
+    if not os.path.exists(analysis_top_dir):
+        error_msg = "Error: Analysis top directory {} does not exist".format(analysis_top_dir)
+        LOG.error(error_msg)
+        raise OSError(error_msg)
     if not os.path.exists(fc_dir):
         LOG.error("Error: Flowcell directory {} does not exist".format(fc_dir))
         return []
     analysis_top_dir = os.path.abspath(config["analysis"]["top_dir"])
-    if not os.path.exists(analysis_top_dir):
-        LOG.error("Error: Analysis top directory {} does not exist".format(analysis_top_dir))
-        return []
     # Map the directory structure for this flowcell
     try:
         fc_dir_structure = parse_casava_directory(fc_dir)
