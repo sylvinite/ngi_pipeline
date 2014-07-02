@@ -69,7 +69,7 @@ def workflow_dna_variantcalling(qscripts_dir_path, setup_xml_path, global_config
             #--xml_input ${PIPELINE_SETUP} \
             #--global_config uppmax_global_config.xml \
             #--number_of_threads 8 \
-            #--scatter_gather 23 \
+            #--scatter_Gather 23 \
             #-jobRunner ${JOB_RUNNER} \
             #-jobNative "${JOB_NATIVE_ARGS}" \
             #--job_walltime 345600 \
@@ -79,7 +79,7 @@ def workflow_dna_variantcalling(qscripts_dir_path, setup_xml_path, global_config
             "--xml_input {setup_xml_path} " \
             "--global_config {global_config_path} " \
             "--number_of_threads {num_threads} " \
-            "--scatter_Gather 23 " \
+            "--scatter_gather 23 " \
             "-jobRunner Drmaa " \
             "--job_walltime {job_walltime} " \
             "-run".format(**locals())
