@@ -258,7 +258,8 @@ def setup_analysis_directory_structure(fc_dir, config_file_path, projects_to_ana
 
         # If specific projects are specified, skip those that do not match
         project_name = project['project_name']
-        if len(restrict_to_projects) > 0 and project_name not in restrict_to_projects:
+        if restrict_to_projects is not None and len(restrict_to_projects) > 0 and \
+                project_name not in restrict_to_projects:
             LOG.debug("Skipping project {}".format(project_name))
             continue
         LOG.info("Setting up project {}".format(project.get("project_dir")))
@@ -279,7 +280,8 @@ def setup_analysis_directory_structure(fc_dir, config_file_path, projects_to_ana
         for sample in project.get('samples', []):
             # If specific samples are specified, skip those that do not match
             sample_name = sample['sample_name'].replace('__','.')
-            if len(restrict_to_samples) > 0 and sample_name not in restrict_to_samples:
+            if restrict_to_samples is not None and len(restrict_to_samples) > 0 and \
+                    sample_name not in restrict_to_samples:
                 LOG.debug("Skipping sample {}".format(sample_name))
                 continue
             LOG.info("Setting up sample {}".format(sample_name))
