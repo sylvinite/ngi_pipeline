@@ -33,8 +33,7 @@ def main(projects_to_analyze, config_file_path):
     """
     config = load_yaml_config(config_file_path)
     ## Problem with module system java version loading at the moment
-    #modules_to_load = ["java/sun_jdk1.7.0_25", "R/2.15.0"]
-    modules_to_load = ["java", "R/2.15.0"]
+    modules_to_load = ["java/sun_jdk1.7.0_25", "R/2.15.0"]
     ## Possibly the Java error could be non-fatal if it's available on PATH
     # Valid only for this session
     load_modules(modules_to_load)
@@ -51,19 +50,20 @@ def launch_piper_jobs(projects_to_analyze):
         for command_line in project.command_lines:
             parsed_cl = shlex.split(command_line)
             # Note: requires piper on the command line at the moment
+            LOG.info("Executing command line: {}".format(command_line))
             try:
                 p_handle = subprocess.Popen(parsed_cl, stdin = subprocess.PIPE,
                                                   stdout = subprocess.PIPE)
                 error_msg = None
             except OSError:
-                error_msg = "Cannot execute command; missing executable on the path? "\
-                            "(Command \"{}\")".format(command_line)
+                error_msg = ("Cannot execute command; missing executable on the path? "
+                             "(Command \"{}\")".format(command_line))
             except ValueError:
-                error_msg = "Cannot execute command; command malformed. " \
-                            "(Command \"{}\")".format(command_line)
+                error_msg = ("Cannot execute command; command malformed. "
+                             "(Command \"{}\")".format(command_line))
             except subprocess.CalledProcessError as e:
-                error_msg = "Error when executing command: \"{}\" " \
-                            "(Command \"{}\")".format(e, command_line)
+                error_msg = ("Error when executing command: \"{}\" "
+                             "(Command \"{}\")".format(e, command_line))
             if error_msg:
                 LOG.error(error_msg)
                 continue
@@ -188,7 +188,7 @@ def build_setup_xml(projects_to_analyze, config):
             setupfilecreator_cl += " --input_sample {}".format(sample_directory)
 
         try:
-            import ipdb; ipdb.set_trace()
+            LOG.info("Executing command line: {}".format(setupfilecreator_cl))
             subprocess.check_call(shlex.split(setupfilecreator_cl))
             project.setup_xml_path = output_xml_filepath
         except (subprocess.CalledProcessError, OSError, ValueError) as e:
