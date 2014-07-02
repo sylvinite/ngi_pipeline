@@ -1,6 +1,7 @@
 from __future__ import print_function
 
 import os
+import shlex
 import subprocess
 
 def load_modules(modules_list):
@@ -18,8 +19,12 @@ def load_modules(modules_list):
     # UPPMAX support staff didn't seem to know this existed, so use with caution
     error_msgs = []
     for module in modules_list:
-        p = subprocess.Popen("modulecmd python load " + module,
-                            stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True)
+        # Yuck
+        lmod_location = "/usr/lib/lmod/lmod/libexec/lmod"
+        cl = "{lmod} python load {module}".format(lmod=lmod_location,
+                                                  module=module)
+        p = subprocess.Popen(shlex.split(cl), stdout=subprocess.PIPE,
+                                              stderr=subprocess.PIPE)
         stdout,stderr = p.communicate()
         try:
             assert(stdout), stderr
