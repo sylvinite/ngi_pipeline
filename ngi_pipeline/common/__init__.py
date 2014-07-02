@@ -11,7 +11,6 @@ from __future__ import print_function
 import argparse
 import collections
 import fnmatch
-import functools
 import glob
 import importlib
 import os
@@ -23,47 +22,45 @@ import yaml
 
 from ngi_pipeline.common.parsers import FlowcellRunMetricsParser
 from ngi_pipeline.log import minimal_logger
+from ngi_pipeline.utils import memoized
 from ngi_pipeline.utils.config import load_yaml_config
 
 LOG = minimal_logger(__name__)
 
 
-def main(config_file_path, demux_fcid_dirs=None, restrict_to_projects=None, restrict_to_samples=None):
+def main(demux_fcid_dirs, config_file_path=None, restrict_to_projects=None, restrict_to_samples=None):
     """
     The main launcher method.
 
-    :param str config_file_path: The path to the configuration file.
-    :param str demux_fcid_dirs: The CASAVA-produced demux directory(s). Optional.
-    :param list restrict_to_projects: A list of projects; analysis will be restricted to these. Optional.
-    :param list restrict_to_samples: A list of samples; analysis will be restricted to these. Optional.
+    :param str demux_fcid_dirs: The CASAVA-produced demux directory/directories.
+    :param str config_file_path: The path to the configuration file; can also be
+                                 specified via environmental variable "NGI_CONFIG"
+    :param list restrict_to_projects: A list of projects; analysis will be
+                                      restricted to these. Optional.
+    :param list restrict_to_samples: A list of samples; analysis will be
+                                     restricted to these. Optional.
     """
-    if not restrict_to_projects:
-        restrict_to_projects = []
-    if not restrict_to_samples:
-        restrict_to_samples = []
-    demux_fcid_dirs_set = set()
+    if not config_file_path:
+        try:
+            config_file_path = os.environ['NGI_CONFIG']
+        except KeyError:
+            error_msg = ("Configuration file not passed as argument and "
+                         "NGI_CONFIG environment variable not defined. "
+                         "Cannot proceed.")
+            LOG.error(error_msg)
+            raise RuntimeError(error_msg)
+    if not restrict_to_projects: restrict_to_projects = []
+    if not restrict_to_samples: restrict_to_samples = []
+    demux_fcid_dirs_set = set(demux_fcid_dirs)
     projects_to_analyze = []
     config = load_yaml_config(config_file_path)
-    if demux_fcid_dirs:
-        demux_fcid_dirs_set.update(demux_fcid_dirs)
-    else:
-        ## change name from INBOX to something else
-        # Check for newly-delivered data in the INBOX
-        inbox_directory = config.get('INBOX')
-        # These flowcells can contain data from multiple projects
-
-        ## TODO change this to use Celery / RabbitMQ
-        demux_fcid_dirs_set.update(check_for_new_flowcells(inbox_directory, num_days_time_limit=30))
 
     # Sort/copy each raw demux FC into project/sample/fcid format -- "analysis-ready"
-    #projects_to_analyze = collections.defaultdict(NGIProject)
     projects_to_analyze = dict()
     for demux_fcid_dir in demux_fcid_dirs_set:
         # These will be a bunch of Project objects each containing Samples, FCIDs, lists of fastq files
-        # Reassignment of name is unnecessary but useful for clarity -- this
-        # continually updates the projects_to_analyze dict and its objects
         projects_to_analyze = setup_analysis_directory_structure(demux_fcid_dir,
-                                                                 config_file_path,
+                                                                 config,
                                                                  projects_to_analyze,
                                                                  restrict_to_projects,
                                                                  restrict_to_samples)
@@ -75,92 +72,17 @@ def main(config_file_path, demux_fcid_dirs=None, restrict_to_projects=None, rest
         # Don't need the dict functionality anymore; revert to list
         projects_to_analyze = projects_to_analyze.values()
 
-    ## change this terminology from 'pipeline' to 'analysis_engine' or something similar
-    analysis_pipeline_module_name = config.get("analysis", {}).get("analysis_pipeline")
-    if not analysis_pipeline_module_name:
+    analysis_engine_module_name = config.get("analysis", {}).get("analysis_engine")
+    if not analysis_engine_module_name:
         error_msg = "No analysis engine specified in configuration file. Exiting."
         LOG.error(error_msg)
         raise RuntimeError(error_msg)
     # Import the module specified in the config file (e.g. bcbio, piper)
-    analysis_module = importlib.import_module(analysis_pipeline_module_name)
+    analysis_module = importlib.import_module(analysis_engine_module_name)
     analysis_module.main(projects_to_analyze=projects_to_analyze, config_file_path=config_file_path)
 
 
-#def get_class( kls ):
-#    """http://stackoverflow.com/questions/452969/does-python-have-an-equivalent-to-java-class-forname"""
-#    parts = kls.split('.')
-#    module = ".".join(parts[:-1])
-#    m = __import__( module )
-#    for comp in parts[1:]:
-#        m = getattr(m, comp)
-#    return m
-
-
-## TODO make these hashable (__hash__, __eq__) in some meaningful way
-## TODO Add path checking, os.path.abspath / os.path.exists
-class NGIObject(object):
-    def __init__(self, name, dirname, subitem_type):
-        self.name = name
-        self.dirname = dirname
-        self._subitems = {}
-        self._subitem_type = subitem_type
-
-    def _add_subitem(self, name, dirname):
-        ## It SHOULD be okay to use name instead of dirname... right? Right??
-        ## E.g. G.Spong_13_03 instead of /proj/a2010002/.../G.Spong_13_03 ??
-        # Only add a new item if the same item doesn't already exist
-        try:
-            subitem = self._subitems[name]
-        except KeyError:
-            subitem = self._subitems[name] = self._subitem_type(name, dirname)
-        return subitem
-
-    def __iter__(self):
-        return iter(self._subitems.values())
-
-    def __unicode__(self):
-        return self.name
-
-    def __str__(self):
-        return self.__unicode__()
-
-    def __repr__(self):
-        return "{}: \"{}\"".format(type(self), self.name)
-
-
-class NGIProject(NGIObject):
-    def __init__(self, name, dirname, base_path):
-        self.base_path = base_path
-        super(NGIProject, self).__init__(name, dirname, subitem_type=NGISample)
-        self.samples = self._subitems
-        self.add_sample = self._add_subitem
-        self.command_lines = []
-
-
-class NGISample(NGIObject):
-    def __init__(self, *args, **kwargs):
-        super(NGISample, self).__init__(subitem_type=NGIFCID, *args, **kwargs)
-        self.fcids = self._subitems
-        self.add_fcid = self._add_subitem
-
-
-class NGIFCID(NGIObject):
-    def __init__(self, *args, **kwargs):
-        super(NGIFCID, self).__init__(subitem_type=None, *args, **kwargs)
-        self.fastqs = self._subitems = []
-        ## TODO why doesn't this work?
-        #delattr(self, "_add_subitem")
-
-    def add_fastq_files(self, fastq):
-        if type(fastq) == list:
-            self._subitems.extend(fastq)
-        elif type(fastq) == str:
-            self._subitems.append(fastq)
-        else:
-            raise TypeError("Fastq files must be passed as a list or a string: " \
-                            "got \"{}\"".format(fastq))
-
-
+# Not used
 def check_for_new_flowcells(inbox_directory, num_days_time_limit=None):
     """Checks for newly-delivered data in the inbox_directory,
     ensuring that the data transfer has finished (by the presence of the file
@@ -204,8 +126,7 @@ def check_for_new_flowcells(inbox_directory, num_days_time_limit=None):
     return list(new_flowcell_directories)
 
 
-## TODO This needs to be changed so it will update preexisting Project objects
-def setup_analysis_directory_structure(fc_dir, config_file_path, projects_to_analyze,
+def setup_analysis_directory_structure(fc_dir, config, projects_to_analyze,
                                        restrict_to_projects=None, restrict_to_samples=None):
     """
     Copy and sort files from their CASAVA-demultiplexed flowcell structure
@@ -213,24 +134,27 @@ def setup_analysis_directory_structure(fc_dir, config_file_path, projects_to_ana
     split across multiple flowcells.
 
     :param str fc_dir: The directory created by CASAVA for this flowcell.
-    :param str config_file_path: The location of the configuration file.
+    :param dict config: The parsed configuration file.
     :param set projects_to_analyze: A dict (of Project objects, or empty)
     :param list restrict_to_projects: Specific projects within the flowcell to process exclusively
     :param list restrict_to_samples: Specific samples within the flowcell to process exclusively
 
     :returns: A list of NGIProject objects that need to be run through the analysis pipeline
     :rtype: list
+
+    :raises OSError: If the analysis destination directory does not exist or if there are permissions errors.
+    :raises KeyError: If a required configuration key is not available.
     """
     LOG.info("Setting up analysis for demultiplexed data in source folder \"{}\"".format(fc_dir))
-    # Load config, expanding shell variables in paths
-    ## TODO consider passing in parsed config file
-    config = load_yaml_config(config_file_path)
+    if not restrict_to_projects: restrict_to_projects = []
+    if not restrict_to_samples: restrict_to_samples = []
     analysis_top_dir = os.path.abspath(config["analysis"]["top_dir"])
+    if not os.path.exists(analysis_top_dir):
+        error_msg = "Error: Analysis top directory {} does not exist".format(analysis_top_dir)
+        LOG.error(error_msg)
+        raise OSError(error_msg)
     if not os.path.exists(fc_dir):
         LOG.error("Error: Flowcell directory {} does not exist".format(fc_dir))
-        return []
-    if not os.path.exists(analysis_top_dir):
-        LOG.error("Error: Analysis top directory {} does not exist".format(analysis_top_dir))
         return []
     # Map the directory structure for this flowcell
     try:
@@ -241,87 +165,66 @@ def setup_analysis_directory_structure(fc_dir, config_file_path, projects_to_ana
     fc_date = fc_dir_structure['fc_date']
     fc_name = fc_dir_structure['fc_name']
     fc_run_id = "{}_{}".format(fc_date, fc_name)
-
     # Copy the basecall stats directory.
-    ## TODO I don't know what these nexttwo lines of comments refer to!!
     # This will be causing an issue when multiple directories are present...
     # syncing should be done from archive, preserving the Unaligned* structures
     _copy_basecall_stats([os.path.join(fc_dir_structure['fc_dir'], d) for d in
                                         fc_dir_structure['basecall_stats_dir']],
                                         analysis_top_dir)
-
-    #sample_fcid_directories = []
     if not fc_dir_structure.get('projects'):
         LOG.warn("No projects found in specified flowcell directory \"{}\"".format(fc_dir))
     # Iterate over the projects in the flowcell directory
     for project in fc_dir_structure.get('projects', []):
-
-        # If specific projects are specified, skip those that do not match
         project_name = project['project_name']
-        if restrict_to_projects is not None and len(restrict_to_projects) > 0 and \
-                project_name not in restrict_to_projects:
+        # If specific projects are specified, skip those that do not match
+        if restrict_to_projects and project_name not in restrict_to_projects:
             LOG.debug("Skipping project {}".format(project_name))
             continue
         LOG.info("Setting up project {}".format(project.get("project_dir")))
-
         # Create a project directory if it doesn't already exist
         project_dir = os.path.join(analysis_top_dir, project_name)
-        if not os.path.exists(project_dir):
-            ## TODO change to mkdir -p
-            os.mkdir(project_dir, 0770)
-
+        ## TODO change to mkdir -p
+        if not os.path.exists(project_dir): os.mkdir(project_dir, 0770)
         try:
             project_obj = projects_to_analyze[project_dir]
         except KeyError:
             project_obj = NGIProject(name=project_name, dirname=project_name, base_path=analysis_top_dir)
             projects_to_analyze[project_dir] = project_obj
-
         # Iterate over the samples in the project
         for sample in project.get('samples', []):
             # If specific samples are specified, skip those that do not match
             sample_name = sample['sample_name'].replace('__','.')
-            if restrict_to_samples is not None and len(restrict_to_samples) > 0 and \
-                    sample_name not in restrict_to_samples:
+            if restrict_to_samples and sample_name not in restrict_to_samples:
                 LOG.debug("Skipping sample {}".format(sample_name))
                 continue
             LOG.info("Setting up sample {}".format(sample_name))
             # Create a directory for the sample if it doesn't already exist
             sample_dir = os.path.join(project_dir, sample_name)
-            if not os.path.exists(sample_dir):
-                ## TODO change to mkdir -p
-                os.mkdir(sample_dir, 0770)
-
-
+            ## TODO change to mkdir -p
+            if not os.path.exists(sample_dir): os.mkdir(sample_dir, 0770)
             # This will only create a new sample object if it doesn't already exist in the project
             sample_obj = project_obj.add_sample(name=sample_name, dirname=sample_name)
-
             # Create a directory for the flowcell if it does not exist
             dst_sample_fcid_dir = os.path.join(sample_dir, fc_run_id)
-            if not os.path.exists(dst_sample_fcid_dir):
-                ## TODO change to mkdir -p
-                os.mkdir(dst_sample_fcid_dir, 0770)
-
+            ## TODO change to mkdir -p
+            if not os.path.exists(dst_sample_fcid_dir): os.mkdir(dst_sample_fcid_dir, 0770)
             # This will only create a new FCID object if it doesn't already exist in the sample
             fcid_obj = sample_obj.add_fcid(name=fc_run_id, dirname=fc_run_id)
-
             # rsync the source files to the sample directory
-            # src: flowcell/data/project/sample
-            # dst: project/sample/flowcell_run
+            #    src: flowcell/data/project/sample
+            #    dst: project/sample/flowcell_run
             src_sample_dir = os.path.join(fc_dir_structure['fc_dir'],
                                           project['data_dir'],
                                           project['project_dir'],
                                           sample['sample_dir'])
             #LOG.info("Copying sample files from \"{}\" to \"{}\"...".format(
             #                                src_sample_dir, dst_sample_fcid_dir))
-            sample_files = do_rsync([ os.path.join(src_sample_dir, f) for f in
-                                      sample.get('files', [])], dst_sample_fcid_dir)
-            #sample_fcid_directories.append(dst_sample_fcid_dir)
-
+            sample_files = do_rsync([os.path.join(src_sample_dir, f) for f in
+                                     sample.get('files', [])], dst_sample_fcid_dir)
             # Just want fastq files here
-            pt = re.compile(".*\.(fastq|fq)(\.gz|\.gzip|\.bz2)?$")
-            fastq_files = filter(pt.match, sample.get('files', []))
+            pattern = re.compile(".*\.(fastq|fq)(\.gz|\.gzip|\.bz2)?$")
+            fastq_files = filter(pattern.match, sample.get('files', []))
             fcid_obj.add_fastq_files(fastq_files)
-
     return projects_to_analyze
 
 
@@ -370,7 +273,6 @@ def parse_casava_directory(fc_dir):
     parser = FlowcellRunMetricsParser(fc_dir)
     run_info = parser.parseRunInfo()
     runparams = parser.parseRunParameters()
-
     try:
         fc_name = run_info['Flowcell']
         fc_date = run_info['Date']
@@ -378,7 +280,6 @@ def parse_casava_directory(fc_dir):
     except KeyError:
         raise RuntimeError("Could not parse flowcell information \"{}\" "\
                        "from Flowcell RunMetrics in flowcell {}".format(e, fc_dir))
-
     # "Unaligned*" because SciLifeLab dirs are called "Unaligned_Xbp"
     # (where "X" is the index length) and there is also an "Unaligned" folder
     unaligned_dir_pattern = os.path.join(fc_dir,"Unaligned*")
@@ -410,17 +311,40 @@ def parse_casava_directory(fc_dir):
                          'project_name': project_name,
                          'samples': project_samples})
     return {'fc_dir': fc_dir,
-            'fc_name': '{}{}'.format(fc_pos,fc_name),
+            'fc_name': '{}{}'.format(fc_pos, fc_name),
             'fc_date': fc_date,
             'basecall_stats_dir': basecall_stats_dir,
             'projects': projects}
+
+
+def _copy_basecall_stats(source_dirs, destination_dir):
+    """Copy relevant files from the Basecall_Stats_FCID directory
+       to the analysis directory
+    """
+    for source_dir in source_dirs:
+        # First create the directory in the destination
+        dirname = os.path.join(destination_dir,os.path.basename(source_dir))
+        try:
+            os.mkdir(dirname)
+        ## TODO wtf
+        except:
+            pass
+        # List the files/directories to copy
+        files = glob.glob(os.path.join(source_dir,"*.htm"))
+        files += glob.glob(os.path.join(source_dir,"*.metrics"))
+        files += glob.glob(os.path.join(source_dir,"*.xml"))
+        files += glob.glob(os.path.join(source_dir,"*.xsl"))
+        for dir in ["Plots","css"]:
+            d = os.path.join(source_dir,dir)
+            if os.path.exists(d):
+                files += [d]
+        do_rsync(files,dirname)
 
 
 # This isn't used at the moment
 def copy_undetermined_index_files(casava_data_dir, destination_dir):
     """
     Copy fastq files with "Undetermined" index reads to the destination directory.
-
     :param str casava_data_dir: The Unaligned directory (e.g. "<FCID>/Unaligned_16bp")
     :param str destination_dir: Eponymous
     """
@@ -448,10 +372,8 @@ def copy_undetermined_index_files(casava_data_dir, destination_dir):
 def _merge_samplesheets(samplesheets, merged_samplesheet):
     """
     Merge multiple Illumina SampleSheet.csv files into one.
-
     :param list samplesheets: A list of the paths to the SampleSheet.csv files to merge.
     :param str merge_samplesheet: The path <...>
-
     :returns: <...>
     :rtype: str
     """
@@ -470,30 +392,6 @@ def _merge_samplesheets(samplesheets, merged_samplesheet):
     return merged_samplesheet
 
 
-def _copy_basecall_stats(source_dirs, destination_dir):
-    """Copy relevant files from the Basecall_Stats_FCID directory
-       to the analysis directory
-    """
-    for source_dir in source_dirs:
-        # First create the directory in the destination
-        dirname = os.path.join(destination_dir,os.path.basename(source_dir))
-        try:
-            os.mkdir(dirname)
-        ## TODO wtf
-        except:
-            pass
-        # List the files/directories to copy
-        files = glob.glob(os.path.join(source_dir,"*.htm"))
-        files += glob.glob(os.path.join(source_dir,"*.metrics"))
-        files += glob.glob(os.path.join(source_dir,"*.xml"))
-        files += glob.glob(os.path.join(source_dir,"*.xsl"))
-        for dir in ["Plots","css"]:
-            d = os.path.join(source_dir,dir)
-            if os.path.exists(d):
-                files += [d]
-        do_rsync(files,dirname)
-
-
 ##  this could also work remotely of course
 def do_rsync(src_files, dst_dir):
     ## TODO check parameters here
@@ -506,30 +404,6 @@ def do_rsync(src_files, dst_dir):
     #    open(os.path.join(dst_dir,os.path.basename(f)),"w").close()
     subprocess.check_call(cl)
     return [ os.path.join(dst_dir,os.path.basename(f)) for f in src_files ]
-
-
-class memoized(object):
-    """
-    Decorator, caches results of function calls.
-    """
-    def __init__(self, func):
-        self.func   = func
-        self.cached = {}
-    def __call__(self, *args):
-        if not isinstance(args, collections.Hashable):
-            return self.func(*args)
-        if args in self.cached:
-            return self.cached[args]
-        else:
-            return_val = self.func(*args)
-            self.cached[args] = return_val
-            return return_val
-    def __repr__(self):
-        return self.func.__doc__
-    # This ensures that attribute access (e.g. obj.attr)
-    # goes through the __call__ function defined above
-    def __get__(self, obj, objtype):
-        return functools.partial(self.__call__, obj)
 
 
 def parse_lane_from_filename(sample_basename):
@@ -682,6 +556,71 @@ def get_flowcell_id_from_dirtree(path):
             return flowcell_pattern.match(dirname).groups()[0]
         except (IndexError, AttributeError):
             raise ValueError("Could not determine flowcell ID from directory path.")
+
+
+## TODO make these hashable (__hash__, __eq__) in some meaningful way
+## TODO Add path checking, os.path.abspath / os.path.exists
+class NGIObject(object):
+    def __init__(self, name, dirname, subitem_type):
+        self.name = name
+        self.dirname = dirname
+        self._subitems = {}
+        self._subitem_type = subitem_type
+
+    def _add_subitem(self, name, dirname):
+        ## It SHOULD be okay to use name instead of dirname... right? Right??
+        ## E.g. G.Spong_13_03 instead of /proj/a2010002/.../G.Spong_13_03 ??
+        # Only add a new item if the same item doesn't already exist
+        try:
+            subitem = self._subitems[name]
+        except KeyError:
+            subitem = self._subitems[name] = self._subitem_type(name, dirname)
+        return subitem
+
+    def __iter__(self):
+        return iter(self._subitems.values())
+
+    def __unicode__(self):
+        return self.name
+
+    def __str__(self):
+        return self.__unicode__()
+
+    def __repr__(self):
+        return "{}: \"{}\"".format(type(self), self.name)
+
+
+class NGIProject(NGIObject):
+    def __init__(self, name, dirname, base_path):
+        self.base_path = base_path
+        super(NGIProject, self).__init__(name, dirname, subitem_type=NGISample)
+        self.samples = self._subitems
+        self.add_sample = self._add_subitem
+        self.command_lines = []
+
+
+class NGISample(NGIObject):
+    def __init__(self, *args, **kwargs):
+        super(NGISample, self).__init__(subitem_type=NGIFCID, *args, **kwargs)
+        self.fcids = self._subitems
+        self.add_fcid = self._add_subitem
+
+
+class NGIFCID(NGIObject):
+    def __init__(self, *args, **kwargs):
+        super(NGIFCID, self).__init__(subitem_type=None, *args, **kwargs)
+        self.fastqs = self._subitems = []
+        ## TODO why doesn't this work?
+        #delattr(self, "_add_subitem")
+
+    def add_fastq_files(self, fastq):
+        if type(fastq) == list:
+            self._subitems.extend(fastq)
+        elif type(fastq) == str:
+            self._subitems.append(fastq)
+        else:
+            raise TypeError("Fastq files must be passed as a list or a string: " \
+                            "got \"{}\"".format(fastq))
 
 
 if __name__=="__main__":

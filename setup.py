@@ -1,10 +1,5 @@
 #!/usr/bin/env python
 
-import glob
-import os
-import subprocess
-import sys
-
 from setuptools import setup, find_packages
 
 try:
@@ -18,7 +13,8 @@ setup(name="ngi_pipeline",
       author_email = "mario@scilifelab.se",
       description = "Infrastructure/analysis pipeline scripts.",
       license = "MIT",
-      url="https://github.com/SciLifeLab/ngi_pipeline",
+      url="https://github.com/scilifelab/scilifelab_pipeline",
+      version="0.1.0",
       install_requires=install_requires,
       packages=find_packages()
       )

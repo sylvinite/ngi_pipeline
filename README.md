@@ -1,4 +1,1 @@
-Requires:
-github.com/scilifelab/scilifelab
-github.com/scilifelab/bcbio-nextgen (for bcbio-nextgen code)
-
+Software designed to take demultiplexed Illumina flowcells and shove 'em through an analysis pipeline (e.g. Piper/GATK).
