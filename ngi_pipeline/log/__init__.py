@@ -6,9 +6,10 @@ import logging
 import sys
 
 from logbook.queues import RedisHandler
-from ngi_pipeline.utils import config as cl
+#from ngi_pipeline.utils import config as cl
+from ngi_pipeline.utils.config import load_yaml_config
 
-def minimal_logger(namespace, extra_fields=None, debug=False):
+def minimal_logger(namespace, config_path=None, extra_fields=None, debug=False):
     """Make and return a minimal console logger.
 
     NOTE: this does apparently *not* work with logbook as I first thought, and
@@ -18,13 +19,17 @@ def minimal_logger(namespace, extra_fields=None, debug=False):
 
     The current function is copied from cement.core.backend.
 
-    :param namespace: namspace of logger
+    :param str namespace: namespace of logger
+    :param str config_path: The path to the config containing the logging server info
+
+    :returns: A logbook.Logger object
+    :rtype: logbook.Logger
     """
-    config = cl.load_pm_config()
     log = logbook.Logger(namespace, level=logbook.INFO)
-    s_h = logbook.StreamHandler(sys.stdout, level = logbook.INFO, bubble=True)
+    s_h = logbook.StreamHandler(sys.stdout, level=logbook.INFO, bubble=True)
     log.handlers.append(s_h)
     try:
+        config = load_yaml_config(config_path)
         host = config.get('log', 'redis_host')
         port = config.getint('log', 'redis_port')
         key = config.get('log', 'redis_key')
