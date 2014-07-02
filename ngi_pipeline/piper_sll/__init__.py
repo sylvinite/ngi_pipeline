@@ -16,11 +16,12 @@ import shutil
 import subprocess
 import time
 
+from ngi_pipeline.common import parse_lane_from_filename, find_fastq_read_pairs, \
+                                get_flowcell_id_from_dirtree
 from ngi_pipeline.log import minimal_logger
+from ngi_pipeline.piper_sll import workflows
+from ngi_pipeline.utils import load_modules
 from ngi_pipeline.utils.config import load_xml_config, load_yaml_config
-from ngi_pipeline.common import parse_lane_from_filename, \
-                                       find_fastq_read_pairs, \
-                                       get_flowcell_id_from_dirtree
 
 LOG = minimal_logger(__name__)
 
@@ -31,22 +32,42 @@ def main(projects_to_analyze, config_file_path):
     :param str config_file_path: The path to the configuration file.
     """
     config = load_yaml_config(config_file_path)
+    ## Problem with module system java version loading at the moment
+    modules_to_load = ["java/sun_jdk1.7.0_25", "R/2.15.0"]
+    ## Possibly the Java error could be non-fatal if it's available on PATH
+    # Valid only for this session
+    load_modules(modules_to_load)
     create_report_tsv(projects_to_analyze)
     build_setup_xml(projects_to_analyze, config)
     build_piper_cl(projects_to_analyze, config)
     ## Run Johan's converter script if needed
-    ## Decide how to track jobs that are running -- write status files? A flat file?
     launch_piper_jobs(projects_to_analyze)
+    # Need to write workflow status to database under relevant heading!
 
 
 def launch_piper_jobs(projects_to_analyze):
     for project in projects_to_analyze:
-        for command_line in projects.command_lines:
+        for command_line in project.command_lines:
             parsed_cl = shlex.split(command_line)
-            p_handle = subprocess.Popen(parsed_cl, stdin = subprocess.PIPE,
+            # Note: requires piper on the command line at the moment
+            LOG.info("Executing command line: {}".format(command_line))
+            try:
+                p_handle = subprocess.Popen(parsed_cl, stdin = subprocess.PIPE,
                                                   stdout = subprocess.PIPE)
+                error_msg = None
+            except OSError:
+                error_msg = ("Cannot execute command; missing executable on the path? "
+                             "(Command \"{}\")".format(command_line))
+            except ValueError:
+                error_msg = ("Cannot execute command; command malformed. "
+                             "(Command \"{}\")".format(command_line))
+            except subprocess.CalledProcessError as e:
+                error_msg = ("Error when executing command: \"{}\" "
+                             "(Command \"{}\")".format(e, command_line))
+            if error_msg:
+                LOG.error(error_msg)
+                continue
             p_stdin, p_stdout = p_handle.communicate()
-            ## TODO more stuff
 
 
 def build_piper_cl(projects_to_analyze, config):
@@ -59,7 +80,13 @@ def build_piper_cl(projects_to_analyze, config):
     :raises ValueError: If a required configuration value is missing.
     """
     try:
-        path_to_piper_rootdir = config['piper']['path_to_piper_rootdir']
+        # Default is the file globalConfig.xml in the piper root dir
+        try:
+            piper_globalconfig_path = config.get("piper", {}).get("path_to_piper_globalconfig")
+        except KeyError:
+            path_to_piper_rootdir = config['piper']['path_to_piper_rootdir']
+            # Default is the file globalConfig.xml in the piper root dir
+            piper_globalconfig_path = os.path.join(path_to_piper_rootdir, "globalConfig.xml")
         path_to_piper_globalconfig = config['piper']['path_to_piper_globalconfig']
         path_to_piper_qscripts = config['piper']['path_to_piper_qscripts']
     except KeyError as e:
@@ -67,12 +94,8 @@ def build_piper_cl(projects_to_analyze, config):
                     "cannot continue.".format(e)
         LOG.error(error_msg)
         raise ValueError(error_msg)
-
-    # Default is the file globalConfig.xml in the piper root dir
-    piper_globalconfig_path = config.get("piper", {}).get("path_to_piper_globalconfig") \
-                                 or os.path.join(path_to_piper_rootdir, "globalConfig.xml")
-
     for project in projects_to_analyze:
+        LOG.info("Building workflow command lines for project {}".format(project))
         ## For NGI, all projects will go through the same workflows;
         ## later, we'll want to let some database values determine this.
 
@@ -86,20 +109,18 @@ def build_piper_cl(projects_to_analyze, config):
         ## This key will probably exist on the project level, and may have multiple values.
         ## Workflows may imply a number of substeps (e.g. qc, alignment, etc.)
         # workflows_for_project = proj_db.get("workflows") or something like that
-        generic_workflow_names_for_project = ("dna_alignonly")
-
+        generic_workflow_names_for_project = ["dna_alignonly"]
         try:
             setup_xml_path = project.setup_xml_path
         except AttributeError:
             LOG.warn("Project {} has no setup.xml file. Skipping project "
                      "command-line generation.".format(project))
+            continue
         for workflow_name in generic_workflow_names_for_project:
-            LOG.info("Building command line for project {}, " \
-                     "workflow {}".format(project, workflow_name))
-            workflows.return_cl_for_workflow(workflow_name=workflow_name,
-                                             qscripts_dir_path=path_to_piper_qscripts,
-                                             setup_xml_path=setup_xml_path,
-                                             global_config_path=piper_globalconfig)
+            cl = workflows.return_cl_for_workflow(workflow_name=workflow_name,
+                                                  qscripts_dir_path=path_to_piper_qscripts,
+                                                  setup_xml_path=setup_xml_path,
+                                                  global_config_path=piper_globalconfig_path)
             project.command_lines.append(cl)
 
 
@@ -126,7 +147,7 @@ def build_setup_xml(projects_to_analyze, config):
             # - adapters to be trimmed (?)
             ## <open connection to project database>
             #reference_genome = proj_db.get('species')
-            reference_genome = 'hg19'
+            reference_genome = 'GRCh37'
             # sequencing_center = proj_db.get('Sequencing Center')
             cl_args["sequencing_center"] = "NGI"
         except:
@@ -137,36 +158,45 @@ def build_setup_xml(projects_to_analyze, config):
         try:
             cl_args["reference_path"] = config['supported_genomes'][reference_genome]
             cl_args["uppmax_proj"] = config['environment']['project_id']
-            cl_args["path_to_sfc"] = config['environment']['path_to_setupfilecreator']
         except KeyError as e:
-            error_msg = "Could not load required information from" \
-                        " configuration file and cannot continue with project {}:" \
-                        " value \"{}\" missing".format(project, e.message)
+            error_msg = ("Could not load required information from"
+                         " configuration file and cannot continue with project {}:"
+                         " value \"{}\" missing".format(project, e.message))
             LOG.error(error_msg)
             continue
+
+        try:
+            cl_args["sfc_binary"] = config['piper']['path_to_setupfilecreator']
+        except KeyError:
+            # Assume setupFileCreator is on path
+            cl_args["sfc_binary"] = "setupFileCreator"
 
         output_xml_filepath = os.path.join( project_top_level_dir,
                                             "{}_setup.xml".format(project))
         cl_args["output_xml_filepath"] = output_xml_filepath
         cl_args["sequencing_tech"] = "Illumina"
 
-        setupfilecreator_cl = "{path_to_sfc} " \
-                              "--output {output_xml_filepath} " \
-                              "--project_name {project} " \
-                              "--sequencing_platform {sequencing_tech} " \
-                              "--sequencing_center {sequencing_center} " \
-                              "--uppnex_project_id {uppmax_proj} " \
-                              "--reference {reference_path}".format(**cl_args)
+        setupfilecreator_cl = ("{sfc_binary} "
+                               "--output {output_xml_filepath} "
+                               "--project_name {project} "
+                               "--sequencing_platform {sequencing_tech} "
+                               "--sequencing_center {sequencing_center} "
+                               "--uppnex_project_id {uppmax_proj} "
+                               "--reference {reference_path}".format(**cl_args))
         for sample in project.samples.values():
             sample_directory = os.path.join(project_top_level_dir, sample.dirname)
             setupfilecreator_cl += " --input_sample {}".format(sample_directory)
 
         try:
+            LOG.info("Executing command line: {}".format(setupfilecreator_cl))
             subprocess.check_call(shlex.split(setupfilecreator_cl))
             project.setup_xml_path = output_xml_filepath
         except (subprocess.CalledProcessError, OSError, ValueError) as e:
-            error_msg = "Unable to produce setup XML file for project {}: \"{}\". Skipping project analysis.".format(project, e.message)
+            error_msg = ("Unable to produce setup XML file for project {}; "
+                         "skipping project analysis. "
+                         "Error is: \"{}\". .".format(project, e))
             LOG.error(error_msg)
+            # There can be multiple projects else we would just raise an Exception
             continue
     return projects_to_analyze
 
@@ -219,5 +249,5 @@ def create_report_tsv(projects_to_analyze):
                                              fcid.dirname)
                     for fq_pairname in find_fastq_read_pairs(directory=fcid_path).keys():
                         lane = parse_lane_from_filename(fq_pairname)
-                        read_library = "Get this from the database somehow"
+                        read_library = "<NotImplemented>"
                         print("\t".join([sample.name, lane, read_library, fcid.name]), file=rtsv_fh)
