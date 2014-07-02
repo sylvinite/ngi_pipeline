@@ -21,8 +21,10 @@ def load_generic_config(config_file_path, config_format="yaml"):
 
     :param str config_file_path: The path to the configuration file.
     :param str config_format: The format of the config file; default yaml.
+
     :returns: A dict of the configuration file with environment variables expanded.
     :rtype: dict
+    :raises IOError: If config file cannot be opened.
     """
     parsers_dict = {"json": json.load,
                     "xml": xmltodict.parse,
