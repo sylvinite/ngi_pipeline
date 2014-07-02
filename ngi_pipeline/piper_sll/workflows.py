@@ -28,11 +28,7 @@ def return_cl_for_workflow(workflow_name, qscripts_dir_path, setup_xml_path, glo
         error_msg = "Workflow \"{}\" has no associated function.".format(workflow_fn_name)
         LOG.error(error_msg)
         raise NotImplementedError(error_msg)
-    ## TODO add module loading of:
-    ##          java/sun_jdk1.7.0_25
-    ##          R/2.15.0
-    ##      to command line, or deal with this in the calling function.
-    ## TODO need tmp, logging directory
+   ## TODO need tmp, logging directory
     LOG.info("Building command line for workflow {}".format(workflow_name))
     return workflow_function(qscripts_dir_path, setup_xml_path, global_config_path)
 
@@ -62,6 +58,7 @@ def workflow_dna_variantcalling(qscripts_dir_path, setup_xml_path, global_config
     :rtype: str
     """
     workflow_qscript_path = os.path.join(qscripts_dir_path, "DNABestPracticeVariantCalling.scala")
+
     ## Should be able to figure this out dynamically I suppose
     #job_walltime = str(calculate_job_time(workflow, ...))
     job_walltime = "345600"
