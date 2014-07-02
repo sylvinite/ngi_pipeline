@@ -13,12 +13,12 @@ try:
 except IOError:
     install_requires = []
 
-setup(name="scilifelab_pipeline",
+setup(name="ngi_pipeline",
       author = "Science for Life Laboratory",
       author_email = "mario@scilifelab.se",
       description = "Infrastructure/analysis pipeline scripts.",
       license = "MIT",
-      url="https://github.com/scilifelab/scilifelab_pipeline",
+      url="https://github.com/SciLifeLab/ngi_pipeline",
       install_requires=install_requires,
       packages=find_packages()
       )
