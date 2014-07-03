@@ -17,6 +17,8 @@ from pika.credentials import PlainCredentials
 ########################
 
 _celeryconfig_tmpl = """
+CELERY_IMPORTS = ("{task_module}", )
+
 BROKER_HOST = "{host}"
 BROKER_PORT = "{port}"
 BROKER_USER = "{userid}"
@@ -32,7 +34,7 @@ BROKER_CONNECTION_MAX_RETRIES = 200
 """
 
 @contextlib.contextmanager
-def create_celery_config(dirs, config):
+def create_celery_config(task_module, dirs, config):
     """ Creates a temporal configuration file for Celery
 
     :param task_module: String representing the tasks module to load
@@ -40,12 +42,13 @@ def create_celery_config(dirs, config):
     :param config: Dictionary with Celery configurations
     """
     try:
-        celery_config = _celeryconfig_tmpl.format(host = config['host'],
-                                                 port = config['port'],
-                                                 userid = config['userid'],
-                                                 password = config['password'],
-                                                 rabbitmq_vhost = config['rabbitmq_vhost'],
-                                                 cores = config.get('cores', multiprocessing.cpu_count()))
+        celery_config = _celeryconfig_tmpl.format(task_module = task_module,
+                                                  host = config['host'],
+                                                  port = config['port'],
+                                                  userid = config['userid'],
+                                                  password = config['password'],
+                                                  rabbitmq_vhost = config['rabbitmq_vhost'],
+                                                  cores = config.get('cores', multiprocessing.cpu_count()))
     except KeyError:
         raise RuntimeError("Could not build configuration file for Celery, missing parameters!")
 
@@ -91,7 +94,7 @@ class CeleryMessenger(object):
         exchange = self.exchange
         # Generate a uniqie ID for the task (required by Celery)
         task_id = base64.b64encode(uuid.uuid4().bytes + uuid.uuid4().bytes)
-        body = json.dumps({'task': task, 'id': task_id, 'args': args})
+        body = json.dumps({'task': task, 'id': task_id, 'args': [args]})
         self.channel.basic_publish(exchange=self.exchange, routing_key=self.queue, body=body,
                                   properties=pika.BasicProperties(content_type='application/json'))
 

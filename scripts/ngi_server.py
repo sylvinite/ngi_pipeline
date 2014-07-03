@@ -45,7 +45,7 @@ def main(config_file, queues=None, task_module=None, base_dir=None):
     with utils.chdir(base_dir):
         with utils.curdir_tmpdir() as work_dir:
             dirs = {"work": work_dir, "config": os.path.dirname(config_file)}
-            with create_celery_config(dirs, config.get('celery', {})):
+            with create_celery_config(task_module, dirs, config.get('celery', {})):
                 run_celeryd(work_dir, queues)
 
 def run_celeryd(work_dir, queues):
@@ -65,7 +65,5 @@ if __name__=="__main__":
                       default=None, help="Queues the server will listen to")
     parser.add_argument("-t", "--tasks", dest="task_module", action="store",
                       default=None, help="Task module to import")
-    parser.add_argument("-d", "--basedir", dest="basedir", action="store",
-                      default=None, help="Working directory (to store the celery config file)")
     args = parser.parse_args()
     main(args.config, args.queues, args.task_module)
