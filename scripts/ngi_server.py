@@ -53,6 +53,7 @@ def run_celeryd(work_dir, queues):
         cl = ["celeryd"]
         if queues:
             cl += ["-Q", queues]
+        cl += ["-n", "ngi_server"]
         check_call(cl)
 
 
