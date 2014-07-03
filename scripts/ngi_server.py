@@ -14,7 +14,6 @@ Usage:
                              managing the full work process.]
    [--tasks=task.module.import: Specify the module of tasks to make available.
                                 Defaults to bcbio.distributed.tasks if not specified.]
-   [--basedir=<dirname>: Base directory to work in. Defaults to current directory.]
 """
 import argparse
 import os
@@ -31,14 +30,13 @@ from ngi_pipeline.utils.config import load_yaml_config
 
 LOG = minimal_logger(__name__)
 
-def main(config_file, queues=None, task_module=None, base_dir=None):
+def main(config_file, queues=None, task_module=None):
     """ Loads configuration and launches the server
     """
     config = load_yaml_config(config_file)
 
     # Prepare working directory to save logs and config files
-    if base_dir is None:
-        base_dir = os.getcwd()
+    base_dir = os.getcwd()
     if task_module is None:
         task_module = "ngi_pipeline.distributed.tasks"
     LOG.info("Starting distributed worker process: {0}".format(queues if queues else ""))
