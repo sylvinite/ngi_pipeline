@@ -17,30 +17,53 @@ Usage:
    [--basedir=<dirname>: Base directory to work in. Defaults to current directory.]
 """
 import argparse
+
+from subprocess import check_call
+
 from celery import Celery
 
+from ngi_pipeline import utils
+from ngi_pipeline.distributed import create_celery_config
+from ngi_pipeline.log import minimal_logger
 from ngi_pipeline.utils.config import load_yaml_config
 
 
-def main(config_file_path):
+LOG = minimal_logger(__name__)
+
+def main(config_file, queues=None, task_module=None, base_dir=None):
     """ Loads configuration and launches the server
     """
     config = load_yaml_config(config_file_path)
 
-    # Find Celery configurations
-    broker = config.get('Celery', {}).get('broker', None)
-    if not broker:
-        raise RuntimeError("Celery config options not found in the configuration file.")
+    # Prepare working directory to save logs and config files
+    if base_dir is None:
+        base_dir = os.getcwd()
+    if task_module is None:
+        task_module = "ngi_pipeline.distributed.tasks"
+    LOG.info("Starting distributed worker process: {0}".format(queues if queues else ""))
+    with utils.chdir(base_dir):
+        with utils.curdir_tmpdir() as work_dir:
+            dirs = {"work": work_dir, "config": os.path.dirname(config_file)}
+            with create_celeryconfig(task_module, dirs, config.get('celery', {})):
+                run_celeryd(work_dir, queues)
 
-    app = Celery('ngi_tasks', broker=broker)
+def run_celeryd(work_dir, queues):
+    with utils.chdir(work_dir):
+        cl = ["celeryd"]
+        if queues:
+            cl += ["-Q", queues]
+        subprocess.check_call(cl)
+
 
 if __name__=="__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--config", required=True,
             help="The path to the configuration file.")
-    parser.add_argument("-q", "--queues", dest="queues", action="store", required=True,
-                      default=None)
-    parser.add:argument("-t", "--tasks", dest="task_module", action="store", required=True,
-                      default=None)
+    parser.add_argument("-q", "--queues", dest="queues", action="store",
+                      default=None, help="Queues the server will listen to")
+    parser.add_argument("-t", "--tasks", dest="task_module", action="store",
+                      default=None, help="Task module to import")
+    parser.add_argument("-d", "--basedir", dest="basedir", action="store",
+                      default=None, help="Working directory (to store the celery config file)")
     args = parser.parse_args()
     main(args.config, args.queues, args.tasks)
