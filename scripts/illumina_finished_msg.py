@@ -7,7 +7,7 @@ from ngi_pipeline.utils.config import load_yaml_config
 def main(config_file):
     config = load_yaml_config(config_file)
     messenger = CeleryMessenger(config.get('celery'), 'ngi_pipeline')
-    messenger.send_message('ngi_pipeline.distributed.tasks.launch_main_analysis',
+    messenger.send_message('launch_main_analysis',
                            '/Users/guillem/archive/test_data_empty_files')
 
 if __name__=="__main__":
