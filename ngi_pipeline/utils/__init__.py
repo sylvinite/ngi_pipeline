@@ -5,7 +5,10 @@ import contextlib
 import functools
 import os
 import shlex
+import shutil
+import stat
 import subprocess
+import tempfile
 
 def load_modules(modules_list):
     """
@@ -37,6 +40,19 @@ def load_modules(modules_list):
             error_msgs.append(error_msg)
     if error_msgs:
         raise RuntimeError("".join(error_msgs))
+
+def safe_makedir(dname):
+    """Make a directory if it doesn't exist, handling concurrent race conditions.
+    """
+    if not os.path.exists(dname):
+        # we could get an error here if multiple processes are creating
+        # the directory at the same time. Grr, concurrency.
+        try:
+            os.makedirs(dname)
+        except OSError:
+            if not os.path.isdir(dname):
+                raise
+    return dname
 
 
 @contextlib.contextmanager

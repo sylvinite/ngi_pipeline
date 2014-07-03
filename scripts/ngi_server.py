@@ -17,6 +17,7 @@ Usage:
    [--basedir=<dirname>: Base directory to work in. Defaults to current directory.]
 """
 import argparse
+import os
 
 from subprocess import check_call
 
@@ -33,7 +34,7 @@ LOG = minimal_logger(__name__)
 def main(config_file, queues=None, task_module=None, base_dir=None):
     """ Loads configuration and launches the server
     """
-    config = load_yaml_config(config_file_path)
+    config = load_yaml_config(config_file)
 
     # Prepare working directory to save logs and config files
     if base_dir is None:
@@ -44,7 +45,7 @@ def main(config_file, queues=None, task_module=None, base_dir=None):
     with utils.chdir(base_dir):
         with utils.curdir_tmpdir() as work_dir:
             dirs = {"work": work_dir, "config": os.path.dirname(config_file)}
-            with create_celeryconfig(task_module, dirs, config.get('celery', {})):
+            with create_celery_config(task_module, dirs, config.get('celery', {})):
                 run_celeryd(work_dir, queues)
 
 def run_celeryd(work_dir, queues):
@@ -52,7 +53,7 @@ def run_celeryd(work_dir, queues):
         cl = ["celeryd"]
         if queues:
             cl += ["-Q", queues]
-        subprocess.check_call(cl)
+        check_call(cl)
 
 
 if __name__=="__main__":
@@ -66,4 +67,4 @@ if __name__=="__main__":
     parser.add_argument("-d", "--basedir", dest="basedir", action="store",
                       default=None, help="Working directory (to store the celery config file)")
     args = parser.parse_args()
-    main(args.config, args.queues, args.tasks)
+    main(args.config, args.queues, args.task_module)

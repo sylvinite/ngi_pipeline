@@ -2,6 +2,7 @@
 """
 import contextlib
 import multiprocessing
+import os
 
 ########################
 #    Useful methods    #
@@ -33,18 +34,19 @@ def create_celery_config(task_module, dirs, config):
     :param config: Dictionary with Celery configurations
     """
     try:
-        _celeryconfig_tmpl.format(hots = config['host'],
-                                  port = config['port'],
-                                  userid = config['userid'],
-                                  password = config['password'],
-                                  rabbitmq_vhost = config['rabbitmq_vhost'],
-                                  cores = config.get('cores', multiprocessing.cpu_count()))
+        celery_config = _celeryconfig_tmpl.format(task_import = task_module,
+                                                 host = config['host'],
+                                                 port = config['port'],
+                                                 userid = config['userid'],
+                                                 password = config['password'],
+                                                 rabbitmq_vhost = config['rabbitmq_vhost'],
+                                                 cores = config.get('cores', multiprocessing.cpu_count()))
     except KeyError:
         raise RuntimeError("Could not build configuration file for Celery, missing parameters!")
 
     out_file = os.path.join(dirs["work"], "celeryconfig.py")
     with open(out_file, "w") as out_handle:
-        out_handle.write(_celeryconfig_tmpl)
+        out_handle.write(celery_config)
     try:
         yield out_file
     finally:
