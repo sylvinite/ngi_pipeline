@@ -32,7 +32,7 @@ def main(demux_fcid_dirs, config_file_path=None, restrict_to_projects=None, rest
     """
     The main launcher method.
 
-    :param str demux_fcid_dirs: The CASAVA-produced demux directory/directories.
+    :param list demux_fcid_dirs: The CASAVA-produced demux directory/directories.
     :param str config_file_path: The path to the configuration file; can also be
                                  specified via environmental variable "NGI_CONFIG"
     :param list restrict_to_projects: A list of projects; analysis will be
@@ -41,12 +41,11 @@ def main(demux_fcid_dirs, config_file_path=None, restrict_to_projects=None, rest
                                      restricted to these. Optional.
     """
     if not config_file_path:
-        try:
-            config_file_path = os.environ['NGI_CONFIG']
-        except KeyError:
-            error_msg = ("Configuration file not passed as argument and "
-                         "NGI_CONFIG environment variable not defined. "
-                         "Cannot proceed.")
+        ## TODO clarify later
+        config_file_path = os.environ.get("NGI_CONFIG") or os.path.expandvars(os.path.join("$HOME/.ngipipeline/ngi_config.yaml"))
+        if not os.path.isfile(config_file_path):
+            error_msg = ("Configuration file \"{}\" does not exist or is not a "
+                         "file. Cannot proceed.".format(config_file_path))
             LOG.error(error_msg)
             raise RuntimeError(error_msg)
     if not restrict_to_projects: restrict_to_projects = []
@@ -160,7 +159,7 @@ def setup_analysis_directory_structure(fc_dir, config, projects_to_analyze,
     try:
         fc_dir_structure = parse_casava_directory(fc_dir)
     except RuntimeError as e:
-        LOG.error("Error when processing flowcell dir \"{}\": e".format(fc_dir))
+        LOG.error("Error when processing flowcell dir \"{}\": {}".format(fc_dir, e))
         return []
     fc_date = fc_dir_structure['fc_date']
     fc_name = fc_dir_structure['fc_name']
@@ -277,9 +276,9 @@ def parse_casava_directory(fc_dir):
         fc_name = run_info['Flowcell']
         fc_date = run_info['Date']
         fc_pos = runparams['FCPosition']
-    except KeyError:
-        raise RuntimeError("Could not parse flowcell information \"{}\" "\
-                       "from Flowcell RunMetrics in flowcell {}".format(e, fc_dir))
+    except KeyError as e:
+        raise RuntimeError("Could not parse flowcell information {} "
+                           "from Flowcell RunMetrics in flowcell {}".format(e, fc_dir))
     # "Unaligned*" because SciLifeLab dirs are called "Unaligned_Xbp"
     # (where "X" is the index length) and there is also an "Unaligned" folder
     unaligned_dir_pattern = os.path.join(fc_dir,"Unaligned*")
@@ -625,7 +624,7 @@ class NGIFCID(NGIObject):
 
 if __name__=="__main__":
     parser = argparse.ArgumentParser("Sort and transfer a demultiplxed illumina run.")
-    parser.add_argument("--config", required=True,
+    parser.add_argument("--config",
             help="The path to the configuration file.")
     parser.add_argument("--project", action="append",
             help="Restrict processing to these projects. "\

@@ -303,7 +303,7 @@ class FlowcellRunMetricsParser(RunMetricsParser):
         infile = os.path.join(os.path.abspath(self.path), fn)
         self.log.debug("parseRunParameters: going to read {}".format(infile))
         if not os.path.exists(infile):
-            self.log.warn("No such files {}".format(infile))
+            self.log.warn("No such file {}".format(infile))
             return {}
         ## TODO revert this try-except later but try to restrict the except a bit
         #try:
