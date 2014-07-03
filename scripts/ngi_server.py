@@ -45,7 +45,7 @@ def main(config_file, queues=None, task_module=None, base_dir=None):
     with utils.chdir(base_dir):
         with utils.curdir_tmpdir() as work_dir:
             dirs = {"work": work_dir, "config": os.path.dirname(config_file)}
-            with create_celery_config(task_module, dirs, config.get('celery', {})):
+            with create_celery_config(dirs, config.get('celery', {})):
                 run_celeryd(work_dir, queues)
 
 def run_celeryd(work_dir, queues):
