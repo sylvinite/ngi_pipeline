@@ -1,6 +1,7 @@
 from __future__ import print_function
 
 import collections
+import contextlib
 import functools
 import os
 import shlex
@@ -38,6 +39,36 @@ def load_modules(modules_list):
         raise RuntimeError("".join(error_msgs))
 
 
+@contextlib.contextmanager
+def curdir_tmpdir(remove=True):
+    """Context manager to create and remove a temporary directory.
+    """
+    tmp_dir_base = os.path.join(os.getcwd(), "tmp")
+    safe_makedir(tmp_dir_base)
+    tmp_dir = tempfile.mkdtemp(dir=tmp_dir_base)
+    safe_makedir(tmp_dir)
+    # Explicitly change the permissions on the temp directory to make it writable by group
+    os.chmod(tmp_dir, stat.S_IRWXU | stat.S_IRWXG)
+    try:
+        yield tmp_dir
+    finally:
+        if remove:
+            shutil.rmtree(tmp_dir)
+
+
+@contextlib.contextmanager
+def chdir(new_dir):
+    """Context manager to temporarily change to a new directory.
+    """
+    cur_dir = os.getcwd()
+    safe_makedir(new_dir)
+    os.chdir(new_dir)
+    try:
+        yield
+    finally:
+        os.chdir(cur_dir)
+
+
 class memoized(object):
     """
     Decorator, caches results of function calls.
@@ -60,3 +91,4 @@ class memoized(object):
     # goes through the __call__ function defined above
     def __get__(self, obj, objtype):
         return functools.partial(self.__call__, obj)
+
