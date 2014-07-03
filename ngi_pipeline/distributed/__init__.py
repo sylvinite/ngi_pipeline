@@ -2,6 +2,7 @@
 """
 import base64
 import contextlib
+import json
 import multiprocessing
 import os
 import sys
@@ -90,7 +91,7 @@ class CeleryMessenger(object):
         exchange = self.exchange
         # Generate a uniqie ID for the task (required by Celery)
         task_id = base64.b64encode(uuid.uuid4().bytes + uuid.uuid4().bytes)
-        body = {'task': task, 'id': task_id, 'args': args}
+        body = json.dumps({'task': task, 'id': task_id, 'args': args})
         self.channel.basic_publish(exchange=self.exchange, routing_key=self.queue, body=body,
                                   properties=pika.BasicProperties(content_type='application/json'))
 
