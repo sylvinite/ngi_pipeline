@@ -55,6 +55,45 @@ def safe_makedir(dname):
     return dname
 
 
+def execute_command_line(cl, stdout=None, stderr=None, cwd=None):
+    """Execute a command line and return the PID.
+
+    :param cl: Can be either a list or a string, if string, gets shlex.splitted
+    :param file stdout: The filehandle destination for STDOUT (can be None)
+    :param file stderr: The filehandle destination for STDERR (can be None)
+    :param str cwd: The directory to be used as CWD for the process launched
+
+    :returns: Process ID of launched process
+    :rtype: str
+
+    :raises RuntimeError: If the OS command-line execution failed.
+    """
+    if cwd and not os.path.isdir(cwd):
+        LOG.warn("CWD specified, \"{}\", is not a valid directory for "
+                 "command \"{}\". Setting to None.".format(cwd, cl))
+        cwd = None
+    if type(cl) is str:
+        cl = shlex.split(cl)
+    LOG.info("Executing command line: {}".format(" ".join(cl)))
+    try:
+        p_handle = subprocess.Popen(cl, stdout = stdout,
+                                        stderr = stderr,
+                                        cwd = cwd)
+        error_msg = None
+    except OSError:
+        error_msg = ("Cannot execute command; missing executable on the path? "
+                     "(Command \"{}\")".format(command_line))
+    except ValueError:
+        error_msg = ("Cannot execute command; command malformed. "
+                     "(Command \"{}\")".format(command_line))
+    except subprocess.CalledProcessError as e:
+        error_msg = ("Error when executing command: \"{}\" "
+                     "(Command \"{}\")".format(e, command_line))
+    if error_msg:
+        raise RuntimeError(error_msg)
+    return p_handle.pid
+
+
 @contextlib.contextmanager
 def curdir_tmpdir(remove=True):
     """Context manager to create and remove a temporary directory.
