@@ -20,7 +20,7 @@ from ngi_pipeline.common import parse_lane_from_filename, find_fastq_read_pairs,
                                 get_flowcell_id_from_dirtree
 from ngi_pipeline.log import minimal_logger
 from ngi_pipeline.piper_ngi import workflows
-from ngi_pipeline.utils import load_modules
+from ngi_pipeline.utils import execute_command_line, load_modules
 from ngi_pipeline.utils.config import load_xml_config, load_yaml_config
 
 LOG = minimal_logger(__name__)
@@ -44,45 +44,6 @@ def main(projects_to_analyze, config_file_path):
     build_piper_cl(projects_to_analyze, config)
     launch_piper_jobs(projects_to_analyze)
     # Need to write workflow status to database under relevant heading!
-
-
-def execute_command_line(cl, stdout=None, stderr=None, cwd=None):
-    """Execute a command line and return the PID.
-
-    :param cl: Can be either a list or a string, if string, gets shlex.splitted
-    :param file stdout: The filehandle destination for STDOUT (can be None)
-    :param file stderr: The filehandle destination for STDERR (can be None)
-    :param str cwd: The directory to be used as CWD for the process launched
-
-    :returns: Process ID of launched process
-    :rtype: str
-
-    :raises RuntimeError: If the OS command-line execution failed.
-    """
-    if cwd and not os.path.isdir(cwd):
-        LOG.warn("CWD specified, \"{}\", is not a valid directory for "
-                 "command \"{}\". Setting to None.".format(cwd, cl))
-        cwd = None
-    if type(cl) is str:
-        cl = shlex.split(cl)
-    LOG.info("Executing command line: {}".format(" ".join(cl)))
-    try:
-        p_handle = subprocess.Popen(cl, stdout = stdout,
-                                        stderr = stderr,
-                                        cwd = cwd)
-        error_msg = None
-    except OSError:
-        error_msg = ("Cannot execute command; missing executable on the path? "
-                     "(Command \"{}\")".format(command_line))
-    except ValueError:
-        error_msg = ("Cannot execute command; command malformed. "
-                     "(Command \"{}\")".format(command_line))
-    except subprocess.CalledProcessError as e:
-        error_msg = ("Error when executing command: \"{}\" "
-                     "(Command \"{}\")".format(e, command_line))
-    if error_msg:
-        raise RuntimeError(error_msg)
-    return p_handle.pid
 
 
 def symlink_convert_file_names(projects_to_analyze):
