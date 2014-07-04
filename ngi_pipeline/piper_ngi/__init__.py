@@ -58,16 +58,20 @@ def symlink_convert_file_names(projects_to_analyze):
                     args_dict = m.groupdict()
                     args_dict.update({"date_fcid": fcid.name})
                     scilifelab_named_file = "{lane_num}_{date_fcid}_{sample_name}_{read}.{ext}".format(**args_dict)
+                    fcid_path =  os.path.join(project.base_path,
+                                             project.dirname,
+                                             sample.dirname,
+                                             fcid.dirname,)
+                    src_fastq = os.path.join(fcid_path, fastq)
+                    dst_fastq = os.path.join(fcid_path, scilifelab_named_file)
                     try:
-                        fcid_path =  os.path.join(project.base_path,
-                                                 project.dirname,
-                                                 sample.dirname,
-                                                 fcid.dirname,)
-                        src_fastq = os.path.join(fcid_path, fastq)
-                        dst_fastq = os.path.join(fcid_path, scilifelab_named_file)
                         os.symlink(src_fastq, dst_fastq)
-                    except OSError:
-                        pass
+                    except OSError as e:
+                        # File already exists
+                        if e.errno == 17:
+                            pass
+                        else:
+                            raise
 
 def convert_sthlm_to_uppsala(projects_to_analyze):
     """Convert projects from Stockholm style (three-level) to Uppsala style
@@ -118,18 +122,14 @@ def convert_sthlm_to_uppsala(projects_to_analyze):
         #read_xml_original = os.path.join(project_base_dir, "report.xml")
         project.dirname = uppsala_dirname
         project.name = uppsala_dirname
-        try:
-            shutil.copy(read_tsv_src, read_tsv_dst)
-        except shutil.Error:
-            # Fuckit
-            pass
+        shutil.copy(read_tsv_src, read_tsv_dst)
 
 
 def launch_piper_jobs(projects_to_analyze):
     for project in projects_to_analyze:
         cwd = os.path.join(project.base_path, project.dirname)
         for command_line in project.command_lines:
-            ## Would like to log these to the log
+            ## TODO Would like to log these to the log -- can we get a Logbook filehandle-like object?
             pid = execute_command_line(command_line, cwd=cwd)
 
 
