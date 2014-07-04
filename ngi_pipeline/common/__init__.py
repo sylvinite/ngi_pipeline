@@ -22,7 +22,7 @@ import yaml
 
 from ngi_pipeline.common.parsers import FlowcellRunMetricsParser
 from ngi_pipeline.log import minimal_logger
-from ngi_pipeline.utils import memoized
+from ngi_pipeline.utils import memoized, safe_makedir
 from ngi_pipeline.utils.config import load_yaml_config
 
 LOG = minimal_logger(__name__)
@@ -41,7 +41,6 @@ def main(demux_fcid_dirs, config_file_path=None, restrict_to_projects=None, rest
                                      restricted to these. Optional.
     """
     if not config_file_path:
-        ## TODO clarify later
         config_file_path = os.environ.get("NGI_CONFIG") or os.path.expandvars(os.path.join("$HOME/.ngipipeline/ngi_config.yaml"))
         if not os.path.isfile(config_file_path):
             error_msg = ("Configuration file \"{}\" does not exist or is not a "
@@ -79,50 +78,6 @@ def main(demux_fcid_dirs, config_file_path=None, restrict_to_projects=None, rest
     # Import the module specified in the config file (e.g. bcbio, piper)
     analysis_module = importlib.import_module(analysis_engine_module_name)
     analysis_module.main(projects_to_analyze=projects_to_analyze, config_file_path=config_file_path)
-
-
-# Not used
-def check_for_new_flowcells(inbox_directory, num_days_time_limit=None):
-    """Checks for newly-delivered data in the inbox_directory,
-    ensuring that the data transfer has finished (by the presence of the file
-    "second_read_processing_completed.txt").
-
-    :param str inbox_directory: The path to the directory to which new data is transferred after demultiplexing.
-    :param int num_days_time_limit: If a folder has not been modified more recently than this it is excluded. Default is no time limit.
-
-    :returns: A list of newly-delivered, demultiplexed flowcell directories.
-    :rtype: list
-    """
-    if not inbox_directory:
-        return []
-    else:
-        new_flowcell_directories = set()
-        ## TODO Not sure what this will be because I don't know what Uppsala uses
-        project_dir_match_patterns = ("*",)
-        # Omit hidden directories
-        project_dir_filter_patterns = (".*",)
-        for directory in os.listdir(inbox_directory):
-            # This gets a little rough up ahead but I can't stand to nest this many if-fors
-            if os.path.isdir(directory) and \
-                any([ fnmatch.fnmatch(directory, ptn) for ptn in project_dir_match_patterns]) and \
-                not any([ fnmatch.fnmatch(directory, ptn) for ptn in project_dir_filter_patterns]):
-                    # Is there an age limit specified?
-                    if num_days_time_limit:
-                        try:
-                            num_days_time_limit = int(num_days_time_limit)
-                            file_age = datetime.datetime.now() - \
-                                       datetime.datetime.fromtimestamp(
-                                                        os.path.getmtime(directory))
-                            if file_age.days > int(num_days_time_limit):
-                                # Directory is too old for consideration
-                                continue
-                        except ValueError:
-                            LOG.warn("Time limit not a number (\"{}\"); ignoring.".format(num_days_time_limit))
-                    # The presence of the file "second_read_processing_completed.txt" indicates
-                    # that both the demultiplexing and the data transfer are complete
-                    if os.path.exists(os.path.join(directory, "second_read_processing_completed.txt")):
-                        new_flowcell_directories.add(directory)
-    return list(new_flowcell_directories)
 
 
 def setup_analysis_directory_structure(fc_dir, config, projects_to_analyze,
@@ -183,8 +138,7 @@ def setup_analysis_directory_structure(fc_dir, config, projects_to_analyze,
         LOG.info("Setting up project {}".format(project.get("project_dir")))
         # Create a project directory if it doesn't already exist
         project_dir = os.path.join(analysis_top_dir, project_name)
-        ## TODO change to mkdir -p
-        if not os.path.exists(project_dir): os.mkdir(project_dir, 0770)
+        if not os.path.exists(project_dir): safe_makedir(project_dir, 0770)
         try:
             project_obj = projects_to_analyze[project_dir]
         except KeyError:
@@ -200,14 +154,12 @@ def setup_analysis_directory_structure(fc_dir, config, projects_to_analyze,
             LOG.info("Setting up sample {}".format(sample_name))
             # Create a directory for the sample if it doesn't already exist
             sample_dir = os.path.join(project_dir, sample_name)
-            ## TODO change to mkdir -p
-            if not os.path.exists(sample_dir): os.mkdir(sample_dir, 0770)
+            if not os.path.exists(sample_dir): safe_makedir(sample_dir, 0770)
             # This will only create a new sample object if it doesn't already exist in the project
             sample_obj = project_obj.add_sample(name=sample_name, dirname=sample_name)
             # Create a directory for the flowcell if it does not exist
             dst_sample_fcid_dir = os.path.join(sample_dir, fc_run_id)
-            ## TODO change to mkdir -p
-            if not os.path.exists(dst_sample_fcid_dir): os.mkdir(dst_sample_fcid_dir, 0770)
+            if not os.path.exists(dst_sample_fcid_dir): safe_makedir(dst_sample_fcid_dir, 0770)
             # This will only create a new FCID object if it doesn't already exist in the sample
             fcid_obj = sample_obj.add_fcid(name=fc_run_id, dirname=fc_run_id)
             # rsync the source files to the sample directory
@@ -324,11 +276,7 @@ def _copy_basecall_stats(source_dirs, destination_dir):
     for source_dir in source_dirs:
         # First create the directory in the destination
         dirname = os.path.join(destination_dir,os.path.basename(source_dir))
-        try:
-            os.mkdir(dirname)
-        ## TODO wtf
-        except:
-            pass
+        safe_makedir(dirname)
         # List the files/directories to copy
         files = glob.glob(os.path.join(source_dir,"*.htm"))
         files += glob.glob(os.path.join(source_dir,"*.metrics"))
@@ -484,8 +432,6 @@ def find_fastq_read_pairs(file_list=None, directory=None):
     """
     if not directory or file_list:
         raise RuntimeError("Must specify either a list of files or a directory path (in kw format.")
-
-    #` Can I do this? "is not"? It seems easy... a little TOO easy...
     if file_list and type(file_list) is not list:
         LOG.warn("file_list parameter passed is not a list; trying as a directory.")
         directory = file_list
@@ -500,11 +446,11 @@ def find_fastq_read_pairs(file_list=None, directory=None):
     else:
         # No files found
         return {}
-    # --> This is the SciLifeLab-Sthlm-specific format
+    # --> This is the SciLifeLab-Sthlm-specific format (obsolete as of August 1st, hopefully)
     #     Format: <lane>_<date>_<flowcell>_<project-sample>_<read>.fastq.gz
     #     Example: 1_140220_AH8AMJADXX_P673_101_1.fastq.gz
-    # --> This is the standard Illumina/Uppsala format:
-    #     Format: <sample_name?>_<index>_<lane>_<read>_<group>.fastq.gz
+    # --> This is the standard Illumina/Uppsala format (and Sthlm -> August 1st 2014)
+    #     Format: <sample_name>_<index>_<lane>_<read>_<group>.fastq.gz
     #     Example: NA10860_NR_TAAGGC_L005_R1_001.fastq.gz
     suffix_pattern = re.compile(r'(.*)fastq')
     # Cut off at the read group
@@ -521,7 +467,6 @@ def find_fastq_read_pairs(file_list=None, directory=None):
                       "cannot be paired: \"{}\"".format(file_fullname))
             try:
                 # File could not be paired, but be the bigger person and include it in the group anyway
-                ## TODO Should we add files that don't match or drop them?
                 file_basename_stripsuffix = suffix_pattern.split(file_basename)[0]
                 matches_dict[file_basename_stripsuffix].append(os.abspath(file_fullname))
             except AttributeError:
@@ -611,7 +556,7 @@ class NGIFCID(NGIObject):
     def __init__(self, *args, **kwargs):
         super(NGIFCID, self).__init__(subitem_type=None, *args, **kwargs)
         self.fastqs = self._subitems = []
-        ## TODO why doesn't this work?
+        ## Not working
         #delattr(self, "_add_subitem")
 
     def __iter__(self):
