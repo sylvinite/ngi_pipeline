@@ -47,6 +47,9 @@ def main(projects_to_analyze, config_file_path):
 
 
 def symlink_convert_file_names(projects_to_analyze):
+    """Converts standard Illumina (and Uppsala) file-naming format to the
+    Stockholm format; required atm so sthlm2UUSNP can switch them back.
+    """
     for project in projects_to_analyze:
         for sample in project:
             for fcid in sample:
