@@ -3,7 +3,7 @@
 
 This reads configuration details and then starts a Celery (http://celeryproject.org>
 server that will handle requests that are passed via an external message queue. This
-allows distributed processing of analysis sections with less assumptions about the
+allows distributed processing of analysis sections with fewer assumptions about the
 system architecture.
 
 Usage:

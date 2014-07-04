@@ -65,7 +65,7 @@ def create_celery_config(task_module, dirs, config):
 
 
 class CeleryMessenger(object):
-    """ Helper class to send formatted messages to a Celery quque
+    """ Helper class to send formatted messages to a Celery queue
     """
     def __init__(self, config, queue, exchange=''):
         try:
