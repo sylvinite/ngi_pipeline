@@ -67,8 +67,7 @@ def symlink_convert_file_names(projects_to_analyze):
                     try:
                         os.symlink(src_fastq, dst_fastq)
                     except OSError as e:
-                        # File already exists
-                        if e.errno == 17:
+                        if e.errno == 17:   # File already exists
                             pass
                         else:
                             raise
