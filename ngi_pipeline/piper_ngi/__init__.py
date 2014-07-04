@@ -99,13 +99,19 @@ def convert_sthlm_to_uppsala(projects_to_analyze):
                          "project {}: {}".format(project, e))
             LOG.error(error_msg)
             continue
-        read_tsv_src = os.path.join(project.base_path, project.dirname, "report.tsv")
-        read_tsv_dst = os.path.join(project.base_path, uppsala_dirname, "report.tsv")
-        project.dirname = uppsala_dirname
-        #read_xml_original = os.path.join(project_base_dir, "report.xml")
+        for ext in ["tsv", "xml"]:
+            report_src_file = os.path.join(project.base_path, project.dirname, "report.{}".format(ext))
+            if os.path.isfile(src_file):
+                report_dst_file = os.path.join(project.base_path, uppsala_dirname, "report.{}".format(ext))
+        try:
+            shutil.copy(report_src_file, report_dst_file)
+        except NameError:
+            error_msg = ("No report.tsv or report.xml file found for project {}; "
+                         "Piper processing will fail!".format(project))
+            LOG.error(error_msg)
+            continue
         project.dirname = uppsala_dirname
         project.name = uppsala_dirname
-        shutil.copy(read_tsv_src, read_tsv_dst)
 
 
 def launch_piper_jobs(projects_to_analyze):
