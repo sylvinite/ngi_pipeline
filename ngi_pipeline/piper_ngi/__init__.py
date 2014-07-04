@@ -19,7 +19,7 @@ import time
 from ngi_pipeline.common import parse_lane_from_filename, find_fastq_read_pairs, \
                                 get_flowcell_id_from_dirtree
 from ngi_pipeline.log import minimal_logger
-from ngi_pipeline.piper_sll import workflows
+from ngi_pipeline.piper_ngi import workflows
 from ngi_pipeline.utils import load_modules
 from ngi_pipeline.utils.config import load_xml_config, load_yaml_config
 
@@ -38,36 +38,135 @@ def main(projects_to_analyze, config_file_path):
     # Valid only for this session
     load_modules(modules_to_load)
     create_report_tsv(projects_to_analyze)
+    convert_sthlm_to_uppsala(projects_to_analyze)
     build_setup_xml(projects_to_analyze, config)
+    # Temporary until the file format switch
     build_piper_cl(projects_to_analyze, config)
-    ## Run Johan's converter script if needed
     launch_piper_jobs(projects_to_analyze)
     # Need to write workflow status to database under relevant heading!
 
 
+def execute_command_line(cl, stdout=None, stderr=None, cwd=None):
+    """Execute a command line and return the PID.
+
+    :param cl: Can be either a list or a string, if string, gets shlex.splitted
+    :param file stdout: The filehandle destination for STDOUT (can be None)
+    :param file stderr: The filehandle destination for STDERR (can be None)
+    :param str cwd: The directory to be used as CWD for the process launched
+
+    :returns: Process ID of launched process
+    :rtype: str
+
+    :raises RuntimeError: If the OS command-line execution failed.
+    """
+    if cwd and not os.path.isdir(cwd):
+        LOG.warn("CWD specified, \"{}\", is not a valid directory for "
+                 "command \"{}\". Setting to None.".format(cwd, cl))
+        cwd = None
+    if type(cl) is str:
+        cl = shlex.split(cl)
+    LOG.info("Executing command line: {}".format(" ".join(cl)))
+    try:
+        p_handle = subprocess.Popen(cl, stdout = stdout,
+                                        stderr = stderr,
+                                        cwd = cwd)
+        error_msg = None
+    except OSError:
+        error_msg = ("Cannot execute command; missing executable on the path? "
+                     "(Command \"{}\")".format(command_line))
+    except ValueError:
+        error_msg = ("Cannot execute command; command malformed. "
+                     "(Command \"{}\")".format(command_line))
+    except subprocess.CalledProcessError as e:
+        error_msg = ("Error when executing command: \"{}\" "
+                     "(Command \"{}\")".format(e, command_line))
+    if error_msg:
+        raise RuntimeError(error_msg)
+    return p_handle.pid
+
+
+def symlink_convert_file_names(projects_to_analyze):
+    for project in projects_to_analyze:
+        for sample in project:
+            for fcid in sample:
+                for fastq in fcid:
+                    m = re.match(r'(?P<sample_name>P\d+_\d+)_(?P<index>\w+)_L\d{2}(?P<lane_num>\d)_(?P<read>R\d)_.*(?P<ext>fastq.*)', fastq)
+                    args_dict = m.groupdict()
+                    args_dict.update({"date_fcid": fcid.name})
+                    scilifelab_named_file = "{lane_num}_{date_fcid}_{sample_name}_{read}.{ext}".format(**args_dict)
+                    try:
+                        fcid_path =  os.path.join(project.base_path,
+                                                 project.dirname,
+                                                 sample.dirname,
+                                                 fcid.dirname,)
+                        src_fastq = os.path.join(fcid_path, fastq)
+                        dst_fastq = os.path.join(fcid_path, scilifelab_named_file)
+                        os.symlink(src_fastq, dst_fastq)
+                    except OSError:
+                        pass
+
+def convert_sthlm_to_uppsala(projects_to_analyze):
+    """Convert projects from Stockholm style (three-level) to Uppsala style
+    (two-level) using the sthlm2UUSNP Java utility.
+
+    :param list projects_to_analyze: The projects to be converted.
+
+    :returns: A list of projects with Uppsala-style directories as attributes.
+    :rtype: list
+    """
+    #for project in projects_to_analyze:
+    #    uu_project_name = "{}_UUSNP".format(project.dirname)
+    #    uu_project_dir = os.path.join(project.base_path, uu_project_name)
+    #    try:
+    #        os.mkdir(uu_project_dir)
+    #    except OSError:
+    #        pass
+    #    for sample in project:
+    #        for fcid in sample:
+    #            symlink_dst_path = os.path.join(uu_project_dir, fcid.dirname)
+    #            symlink_src_path = os.path.join(project.base_path,
+    #                                            project.dirname,
+    #                                            sample.dirname,
+    #                                            fcid.dirname)
+    #            try:
+    #                os.symlink(symlink_src_path, symlink_dst_path)
+    #            except OSError:
+    #                pass
+    # Requires sthlm2UUSNP on PATH
+    symlink_convert_file_names(projects_to_analyze)
+    cl_template = "sthlm2UUSNP -i {input_dir} -o {output_dir}"
+    for project in projects_to_analyze:
+        LOG.info("Converting Sthlm project {} to UUSNP format".format(project))
+        input_dir = os.path.join(project.base_path, project.dirname)
+        uppsala_dirname = "{}_UUSNP".format(project.dirname)
+        output_dir = os.path.join(project.base_path, uppsala_dirname)
+        cl = cl_template.format(input_dir=input_dir, output_dir=output_dir)
+        try:
+            subprocess.check_call(shlex.split(cl))
+        except subprocess.CalledProcessError as e:
+            error_msg = ("Unable to convert Sthlm->UU format for "
+                         "project {}: {}".format(project, e))
+            LOG.error(error_msg)
+            continue
+        read_tsv_src = os.path.join(project.base_path, project.dirname, "report.tsv")
+        read_tsv_dst = os.path.join(project.base_path, uppsala_dirname, "report.tsv")
+        project.dirname = uppsala_dirname
+        #read_xml_original = os.path.join(project_base_dir, "report.xml")
+        project.dirname = uppsala_dirname
+        project.name = uppsala_dirname
+        try:
+            shutil.copy(read_tsv_src, read_tsv_dst)
+        except shutil.Error:
+            # Fuckit
+            pass
+
+
 def launch_piper_jobs(projects_to_analyze):
     for project in projects_to_analyze:
+        cwd = os.path.join(project.base_path, project.dirname)
         for command_line in project.command_lines:
-            parsed_cl = shlex.split(command_line)
-            # Note: requires piper on the command line at the moment
-            LOG.info("Executing command line: {}".format(command_line))
-            try:
-                p_handle = subprocess.Popen(parsed_cl, stdin = subprocess.PIPE,
-                                                  stdout = subprocess.PIPE)
-                error_msg = None
-            except OSError:
-                error_msg = ("Cannot execute command; missing executable on the path? "
-                             "(Command \"{}\")".format(command_line))
-            except ValueError:
-                error_msg = ("Cannot execute command; command malformed. "
-                             "(Command \"{}\")".format(command_line))
-            except subprocess.CalledProcessError as e:
-                error_msg = ("Error when executing command: \"{}\" "
-                             "(Command \"{}\")".format(e, command_line))
-            if error_msg:
-                LOG.error(error_msg)
-                continue
-            p_stdin, p_stdout = p_handle.communicate()
+            ## Would like to log these to the log
+            pid = execute_command_line(command_line, cwd=cwd)
 
 
 def build_piper_cl(projects_to_analyze, config):
@@ -184,8 +283,11 @@ def build_setup_xml(projects_to_analyze, config):
                                "--uppnex_project_id {uppmax_proj} "
                                "--reference {reference_path}".format(**cl_args))
         for sample in project.samples.values():
-            sample_directory = os.path.join(project_top_level_dir, sample.dirname)
-            setupfilecreator_cl += " --input_sample {}".format(sample_directory)
+            ## TODO temporary fix before the directory format switch
+            #sample_directory = os.path.join(project_top_level_dir, sample.dirname)
+            for fcid in sample:
+                sample_directory = os.path.join(project_top_level_dir, fcid.dirname)
+                setupfilecreator_cl += " --input_sample {}".format(sample_directory)
 
         try:
             LOG.info("Executing command line: {}".format(setupfilecreator_cl))
@@ -248,6 +350,10 @@ def create_report_tsv(projects_to_analyze):
                                              sample.dirname,
                                              fcid.dirname)
                     for fq_pairname in find_fastq_read_pairs(directory=fcid_path).keys():
-                        lane = parse_lane_from_filename(fq_pairname)
+                        try:
+                            lane = parse_lane_from_filename(fq_pairname)
+                        except ValueError as e:
+                            LOG.error("Could not get lane from filename for file {} -- skipping ({})".format(fq_pairname, e))
+                            continue
                         read_library = "<NotImplemented>"
                         print("\t".join([sample.name, lane, read_library, fcid.name]), file=rtsv_fh)

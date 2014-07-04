@@ -167,6 +167,7 @@ def setup_analysis_directory_structure(fc_dir, config, projects_to_analyze,
     # Copy the basecall stats directory.
     # This will be causing an issue when multiple directories are present...
     # syncing should be done from archive, preserving the Unaligned* structures
+    LOG.info("Copying basecall stats for run {}".format(fc_dir))
     _copy_basecall_stats([os.path.join(fc_dir_structure['fc_dir'], d) for d in
                                         fc_dir_structure['basecall_stats_dir']],
                                         analysis_top_dir)
@@ -216,8 +217,8 @@ def setup_analysis_directory_structure(fc_dir, config, projects_to_analyze,
                                           project['data_dir'],
                                           project['project_dir'],
                                           sample['sample_dir'])
-            #LOG.info("Copying sample files from \"{}\" to \"{}\"...".format(
-            #                                src_sample_dir, dst_sample_fcid_dir))
+            LOG.info("Copying sample files from \"{}\" to \"{}\"...".format(
+                                            src_sample_dir, dst_sample_fcid_dir))
             sample_files = do_rsync([os.path.join(src_sample_dir, f) for f in
                                      sample.get('files', [])], dst_sample_fcid_dir)
             # Just want fastq files here
@@ -393,8 +394,9 @@ def _merge_samplesheets(samplesheets, merged_samplesheet):
 
 ##  this could also work remotely of course
 def do_rsync(src_files, dst_dir):
-    ## TODO check parameters here
-    cl = ["rsync", "-car"]
+    ## TODO I changed this -c because it takes for goddamn ever but I'll set it back once in Production
+    #cl = ["rsync", "-car"]
+    cl = ["rsync", "-aPv"]
     cl.extend(src_files)
     cl.append(dst_dir)
     cl = map(str, cl)
@@ -436,9 +438,11 @@ def parse_lane_from_filename(sample_basename):
         #return match.group('project'), match.group('sample'), match.group('lane')
         return match.group('lane')
     else:
-        raise ValueError("Error: filename didn't match conventions, "
-                         "couldn't find project id for sample "
-                         "\"{}\"".format(sample_basename))
+        error_msg = ("Error: filename didn't match conventions, "
+                     "couldn't find project id for sample "
+                     "\"{}\"".format(sample_basename))
+        LOG.error(error_msg)
+        raise ValueError(error_msg)
 
 
 @memoized
@@ -567,8 +571,6 @@ class NGIObject(object):
         self._subitem_type = subitem_type
 
     def _add_subitem(self, name, dirname):
-        ## It SHOULD be okay to use name instead of dirname... right? Right??
-        ## E.g. G.Spong_13_03 instead of /proj/a2010002/.../G.Spong_13_03 ??
         # Only add a new item if the same item doesn't already exist
         try:
             subitem = self._subitems[name]
@@ -611,6 +613,9 @@ class NGIFCID(NGIObject):
         self.fastqs = self._subitems = []
         ## TODO why doesn't this work?
         #delattr(self, "_add_subitem")
+
+    def __iter__(self):
+        return iter(self._subitems)
 
     def add_fastq_files(self, fastq):
         if type(fastq) == list:
