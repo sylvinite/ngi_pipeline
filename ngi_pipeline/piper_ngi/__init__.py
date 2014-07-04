@@ -81,26 +81,10 @@ def convert_sthlm_to_uppsala(projects_to_analyze):
     :returns: A list of projects with Uppsala-style directories as attributes.
     :rtype: list
     """
-    #for project in projects_to_analyze:
-    #    uu_project_name = "{}_UUSNP".format(project.dirname)
-    #    uu_project_dir = os.path.join(project.base_path, uu_project_name)
-    #    try:
-    #        os.mkdir(uu_project_dir)
-    #    except OSError:
-    #        pass
-    #    for sample in project:
-    #        for fcid in sample:
-    #            symlink_dst_path = os.path.join(uu_project_dir, fcid.dirname)
-    #            symlink_src_path = os.path.join(project.base_path,
-    #                                            project.dirname,
-    #                                            sample.dirname,
-    #                                            fcid.dirname)
-    #            try:
-    #                os.symlink(symlink_src_path, symlink_dst_path)
-    #            except OSError:
-    #                pass
-    # Requires sthlm2UUSNP on PATH
+    # Need to convert file names from Illumina --> Sthlm format
+    # so we can convert file names from Sthlm --> Illumina format
     symlink_convert_file_names(projects_to_analyze)
+    # Requires sthlm2UUSNP on PATH
     cl_template = "sthlm2UUSNP -i {input_dir} -o {output_dir}"
     for project in projects_to_analyze:
         LOG.info("Converting Sthlm project {} to UUSNP format".format(project))
