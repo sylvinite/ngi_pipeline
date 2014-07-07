@@ -107,6 +107,20 @@ def create_demultiplexed_flowcell():
     project_name = generate_project_name()
     sample_name = generate_sample_name()
     run_info_xml_text = generate_RunInfo()
+    run_parameters_xml_text = generate_runParameters()
+
+
+def generate_runParameters():
+    """Generate a dummy runParameters.xml file.
+    This contains only the "FCPosition" parameter."
+    """
+    return(
+    '<?xml version="1.0"?>'
+    '<RunParameters xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">'
+    '  <Setup>'
+    '    <FCPosition>{}</FCPosition>'
+    '  </Setup>'
+    '</RunParameters>').format(random.choice("AB"))
 
 
 def generate_RunInfo(run_id=None, fcid=generate_flowcell_id(),
@@ -127,7 +141,6 @@ def generate_RunInfo(run_id=None, fcid=generate_flowcell_id(),
         instrument_id=generate_instrument_id()
         fcid=generate_flowcell_id()
         run_id = generate_run_id(date=date, instrument_id=instrument_id, fcid=fcid)
-
     # I suppose it would be better here to make some kind of dict->xml function
     # So you feel free to go ahead and write that for me
     return (
@@ -151,4 +164,4 @@ def create_project_structure(project_name=generate_project_name(),
     """
     raise NotImplementedError
     tmp_dir = tempfile.mkdtmp()
-    project_dir = os.path.join(tmp_dir, project_name)  #run_dir =
+    project_dir = os.path.join(tmp_dir, project_name)
