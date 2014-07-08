@@ -41,7 +41,7 @@ def load_modules(modules_list):
     if error_msgs:
         raise RuntimeError("".join(error_msgs))
 
-def safe_makedir(dname):
+def safe_makedir(dname, mode=0777):
     """Make a directory if it doesn't exist, handling concurrent race conditions.
     """
     if not os.path.exists(dname):

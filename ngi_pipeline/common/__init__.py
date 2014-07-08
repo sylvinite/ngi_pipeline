@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 """
-This script organizes demultiplexed (CASAVA 1.8) sequencing data into the relevant
+This module organizes demultiplexed (CASAVA 1.8) sequencing data into the relevant
 project/sample/flowcell directory structure.
 """
 

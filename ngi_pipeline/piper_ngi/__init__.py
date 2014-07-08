@@ -54,10 +54,15 @@ def symlink_convert_file_names(projects_to_analyze):
         for sample in project:
             for fcid in sample:
                 for fastq in fcid:
-                    m = re.match(r'(?P<sample_name>P\d+_\d+)_(?P<index>\w+)_L\d{2}(?P<lane_num>\d)_(?P<read>R\d)_.*(?P<ext>fastq.*)', fastq)
-                    args_dict = m.groupdict()
+                    #m = re.match(r'(?P<sample_name>P\d+_\d+)_(?P<index>\w+)_L\d{2}(?P<lane_num>\d)_(?P<read>R\d)_.*(?P<ext>fastq.*)', fastq)
+                    m = re.match(r'(?P<sample_name>\w+)_(?P<index>[\w-]+)_L\d{2}(?P<lane_num>\d)_(?P<read_num>R\d)_.*(?P<ext>fastq.*)', fastq)
+                    try:
+                        args_dict = m.groupdict()
+                    except AttributeError:
+                        # No match
+                        LOG.error("Filename \"{}\" did not match template! Blame {}".format(fastq, "Mario"))
                     args_dict.update({"date_fcid": fcid.name})
-                    scilifelab_named_file = "{lane_num}_{date_fcid}_{sample_name}_{read}.{ext}".format(**args_dict)
+                    scilifelab_named_file = "{lane_num}_{date_fcid}_{sample_name}_{read_num}.{ext}".format(**args_dict)
                     fcid_path =  os.path.join(project.base_path,
                                              project.dirname,
                                              sample.dirname,
@@ -101,7 +106,7 @@ def convert_sthlm_to_uppsala(projects_to_analyze):
             continue
         for ext in ["tsv", "xml"]:
             report_src_file = os.path.join(project.base_path, project.dirname, "report.{}".format(ext))
-            if os.path.isfile(src_file):
+            if os.path.isfile(report_src_file):
                 report_dst_file = os.path.join(project.base_path, uppsala_dirname, "report.{}".format(ext))
         try:
             shutil.copy(report_src_file, report_dst_file)
