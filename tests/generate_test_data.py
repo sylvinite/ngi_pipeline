@@ -88,7 +88,7 @@ def create_demultiplexed_flowcell():
     │   ├── DemultiplexConfig.xml
     │   ├── DemultiplexedBustardConfig.xml
     │   ├── DemultiplexedBustardSummary.xml
-    │   ├── Project_G__Grigelioniene_14_01
+    │   ├── Project_T__Durden_14_01
     │   ├── Temp
     │   └── Undetermined_indices
     └── Unaligned_8bp
@@ -96,7 +96,7 @@ def create_demultiplexed_flowcell():
         ├── DemultiplexConfig.xml
         ├── DemultiplexedBustardConfig.xml
         ├── DemultiplexedBustardSummary.xml
-        ├── Project_M__Nister_14_01
+        ├── Project_M__ayhem_14_01
         ├── Temp
         └── Undetermined_indices
     """
@@ -108,6 +108,26 @@ def create_demultiplexed_flowcell():
     sample_name = generate_sample_name()
     run_info_xml_text = generate_RunInfo()
     run_parameters_xml_text = generate_runParameters()
+
+    tmp_dir = tempfile.mkdtemp()
+    run_dir = os.path.join(tmp_dir, run_id)
+    run_info_xml_file = os.path.join(run_dir, "RunInfo.xml")
+    run_parameters_xml_file = os.path.join(run_dir, "runParameters.xml")
+    unaligned_dir = os.path.join(run_dir, "Unaligned")
+    project_dir = os.path.join(unaligned_dir, project_name)
+    sample_dir = os.path.join(project_dir, "Sample_{}".format(sample_name))
+
+    # Created the whole tree, run_dir/unaligned_dir/project_dir/sample_dir
+    os.makedirs(sample_dir)
+
+    with open(run_info_xml_file, 'w') as f:
+        f.writelines(run_info_xml_text)
+    with open (run_parameters_xml_file, 'w') as f:
+        f.writelines(run_parameters_xml_text)
+
+    # Generate sample fastq files
+    # Generate SampleSheet.csv?
+    # Generate Basecall_Stats?
 
 
 def generate_runParameters():
