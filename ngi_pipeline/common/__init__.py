@@ -116,16 +116,22 @@ def setup_analysis_directory_structure(fc_dir, config, projects_to_analyze,
     except RuntimeError as e:
         LOG.error("Error when processing flowcell dir \"{}\": {}".format(fc_dir, e))
         return []
+    # From RunInfo.xml
     fc_date = fc_dir_structure['fc_date']
+    # From RunInfo.xml (name) & runParameters.xml (position)
     fc_name = fc_dir_structure['fc_name']
     fc_run_id = "{}_{}".format(fc_date, fc_name)
+
+    ## This appears to be unneeded, at least for the moment.
+    ##  When would these be required?
+    ##  Where should they be copied to (not the top analysis directory -- inside the project? Why?)
     # Copy the basecall stats directory.
     # This will be causing an issue when multiple directories are present...
     # syncing should be done from archive, preserving the Unaligned* structures
-    LOG.info("Copying basecall stats for run {}".format(fc_dir))
-    _copy_basecall_stats([os.path.join(fc_dir_structure['fc_dir'], d) for d in
-                                        fc_dir_structure['basecall_stats_dir']],
-                                        analysis_top_dir)
+    #LOG.info("Copying basecall stats for run {}".format(fc_dir))
+    #_copy_basecall_stats([os.path.join(fc_dir_structure['fc_dir'], d) for d in
+    #                                    fc_dir_structure['basecall_stats_dir']],
+    #                                    analysis_top_dir)
     if not fc_dir_structure.get('projects'):
         LOG.warn("No projects found in specified flowcell directory \"{}\"".format(fc_dir))
     # Iterate over the projects in the flowcell directory
@@ -249,14 +255,18 @@ def parse_casava_directory(fc_dir):
             fastq_file_pattern = os.path.join(sample_dir,"*.fastq.gz")
             samplesheet_pattern = os.path.join(sample_dir,"*.csv")
             fastq_files = [os.path.basename(file) for file in glob.glob(fastq_file_pattern)]
-            samplesheet = glob.glob(samplesheet_pattern)
-            assert len(samplesheet) == 1, \
-                    "Error: could not unambiguously locate samplesheet in {}".format(sample_dir)
+            ## NOTE that we don't wind up using this SampleSheet for anything so far as I know
+            ## TODO consider removing; however, some analysis engines that
+            ##      we want to include in the future may need them.
+            #samplesheet = glob.glob(samplesheet_pattern)
+            #assert len(samplesheet) == 1, \
+            #        "Error: could not unambiguously locate samplesheet in {}".format(sample_dir)
             sample_name = os.path.basename(sample_dir).replace("Sample_","").replace('__','.')
             project_samples.append({'sample_dir': os.path.basename(sample_dir),
                                     'sample_name': sample_name,
                                     'files': fastq_files,
-                                    'samplesheet': os.path.basename(samplesheet[0])})
+            #                        'samplesheet': os.path.basename(samplesheet[0])})
+                                   })
         project_name = os.path.basename(project_dir).replace("Project_","").replace('__','.')
         projects.append({'data_dir': os.path.relpath(os.path.dirname(project_dir),fc_dir),
                          'project_dir': os.path.basename(project_dir),
@@ -340,7 +350,6 @@ def _merge_samplesheets(samplesheets, merged_samplesheet):
     return merged_samplesheet
 
 
-##  this could also work remotely of course
 def do_rsync(src_files, dst_dir):
     ## TODO I changed this -c because it takes for goddamn ever but I'll set it back once in Production
     #cl = ["rsync", "-car"]
@@ -376,8 +385,8 @@ def parse_lane_from_filename(sample_basename):
     :rtype: tuple
     :raises ValueError: If the ids cannot be determined from the filename (no regex match)
     """
-    ## TODO so it turns out Uppsala doesn't do this project_sample thing with their sample naming which is a little sad for me
-    # Stockholm or Illumina
+    # Stockholm or \
+    # Illumina
     match = re.match(r'(?P<lane>\d)_\d{6}_\w{10}_(?P<project>P\d{3})_(?P<sample>\d{3}).*', sample_basename) or \
             re.match(r'.*_L(?P<lane>\d{3}).*', sample_basename)
             #re.match(r'(?P<project>P\d{3})_(?P<sample>\w+)_.*_L(?P<lane>\d{3})', sample_basename)
@@ -387,21 +396,25 @@ def parse_lane_from_filename(sample_basename):
         return match.group('lane')
     else:
         error_msg = ("Error: filename didn't match conventions, "
-                     "couldn't find project id for sample "
+                     "couldn't find lane number for sample "
                      "\"{}\"".format(sample_basename))
         LOG.error(error_msg)
         raise ValueError(error_msg)
 
 
 @memoized
+## TODO change to use new database API
+## TODO How to deal with Uppsala project naming?
 def get_project_data_for_id(project_id, proj_db):
     """Pulls all the data about a project from the StatusDB
     given the project's id (e.g. "P602") and a couchdb view object.
 
     :param str project_id: The project ID
     :param proj_db: The project_db object
+
     :returns: A dict of the project data
     :rtype: dict
+    :raises ValueError: If the project could not be found in the database
     """
     db_view = proj_db.view('project/project_id')
     try:
@@ -418,17 +431,19 @@ def find_fastq_read_pairs(file_list=None, directory=None):
     and returns a dict of {base_name: [ file_read_one, file_read_two ]}
     Filters out files not ending with .fastq[.gz|.gzip|.bz2].
     E.g.
-        1_131129_BH7VPTADXX_P602_101_1.fastq.gz
-        1_131129_BH7VPTADXX_P602_101_2.fastq.gz
+        P567_102_AAAAAA_L001_R1_001.fastq.gz
+        P567_102_AAAAAA_L001_R2_001.fastq.gz
     becomes
-        { "1_131129_BH7VPTADXX_P602_101":
-        [ "1_131129_BH7VPTADXX_P602_101_1.fastq.gz",
-          "1_131129_BH7VPTADXX_P602_101_2.fastq.gz"]}
+        { "P567_102_AAAAAA_L001":
+        [ "P567_102_AAAAAA_L001_R1_001.fastq.gz",
+          "P567_102_AAAAAA_L001_R2_001.fastq.gz" ]}
 
     :param list file_list: A list... of files
-    :param str dir: The directory to search for fastq file pairs.
+    :param str directory: The directory to search for fastq file pairs.
+
     :returns: A dict of file_basename -> [file1, file2]
     :rtype: dict
+    :raises RuntimeError: If neither of file_list or directory are specified
     """
     if not directory or file_list:
         raise RuntimeError("Must specify either a list of files or a directory path (in kw format.")
@@ -470,7 +485,8 @@ def find_fastq_read_pairs(file_list=None, directory=None):
                 file_basename_stripsuffix = suffix_pattern.split(file_basename)[0]
                 matches_dict[file_basename_stripsuffix].append(os.abspath(file_fullname))
             except AttributeError:
-                # ??
+                raise NotImplementedError("You peer now beyond the limits of reality\n"
+                                          "http://10thhouse.org/wp-content/uploads/2014/06/veil.jpg")
                 continue
     return dict(matches_dict)
 
