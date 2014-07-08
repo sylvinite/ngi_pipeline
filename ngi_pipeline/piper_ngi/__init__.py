@@ -16,12 +16,12 @@ import shutil
 import subprocess
 import time
 
-from ngi_pipeline.common import parse_lane_from_filename, find_fastq_read_pairs, \
+from . import workflows
+from ..common import parse_lane_from_filename, find_fastq_read_pairs, \
                                 get_flowcell_id_from_dirtree
-from ngi_pipeline.log import minimal_logger
-from ngi_pipeline.piper_ngi import workflows
-from ngi_pipeline.utils import execute_command_line, load_modules
-from ngi_pipeline.utils.config import load_xml_config, load_yaml_config
+from ..log import minimal_logger
+from ..utils import execute_command_line, load_modules
+from ..utils.config import load_xml_config, load_yaml_config
 
 LOG = minimal_logger(__name__)
 

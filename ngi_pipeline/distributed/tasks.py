@@ -3,7 +3,7 @@
 
 from celery.task import task
 
-from ngi_pipeline import common
+from .. import common
 
 @task(ignore_results=True, queue="ngi_pipeline", name="launch_main_analysis")
 def launch_main_analysis(run_dir):

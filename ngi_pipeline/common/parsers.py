@@ -3,11 +3,11 @@
 import collections
 import os
 import re
-## TODO do we need these xml thingers? what about xmltodict instead?
+
 import xml.etree.cElementTree as ET
 import xml.parsers.expat
 
-from ngi_pipeline.log import minimal_logger
+from ..log import minimal_logger
 LOG = minimal_logger(__name__)
 
 class MetricsParser():

@@ -4,8 +4,6 @@ This script organizes demultiplexed (CASAVA 1.8) sequencing data into the releva
 project/sample/flowcell directory structure.
 """
 
-## For testing, use the top directory /pica/v3/a2010002/archive/131030_SN7001362_0103_BC2PUYACXX
-
 from __future__ import print_function
 
 import argparse
@@ -20,10 +18,10 @@ import sys
 import unittest
 import yaml
 
-from ngi_pipeline.common.parsers import FlowcellRunMetricsParser
-from ngi_pipeline.log import minimal_logger
-from ngi_pipeline.utils import memoized, safe_makedir
-from ngi_pipeline.utils.config import load_yaml_config
+from .parsers import FlowcellRunMetricsParser
+from ..log import minimal_logger
+from ..utils import memoized, safe_makedir
+from ..utils.config import load_yaml_config
 
 LOG = minimal_logger(__name__)
 
