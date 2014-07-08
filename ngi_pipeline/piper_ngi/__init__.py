@@ -68,6 +68,7 @@ def symlink_convert_file_names(project):
                 except AttributeError:
                     # No match
                     LOG.error("Filename \"{}\" did not match template! Blame {}".format(fastq, "Mario"))
+                    continue
                 args_dict.update({"date_fcid": fcid.name})
                 scilifelab_named_file = "{lane_num}_{date_fcid}_{sample_name}_{read_num}.{ext}".format(**args_dict)
                 fcid_path =  os.path.join(project.base_path,
