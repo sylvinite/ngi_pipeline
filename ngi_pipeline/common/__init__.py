@@ -490,16 +490,17 @@ def find_fastq_read_pairs(file_list=None, directory=None):
 
 
 @memoized
+# This is a bit of a misnomer
 def get_flowcell_id_from_dirtree(path):
     """Given the path to a file, tries to work out the flowcell ID.
 
     Project directory structure is generally either:
-        <date>_<flowcell>/Sample_<project-sample-id>/
+        <run_id>/Sample_<project-sample-id>/
          131018_D00118_0121_BC2NANACXX/Sample_NA10860_NR/
         (Uppsala format)
     or:
         <project>/<project-sample-id>/<date>_<flowcell>/
-        G.Spong_13_03/P673_101/140220_AH8AMJADXX/
+        J.Doe_14_03/P673_101/140220_AH8AMJADXX/
         (Sthlm format)
     :param str path: The path to the file
     :returns: The flowcell ID
@@ -584,26 +585,3 @@ class NGIFCID(NGIObject):
         else:
             raise TypeError("Fastq files must be passed as a list or a string: " \
                             "got \"{}\"".format(fastq))
-
-
-if __name__=="__main__":
-    parser = argparse.ArgumentParser("Sort and transfer a demultiplxed illumina run.")
-    parser.add_argument("--config",
-            help="The path to the configuration file.")
-    parser.add_argument("--project", action="append",
-            help="Restrict processing to these projects. "\
-                 "Use flag multiple times for multiple projects.")
-    parser.add_argument("--sample", action="append",
-            help="Restrict processing to these samples. "\
-                 "Use flag multiple times for multiple projects.")
-    parser.add_argument("demux_fcid_dir", nargs='*', action="store",
-            help="The path to the Illumina demultiplexed fc directories to process. "\
-                 "If not specified, new data will be checked for in the "\
-                 "\"INBOX\" directory specifiedin the configuration file.")
-
-    args_ns = parser.parse_args()
-    main(config_file_path=args_ns.config,
-         demux_fcid_dirs=args_ns.demux_fcid_dir,
-         restrict_to_projects=args_ns.project,
-         restrict_to_samples=args_ns.sample)
-
