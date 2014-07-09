@@ -26,7 +26,7 @@ from ..utils.config import load_yaml_config
 LOG = minimal_logger(__name__)
 
 
-def main(demux_fcid_dirs, config_file_path=None, restrict_to_projects=None, restrict_to_samples=None):
+def process_demultiplexed_flowcells(demux_fcid_dirs, config_file_path=None, restrict_to_projects=None, restrict_to_samples=None):
     """
     The main launcher method.
 

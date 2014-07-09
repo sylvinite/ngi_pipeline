@@ -14,4 +14,4 @@ def launch_main_analysis(run_dir):
 
     :param: run_dir: Run directory to analyze
     """
-    common.main([run_dir])
+    common.process_demultiplexed_flowcells([run_dir])
