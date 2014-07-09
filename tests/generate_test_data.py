@@ -1,3 +1,4 @@
+import datetime
 import os
 import random
 import re
@@ -14,16 +15,23 @@ def generate_project_name():
             random.randint(12,14),
             random.randint(11,99))
 
-def generate_sample_name(project_id=random.randint(100,999)):
+def generate_sample_name(project_id=None):
     """Generate a sample name in the form P123_456
     """
+    if not project_id: project_id = random.randint(100,999)
     return "P{}_{}".format(project_id, random.randint(101,199))
 
 
 def generate_flowcell_id():
     """Generate a flowcell barcode in the format ABC123CXX
     """
-    return "{}CXX".format("".join([random.choice(string.ascii_uppercase, string.digits) for i in xrange(6)]))
+    return "{}CXX".format("".join([random.choice(string.ascii_uppercase + string.digits) for i in xrange(6)]))
+
+
+def generate_instrument_id(prefix="SN"):
+    """Generate an instrument ID in the format SN#### or so
+    """
+    return "{}{}".format(prefix, str(random.randint(101,9999)))
 
 
 def generate_barcode(length=6):
@@ -41,22 +49,29 @@ def generate_nucleotide_sequence(seq_length, alphabet="AGCT"):
     return "".join([ random.choice(alphabet) for i in xrange(seq_length) ])
 
 
-def generate_sample_file_name(sample_name=generate_sample_name(),
-                              barcode=generate_barcode(),
-                              lane=random.randint(1,8),
-                              read_num=1):
+def generate_sample_file_name(sample_name=None, barcode=None, lane=None, read_num=1):
     """Generate a CASAVA 1.8+-style sample file name in the format
     P567_102_AAAAAA_L001_R1_001.fastq.gz
     """
-    return "{project_sample}_{barcode}_{lane}_R{read_num}_001.fastq.gz".format(**locals())
+    if not sample_name: sample_name = generate_sample_name()
+    if not barcode: barcode = generate_barcode()
+    if not lane: lane = random.randint(1,8)
+    return "{sample_name}_{barcode}_{lane}_R{read_num}_001.fastq.gz".format(**locals())
 
+def generate_paired_sample_file_names(sample_name=None, barcode=None, lane=None):
+    if not sample_name: sample_name = generate_sample_name()
+    if not barcode: barcode = generate_barcode()
+    if not lane: lane = random.randint(1,8)
+    return [ generate_sample_file_name(sample_name, barcode, lane, read_num) for
+             read_num in (1,2) ]
 
-def generate_run_id(date=datetime.date.today().strformat("%y%m%d"),
-                    instrument_id=generate_instrument_id(),
-                    fcid=generate_flowcell_id()):
+def generate_run_id(date=None, instrument_id=None, fcid=None):
     """Generate a run identifier in the format:
         <YYMMDD>_<instrument_id>_0<nnn>_<FCID>
     """
+    if not date: date = datetime.date.today().strftime("%y%m%d")
+    if not instrument_id: instrument_id = generate_instrument_id()
+    if not fcid: fcid = generate_flowcell_id()
     return "{date}_{instrument_id}_0{number}_{A_B}{fcid}".format(date=date,
                                                               instrument_id=instrument_id,
                                                               number=random.randint(101,999),
@@ -64,83 +79,69 @@ def generate_run_id(date=datetime.date.today().strformat("%y%m%d"),
                                                               fcid=fcid)
 
 
-def generate_identifier(date=datetime.date.today().strftime("%y%m%d"),
-                        flowcell_barcode=generate_flowcell_barcode()):
+def generate_identifier(date=None, flowcell_barcode=None):
     """Generate a date_barcode identifier in the format 140704_ABC123CXX
     """
+    if not date: date = datetime.date.today().strftime("%y%m%d")
+    if not flowcell_barcode: flowcell_barcode = generate_flowcell_id()
     return "{}_{}".format(date, flowcell_barcode)
 
 
 def create_demultiplexed_flowcell():
     """
-    140528_D00415_0049_BC423WACXX/
-    ├── C423WACXX.csv
-    ├── RTAComplete.txt
-    ├── RunInfo.xml
-    ├── runParameters.xml
-    ├── SampleSheet_0bp.csv
-    ├── SampleSheet_8bp.csv
-    ├── second_read_processing_started.txt
-    ├── Unaligned
-    │   └── Basecall_Stats_C423WACXX
-    ├── Unaligned_0bp
-    │   ├── Basecall_Stats_C423WACXX
-    │   ├── DemultiplexConfig.xml
-    │   ├── DemultiplexedBustardConfig.xml
-    │   ├── DemultiplexedBustardSummary.xml
-    │   ├── Project_T__Durden_14_01
-    │   ├── Temp
-    │   └── Undetermined_indices
-    └── Unaligned_8bp
-        ├── Basecall_Stats_C423WACXX
-        ├── DemultiplexConfig.xml
-        ├── DemultiplexedBustardConfig.xml
-        ├── DemultiplexedBustardSummary.xml
-        ├── Project_M__ayhem_14_01
-        ├── Temp
-        └── Undetermined_indices
+    140704_D00123_0321_BC423WACXX/
+    |--- RunInfo.xml
+    |--- runParameters.xml
+    |--- SampleSheet.csv
+    |--- Unaligned
+         |--- Project_J__Doe_14_01
+              |--- Sample_P123_456
+                   |--- P123_456_AGCTGC_1_R1_001.fastq.gz
+                   |--- P123_456_AGCTGC_1_R2_001.fastq.gz
     """
-    # Need at least: RunInfo.xml, runParameters.xml, Unaligned*, SampleSheet.csv?
-    #   Unaligned/Basecall_Stats_*, Undetermined_Indices?,
-    # Project/Sample/[fq1, fq2, ..., fqn]
     run_id = generate_run_id()
     project_name = generate_project_name()
     sample_name = generate_sample_name()
     run_info_xml_text = generate_RunInfo()
     run_parameters_xml_text = generate_runParameters()
-
     tmp_dir = tempfile.mkdtemp()
     run_dir = os.path.join(tmp_dir, run_id)
+    run_samplesheet = os.path.join(run_dir, "SampleSheet.csv")
     run_info_xml_file = os.path.join(run_dir, "RunInfo.xml")
     run_parameters_xml_file = os.path.join(run_dir, "runParameters.xml")
     unaligned_dir = os.path.join(run_dir, "Unaligned")
     project_dir = os.path.join(unaligned_dir, project_name)
     sample_dir = os.path.join(project_dir, "Sample_{}".format(sample_name))
-
+    sample_samplesheet = os.path.join(sample_dir, "SampleSheet.csv")
     # Created the whole tree, run_dir/unaligned_dir/project_dir/sample_dir
     os.makedirs(sample_dir)
-
+    generate_sample_file_name(sample_name)
+    # Touch files
+    open(run_samplesheet, 'w').close()
+    open(sample_samplesheet, 'w').close()
+    for fq in generate_paired_sample_file_names(sample_name = sample_name):
+        fq_file_path = os.path.join(sample_dir, fq)
+        open(fq_file_path, 'w').close()
+    # Write files
     with open(run_info_xml_file, 'w') as f:
         f.writelines(run_info_xml_text)
     with open (run_parameters_xml_file, 'w') as f:
         f.writelines(run_parameters_xml_text)
-
-    # Generate sample fastq files
-    # Generate SampleSheet.csv?
     # Generate Basecall_Stats?
+    return run_dir
 
 
 def generate_runParameters():
     """Generate a dummy runParameters.xml file.
     This contains only the "FCPosition" parameter."
     """
-    return(
-    '<?xml version="1.0"?>'
-    '<RunParameters xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">'
-    '  <Setup>'
-    '    <FCPosition>{}</FCPosition>'
-    '  </Setup>'
-    '</RunParameters>').format(random.choice("AB"))
+    return (
+    '<?xml version="1.0"?>\n'
+    '<RunParameters xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">\n'
+    '  <Setup>\n'
+    '    <FCPosition>{}</FCPosition>\n'
+    '  </Setup>\n'
+    '</RunParameters>\n').format(random.choice("AB"))
 
 
 def generate_RunInfo(run_id=None, fcid=generate_flowcell_id(),
@@ -164,14 +165,14 @@ def generate_RunInfo(run_id=None, fcid=generate_flowcell_id(),
     # I suppose it would be better here to make some kind of dict->xml function
     # So you feel free to go ahead and write that for me
     return (
-    '<?xml version="1.0">'
-    '<RunInfo xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" Version="2">'
-    '  <Run Id="{run_id}" Number="01">'
-    '    <Flowcell>{fcid}</Flowcell>'
-    '    <Instrument>{instrument_id}</Instrument>'
-    '    <Date>{date}</Date>'
-    '  </Run>'
-    '</RunInfo>').format(run_id=run_id, fcid=fcid, instrument_id=instrument_id,
+    '<?xml version="1.0">\n'
+    '<RunInfo xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" Version="2">\n'
+    '  <Run Id="{run_id}" Number="01">\n'
+    '    <Flowcell>{fcid}</Flowcell>\n'
+    '    <Instrument>{instrument_id}</Instrument>\n'
+    '    <Date>{date}</Date>\n'
+    '  </Run>\n'
+    '</RunInfo>\n').format(run_id=run_id, fcid=fcid, instrument_id=instrument_id,
                          date=date)
 
 
