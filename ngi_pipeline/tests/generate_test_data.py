@@ -59,7 +59,7 @@ def generate_sample_file_name(sample_name=None, barcode=None, lane=None, read_nu
     if not sample_name: sample_name = generate_sample_name()
     if not barcode: barcode = generate_barcode()
     if not lane: lane = random.randint(1,8)
-    return "{sample_name}_{barcode}_{lane}_R{read_num}_001.fastq.gz".format(**locals())
+    return "{sample_name}_{barcode}_L00{lane}_R{read_num}_001.fastq.gz".format(**locals())
 
 
 def generate_paired_sample_file_names(sample_name=None, barcode=None, lane=None):
