@@ -1,8 +1,4 @@
 ## TODO this is a lot of code I haven't read and some of which can doubtless be removed and some of which may be missing things
-
-
-LOG = minimal_logger(__name__)
-
 import collections
 import os
 import re
@@ -10,7 +6,7 @@ import xml.etree.cElementTree as ET
 import xml.parsers.expat
 
 from ..log import minimal_logger
-from ..utils import memoized
+from .classes import memoized
 
 LOG = minimal_logger(__name__)
 

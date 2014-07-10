@@ -134,7 +134,7 @@ def setup_analysis_directory_structure(fc_dir, config, projects_to_analyze,
         if restrict_to_projects and project_name not in restrict_to_projects:
             LOG.debug("Skipping project {}".format(project_name))
             continue
-        LOG.info("Setting up project {}".format(project.get("project_dir")))
+        LOG.info("Setting up project {}".format(project.get("project_name")))
         # Create a project directory if it doesn't already exist
         project_dir = os.path.join(analysis_top_dir, project_name)
         if not os.path.exists(project_dir): safe_makedir(project_dir, 0770)
