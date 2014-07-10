@@ -539,8 +539,8 @@ def find_fastq_read_pairs(file_list=None, directory=None):
         P567_102_AAAAAA_L001_R2_001.fastq.gz
     becomes
         { "P567_102_AAAAAA_L001":
-        [ "P567_102_AAAAAA_L001_R1_001.fastq.gz",
-          "P567_102_AAAAAA_L001_R2_001.fastq.gz" ]}
+           ["P567_102_AAAAAA_L001_R1_001.fastq.gz",
+            "P567_102_AAAAAA_L001_R2_001.fastq.gz"] }
 
     :param list file_list: A list... of files
     :param str directory: The directory to search for fastq file pairs.
@@ -549,8 +549,9 @@ def find_fastq_read_pairs(file_list=None, directory=None):
     :rtype: dict
     :raises RuntimeError: If neither of file_list or directory are specified
     """
-    if not directory or file_list:
-        raise RuntimeError("Must specify either a list of files or a directory path (in kw format.")
+    if not (directory or file_list):
+        raise RuntimeError("Must specify either a list of files or a directory "
+                           "path (use keyword format).")
     if file_list and type(file_list) is not list:
         LOG.warn("file_list parameter passed is not a list; trying as a directory.")
         directory = file_list
@@ -580,18 +581,13 @@ def find_fastq_read_pairs(file_list=None, directory=None):
         try:
             # See if there's a pair!
             pair_base = file_format_pattern.match(file_basename).groups()[0]
-            matches_dict[pair_base].append(os.path.abspath(file_pathname))
+            matches_dict[pair_base].append(file_pathname)
         except AttributeError:
             LOG.warn("Warning: file doesn't match expected file format, "
                       "cannot be paired: \"{}\"".format(file_fullname))
-            try:
-                # File could not be paired, but be the bigger person and include it in the group anyway
-                file_basename_stripsuffix = suffix_pattern.split(file_basename)[0]
-                matches_dict[file_basename_stripsuffix].append(os.abspath(file_fullname))
-            except AttributeError:
-                raise NotImplementedError("You peer now beyond the limits of reality\n"
-                                          "http://10thhouse.org/wp-content/uploads/2014/06/veil.jpg")
-                continue
+            # File could not be paired, but be the bigger person and include it in the group anyway
+            file_basename_stripsuffix = suffix_pattern.split(file_basename)[0]
+            matches_dict[file_basename_stripsuffix].append(os.abspath(file_fullname))
     return dict(matches_dict)
 
 
