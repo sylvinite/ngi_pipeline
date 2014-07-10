@@ -1,5 +1,6 @@
 ## TODO this is a lot of code I haven't read and some of which can doubtless be removed and some of which may be missing things
 import collections
+import glob
 import os
 import re
 import xml.etree.cElementTree as ET
@@ -529,7 +530,29 @@ class FlowcellRunMetricsParser(RunMetricsParser):
         return metrics
 
 
-def find_fastq_read_pairs(file_list=None, directory=None):
+def find_fastq_read_pairs_from_dir(directory):
+    """
+    Given the path to a directory, finds read pairs (based on _R1_/_R2_ file naming)
+    and returns a dict of {base_name: [ file_read_one, file_read_two ]}
+    Filters out files not ending with .fastq[.gz|.gzip|.bz2].
+
+    E.g. a path to a directory containing:
+        P567_102_AAAAAA_L001_R1_001.fastq.gz
+        P567_102_AAAAAA_L001_R2_001.fastq.gz
+    becomes
+        { "P567_102_AAAAAA_L001":
+           ["P567_102_AAAAAA_L001_R1_001.fastq.gz",
+            "P567_102_AAAAAA_L001_R2_001.fastq.gz"] }
+
+    :param str directory: The directory to search for fastq file pairs.
+    :returns: A dict of file_basename -> [file1, file2]
+    :rtype: dict
+    """
+    file_list = glob.glob(os.path.join(directory, "*"))
+    return find_fastq_read_pairs(file_list)
+
+
+def find_fastq_read_pairs(file_list):
     """
     Given a list of file names, finds read pairs (based on _R1_/_R2_ file naming)
     and returns a dict of {base_name: [ file_read_one, file_read_two ]}
@@ -542,29 +565,17 @@ def find_fastq_read_pairs(file_list=None, directory=None):
            ["P567_102_AAAAAA_L001_R1_001.fastq.gz",
             "P567_102_AAAAAA_L001_R2_001.fastq.gz"] }
 
-    :param list file_list: A list... of files
-    :param str directory: The directory to search for fastq file pairs.
+    :param list file_list: A list of files in no particular order
 
     :returns: A dict of file_basename -> [file1, file2]
     :rtype: dict
-    :raises RuntimeError: If neither of file_list or directory are specified
     """
-    if not (directory or file_list):
-        raise RuntimeError("Must specify either a list of files or a directory "
-                           "path (use keyword format).")
-    if file_list and type(file_list) is not list:
-        LOG.warn("file_list parameter passed is not a list; trying as a directory.")
-        directory = file_list
-        file_list = None
-    ## TODO What exceptions can be thrown here? Permissions, dir not accessible, ...
-    if directory:
-        file_list = glob.glob(os.path.join(directory, "*"))
     # We only want fastq files
-    if file_list:
-        pt = re.compile(".*\.(fastq|fq)(\.gz|\.gzip|\.bz2)?$")
-        file_list = filter(pt.match, file_list)
-    else:
+    pt = re.compile(".*\.(fastq|fq)(\.gz|\.gzip|\.bz2)?$")
+    file_list = filter(pt.match, file_list)
+    if not file_list:
         # No files found
+        LOG.warn("No fastq files found.")
         return {}
     # --> This is the SciLifeLab-Sthlm-specific format (obsolete as of August 1st, hopefully)
     #     Format: <lane>_<date>_<flowcell>_<project-sample>_<read>.fastq.gz
