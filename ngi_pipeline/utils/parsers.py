@@ -619,12 +619,12 @@ def parse_lane_from_filename(sample_basename):
     # Stockholm or \
     # Illumina
     match = re.match(r'(?P<lane>\d)_\d{6}_\w{10}_(?P<project>P\d{3})_(?P<sample>\d{3}).*', sample_basename) or \
-            re.match(r'.*_L(?P<lane>\d{3}).*', sample_basename)
+            re.match(r'.*_L\d{2}(?P<lane>\d{1}).*', sample_basename)
             #re.match(r'(?P<project>P\d{3})_(?P<sample>\w+)_.*_L(?P<lane>\d{3})', sample_basename)
 
     if match:
         #return match.group('project'), match.group('sample'), match.group('lane')
-        return match.group('lane')
+        return int(match.group('lane'))
     else:
         error_msg = ("Error: filename didn't match conventions, "
                      "couldn't find lane number for sample "
