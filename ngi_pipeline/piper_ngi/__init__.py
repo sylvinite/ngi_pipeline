@@ -17,11 +17,11 @@ import subprocess
 import time
 
 from . import workflows
-from ..common import parse_lane_from_filename, find_fastq_read_pairs, \
-                                get_flowcell_id_from_dirtree
 from ..log import minimal_logger
 from ..utils import execute_command_line, load_modules
 from ..utils.config import load_xml_config, load_yaml_config
+from ..utils.parsers import parse_lane_from_filename, find_fastq_read_pairs, \
+                                get_flowcell_id_from_dirtree
 
 LOG = minimal_logger(__name__)
 

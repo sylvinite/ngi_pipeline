@@ -1,13 +1,17 @@
 ## TODO this is a lot of code I haven't read and some of which can doubtless be removed and some of which may be missing things
 
+
+LOG = minimal_logger(__name__)
+
 import collections
 import os
 import re
-
 import xml.etree.cElementTree as ET
 import xml.parsers.expat
 
 from ..log import minimal_logger
+from ..utils import memoized
+
 LOG = minimal_logger(__name__)
 
 class MetricsParser():
@@ -527,3 +531,138 @@ class FlowcellRunMetricsParser(RunMetricsParser):
 
         ## Set data
         return metrics
+
+
+def find_fastq_read_pairs(file_list=None, directory=None):
+    """
+    Given a list of file names, finds read pairs (based on _R1_/_R2_ file naming)
+    and returns a dict of {base_name: [ file_read_one, file_read_two ]}
+    Filters out files not ending with .fastq[.gz|.gzip|.bz2].
+    E.g.
+        P567_102_AAAAAA_L001_R1_001.fastq.gz
+        P567_102_AAAAAA_L001_R2_001.fastq.gz
+    becomes
+        { "P567_102_AAAAAA_L001":
+        [ "P567_102_AAAAAA_L001_R1_001.fastq.gz",
+          "P567_102_AAAAAA_L001_R2_001.fastq.gz" ]}
+
+    :param list file_list: A list... of files
+    :param str directory: The directory to search for fastq file pairs.
+
+    :returns: A dict of file_basename -> [file1, file2]
+    :rtype: dict
+    :raises RuntimeError: If neither of file_list or directory are specified
+    """
+    if not directory or file_list:
+        raise RuntimeError("Must specify either a list of files or a directory path (in kw format.")
+    if file_list and type(file_list) is not list:
+        LOG.warn("file_list parameter passed is not a list; trying as a directory.")
+        directory = file_list
+        file_list = None
+    ## TODO What exceptions can be thrown here? Permissions, dir not accessible, ...
+    if directory:
+        file_list = glob.glob(os.path.join(directory, "*"))
+    # We only want fastq files
+    if file_list:
+        pt = re.compile(".*\.(fastq|fq)(\.gz|\.gzip|\.bz2)?$")
+        file_list = filter(pt.match, file_list)
+    else:
+        # No files found
+        return {}
+    # --> This is the SciLifeLab-Sthlm-specific format (obsolete as of August 1st, hopefully)
+    #     Format: <lane>_<date>_<flowcell>_<project-sample>_<read>.fastq.gz
+    #     Example: 1_140220_AH8AMJADXX_P673_101_1.fastq.gz
+    # --> This is the standard Illumina/Uppsala format (and Sthlm -> August 1st 2014)
+    #     Format: <sample_name>_<index>_<lane>_<read>_<group>.fastq.gz
+    #     Example: NA10860_NR_TAAGGC_L005_R1_001.fastq.gz
+    suffix_pattern = re.compile(r'(.*)fastq')
+    # Cut off at the read group
+    file_format_pattern = re.compile(r'(.*)_(?:R\d|\d\.).*')
+    matches_dict = collections.defaultdict(list)
+    for file_pathname in file_list:
+        file_basename = os.path.basename(file_pathname)
+        try:
+            # See if there's a pair!
+            pair_base = file_format_pattern.match(file_basename).groups()[0]
+            matches_dict[pair_base].append(os.path.abspath(file_pathname))
+        except AttributeError:
+            LOG.warn("Warning: file doesn't match expected file format, "
+                      "cannot be paired: \"{}\"".format(file_fullname))
+            try:
+                # File could not be paired, but be the bigger person and include it in the group anyway
+                file_basename_stripsuffix = suffix_pattern.split(file_basename)[0]
+                matches_dict[file_basename_stripsuffix].append(os.abspath(file_fullname))
+            except AttributeError:
+                raise NotImplementedError("You peer now beyond the limits of reality\n"
+                                          "http://10thhouse.org/wp-content/uploads/2014/06/veil.jpg")
+                continue
+    return dict(matches_dict)
+
+
+def parse_lane_from_filename(sample_basename):
+    """Project id, sample id, and lane are pulled from the standard filename format,
+     which is:
+       <lane_num>_<date>_<fcid>_<project>_<sample_num>_<read>.fastq[.gz]
+       e.g.
+       1_140220_AH8AMJADXX_P673_101_1.fastq.gz
+       (SciLifeLab Sthlm format)
+    or
+       <sample-name>_<index>_<lane>_<read>_<group>.fastq.gz
+       e.g.
+       P567_102_AAAAAA_L001_R1_001.fastq.gz
+       (Standard Illumina format)
+
+    returns a tuple of (project_id, sample_id, lane) or raises a ValueError if there is no match
+    (which shouldn't generally happen and probably indicates a larger issue).
+
+    :param str sample_basename: The name of the file from which to pull the project id
+    :returns: (project_id, sample_id)
+    :rtype: tuple
+    :raises ValueError: If the ids cannot be determined from the filename (no regex match)
+    """
+    # Stockholm or \
+    # Illumina
+    match = re.match(r'(?P<lane>\d)_\d{6}_\w{10}_(?P<project>P\d{3})_(?P<sample>\d{3}).*', sample_basename) or \
+            re.match(r'.*_L(?P<lane>\d{3}).*', sample_basename)
+            #re.match(r'(?P<project>P\d{3})_(?P<sample>\w+)_.*_L(?P<lane>\d{3})', sample_basename)
+
+    if match:
+        #return match.group('project'), match.group('sample'), match.group('lane')
+        return match.group('lane')
+    else:
+        error_msg = ("Error: filename didn't match conventions, "
+                     "couldn't find lane number for sample "
+                     "\"{}\"".format(sample_basename))
+        LOG.error(error_msg)
+        raise ValueError(error_msg)
+
+
+@memoized
+def get_flowcell_id_from_dirtree(path):
+    """Given the path to a file, tries to work out the flowcell ID.
+
+    Project directory structure is generally either:
+        <run_id>/Sample_<project-sample-id>/
+         131018_D00118_0121_BC2NANACXX/Sample_NA10860_NR/
+        (Uppsala format)
+    or:
+        <project>/<project-sample-id>/<date>_<flowcell>/
+        J.Doe_14_03/P673_101/140220_AH8AMJADXX/
+        (Sthlm format)
+    :param str path: The path to the file
+    :returns: The flowcell ID
+    :rtype: str
+    :raises ValueError: If the flowcell ID cannot be determined
+    """
+    flowcell_pattern = re.compile(r'\d{4,6}_(?P<fcid>[A-Z0-9]{10})')
+    try:
+        # SciLifeLab Sthlm tree format (3-dir)
+        path, dirname = os.path.split(path)
+        return flowcell_pattern.match(dirname).groups()[0]
+    except (IndexError, AttributeError):
+        try:
+            # SciLifeLab Uppsala tree format (2-dir)
+            _, dirname = os.path.split(path)
+            return flowcell_pattern.match(dirname).groups()[0]
+        except (IndexError, AttributeError):
+            raise ValueError("Could not determine flowcell ID from directory path.")

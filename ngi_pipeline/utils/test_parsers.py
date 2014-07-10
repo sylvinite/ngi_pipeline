@@ -2,12 +2,9 @@ import datetime
 import tempfile
 import unittest
 
-import tests
-#import tests.generate_test_data as gtd
-#from ngi_pipeline import common
-from ngi_pipeline.common import get_flowcell_id_from_dirtree
+from .parsers import get_flowcell_id_from_dirtree
+from ..tests import generate_test_data as gtd
 
-# Does this need to be a class? What are the advantages? RTD
 class TestCommon(unittest.TestCase):
 
     def test_get_flowcell_id_from_dirtree(self):
@@ -22,8 +19,6 @@ class TestCommon(unittest.TestCase):
                 run_id = run_id,
                 sample_name = gtd.generate_sample_name())
         # Test Sthlm format
-        assertEqual(ngi_pipeline.common.get_flowcell_id_from_dirtree(sthlm_project_path),
-                    "{}_{}".format(date, flowcell_id))
+        self.assertEqual(get_flowcell_id_from_dirtree(sthlm_project_path), flowcell_id)
         # Test Uppsala format
-        assertEqual(ngi_pipeline.common.get_flowcell_id_from_dirtree(uppsala_project_path),
-                    "{}_{}".format(date, flowcell_id))
+        self.assertEqual(get_flowcell_id_from_dirtree(uppsala_project_path), flowcell_id)
