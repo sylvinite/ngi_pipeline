@@ -6,8 +6,7 @@ import logging
 import sys
 
 from logbook.queues import RedisHandler
-#from ngi_pipeline.utils import config as cl
-from ngi_pipeline.utils.config import load_yaml_config
+from ..utils.config import load_yaml_config
 
 def minimal_logger(namespace, config_path=None, extra_fields=None, debug=False):
     """Make and return a minimal console logger.
