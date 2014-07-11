@@ -18,6 +18,7 @@ import time
 
 from . import workflows
 from ..log import minimal_logger
+from ..utils.filesystem import safe_makedir
 from ..utils import execute_command_line, load_modules
 from ..utils.config import load_xml_config, load_yaml_config
 from ..utils.parsers import parse_lane_from_filename, find_fastq_read_pairs, find_fastq_read_pairs_from_dir, \
@@ -61,10 +62,15 @@ def symlink_convert_file_names(project):
     """Converts standard Illumina (and Uppsala) file-naming format to the
     Stockholm format; required atm so sthlm2UUSNP can switch them back.
     """
+    stockolm_dirname = "{}_sthl".format(project.dirname)
+    safe_makedir(os.path.join(project.base_path , stockolm_dirname))
+
     for sample in project:
+        safe_makedir(os.path.join(project.base_path , stockolm_dirname, sample.dirname))
         for fcid in sample:
+            safe_makedir(os.path.join(project.base_path , stockolm_dirname, sample.dirname, fcid.dirname))
             for fastq in fcid:
-                m = re.match(r'(?P<sample_name>\w+)_(?P<index>[\w-]+)_L\d{2}(?P<lane_num>\d)_(?P<read_num>R\d)_.*(?P<ext>fastq.*)', fastq)
+                m = re.match(r'(?P<sample_name>\w+)_(?P<index>[\w-]+)_L\d{2}(?P<lane_num>\d)_R(?P<read_num>\d)_.*(?P<ext>fastq.*)', fastq)
                 try:
                     args_dict = m.groupdict()
                 except AttributeError:
@@ -73,12 +79,17 @@ def symlink_convert_file_names(project):
                     continue
                 args_dict.update({"date_fcid": fcid.name})
                 scilifelab_named_file = "{lane_num}_{date_fcid}_{sample_name}_{read_num}.{ext}".format(**args_dict)
-                fcid_path =  os.path.join(project.base_path,
+                fcid_src_path =  os.path.join(project.base_path,
                                          project.dirname,
                                          sample.dirname,
                                          fcid.dirname,)
-                src_fastq = os.path.join(fcid_path, fastq)
-                dst_fastq = os.path.join(fcid_path, scilifelab_named_file)
+                fcid_dst_path =  os.path.join(project.base_path,
+                                         stockolm_dirname,
+                                         sample.dirname,
+                                         fcid.dirname,)
+                         
+                src_fastq = os.path.join(fcid_src_path, fastq)
+                dst_fastq = os.path.join(fcid_dst_path, scilifelab_named_file)
                 try:
                     os.symlink(src_fastq, dst_fastq)
                 except OSError as e:
@@ -86,6 +97,8 @@ def symlink_convert_file_names(project):
                         pass
                     else:
                         raise
+    project.dirname = stockolm_dirname
+    project.name = stockolm_dirname
 
 def convert_sthlm_to_uppsala(project):
     """Convert projects from Stockholm style (three-level) to Uppsala style
@@ -119,14 +132,17 @@ def convert_sthlm_to_uppsala(project):
         report_src_file = os.path.join(project.base_path, project.dirname, "report.{}".format(ext))
         if os.path.isfile(report_src_file):
             report_dst_file = os.path.join(project.base_path, uppsala_dirname, "report.{}".format(ext))
-    try:
-        shutil.copy(report_src_file, report_dst_file)
-    except NameError:
-        error_msg = ("No report.tsv or report.xml file found for project {}; "
-                     "Piper processing will fail!".format(project))
-        LOG.error(error_msg)
-        ## TODO Pick better exception
-        raise Exception(error_msg)
+    # at this point report_dst_file and report_src file are initialised!!!! I hate python scoping rules they suck!!!!
+    #THIS WILL FAIL ALWAYS: report.tsv is in the run folder of UUSNP format, so we need to check each run folder but we cannot do it easily
+    #DESIGN DECISION: if sthlm2UUSNP succeeds it means that the tsv file has been properly created --> no need to this check
+    #try:
+    #    shutil.copy(report_src_file, report_dst_file)
+    #except NameError:
+    #    error_msg = ("No report.tsv or report.xml file found for project {}; "
+    #                 "Piper processing will fail!".format(project))
+    #    LOG.error(error_msg)
+    #    ## TODO Pick better exception
+    #    raise Exception(error_msg)
     project.dirname = uppsala_dirname
     project.name = uppsala_dirname
 
