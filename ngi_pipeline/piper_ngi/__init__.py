@@ -43,10 +43,10 @@ def main(projects_to_analyze, config_file_path):
         try:
             #create_report_tsv(project) ##TODO: this is not needed as sthl_to_uppsala should take care of evrything
             # Temporary until the file format switch
-            import pdb
-            pdb.set_trace()
             convert_sthlm_to_uppsala(project)
             build_setup_xml(project, config)
+            import pdb
+            pdb.set_trace()
             build_piper_cl(project, config)
             launch_piper_jobs(project)
         ## TODO Pick a better Exception
@@ -145,6 +145,8 @@ def convert_sthlm_to_uppsala(project):
     #    raise Exception(error_msg)
     project.dirname = uppsala_dirname
     project.name = uppsala_dirname
+    for sample in project.samples.values():
+        sample.dirname = "Sample_{}".format(sample.dirname) ##QUICKFIX
 
 
 def launch_piper_jobs(project):
@@ -272,7 +274,7 @@ def build_setup_xml(project, config):
         ## TODO fix this, it ain't right. It just ain't right.
         #sample_directory = os.path.join(project_top_level_dir, sample.dirname)
         for fcid in sample:
-            sample_directory = os.path.join(project_top_level_dir, fcid.dirname)
+            sample_directory = os.path.join(project_top_level_dir, fcid.dirname, sample.dirname)
             setupfilecreator_cl += " --input_sample {}".format(sample_directory)
 
     try:
