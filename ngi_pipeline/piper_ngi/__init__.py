@@ -20,8 +20,9 @@ from . import workflows
 from ..log import minimal_logger
 from ..utils import execute_command_line, load_modules
 from ..utils.config import load_xml_config, load_yaml_config
-from ..utils.parsers import parse_lane_from_filename, find_fastq_read_pairs, \
+from ..utils.parsers import parse_lane_from_filename, find_fastq_read_pairs, find_fastq_read_pairs_from_dir, \
                                 get_flowcell_id_from_dirtree
+#TOD: only one between find_fastq_read_pairs and find_fastq_read_pairs_from_dir shoild be included
 
 LOG = minimal_logger(__name__)
 
@@ -39,8 +40,10 @@ def main(projects_to_analyze, config_file_path):
     load_modules(modules_to_load)
     for project in projects_to_analyze:
         try:
-            create_report_tsv(project)
+            #create_report_tsv(project) ##TODO: this is not needed as sthl_to_uppsala should take care of evrything
             # Temporary until the file format switch
+            import pdb
+            pdb.set_trace()
             convert_sthlm_to_uppsala(project)
             build_setup_xml(project, config)
             build_piper_cl(project, config)
@@ -102,9 +105,9 @@ def convert_sthlm_to_uppsala(project):
     input_dir = os.path.join(project.base_path, project.dirname)
     uppsala_dirname = "{}_UUSNP".format(project.dirname)
     output_dir = os.path.join(project.base_path, uppsala_dirname)
-    cl = cl_template.format(input_dir=input_dir, output_dir=output_dir)
+    com = cl_template.format(input_dir=input_dir, output_dir=output_dir)
     try:
-        subprocess.check_call(shlex.split(cl))
+        subprocess.check_call(shlex.split(com))
     except subprocess.CalledProcessError as e:
         # Fails most commonly if a file/directory already exists. Should it?
         error_msg = ("Unable to convert Sthlm->UU format for "
@@ -282,6 +285,7 @@ def create_report_tsv(project):
 
     :param NGIProject project: The project to be converted.
     """
+    
     report_header = ("#SampleName", "Lane", "ReadLibrary", "FlowcellID")
 
     report_paths = []
@@ -296,31 +300,36 @@ def create_report_tsv(project):
         ## TODO decide if we should just overwrite
         ## TODO pick a better Exception
         raise Exception(error_msg)
+        ##Mario here there is a for sure an error I try to fix this
 
-        ## TODO Activate this check/move thing later
-        #if os.path.exists(report_tsv_path):
-        #    path, orig_filename = os.path.split(report_tsv_path)
-        #    orig_basename, orig_ext = os.path.splitext(orig_filename)
-        #    mv_filename = orig_basename + time.strftime("_%Y-%m-%d_%H:%M:%S") + orig_ext
-        #    mv_path = os.path.join(path, mv_filename)
-        #    LOG.info("Moving preexisting report.tsv file to {}".format(mv_path))
-        #    shutil.move(report_tsv_path, mv_path)
-        with open(report_tsv_path, 'w') as rtsv_fh:
-            report_paths.append(report_tsv_path)
-            LOG.info("Writing {}".format(report_tsv_path))
-            print("\t".join(report_header), file=rtsv_fh)
-            for sample in project:
-                for fcid in sample:
-                    fcid_path = os.path.join(project.base_path,
+    ## TODO Activate this check/move thing later
+    #if os.path.exists(report_tsv_path):
+    #    path, orig_filename = os.path.split(report_tsv_path)
+    #    orig_basename, orig_ext = os.path.splitext(orig_filename)
+    #    mv_filename = orig_basename + time.strftime("_%Y-%m-%d_%H:%M:%S") + orig_ext
+    #    mv_path = os.path.join(path, mv_filename)
+    #    LOG.info("Moving preexisting report.tsv file to {}".format(mv_path))
+    #    shutil.move(report_tsv_path, mv_path)
+    with open(report_tsv_path, 'w') as rtsv_fh:
+        report_paths.append(report_tsv_path)
+        LOG.info("Writing {}".format(report_tsv_path))
+        print("\t".join(report_header), file=rtsv_fh)
+        for sample in project:
+            for fcid in sample:
+                fcid_path = os.path.join(project.base_path,
                                              project.dirname,
                                              sample.dirname,
                                              fcid.dirname)
-                    for fq_pairname in find_fastq_read_pairs(directory=fcid_path).keys():
-                        try:
-                            lane = parse_lane_from_filename(fq_pairname)
-                        except ValueError as e:
-                            LOG.error("Could not get lane from filename for file {} -- skipping ({})".format(fq_pairname, e))
-                            ## TODO pick a better Exception
-                            raise Exception(error_msg)
-                        read_library = "<NotImplemented>"
-                        print("\t".join([sample.name, lane, read_library, fcid.name]), file=rtsv_fh)
+                #TODO keeps failing: there is something that breack here
+                for fq_pairname in find_fastq_read_pairs_from_dir(directory=fcid_path).keys():
+                    try:
+                        lane = parse_lane_from_filename(fq_pairname)
+                    except ValueError as e:
+                        LOG.error("Could not get lane from filename for file {} -- skipping ({})".format(fq_pairname, e))
+                        ## TODO pick a better Exception
+                        raise Exception(error_msg)
+                    read_library = "<NotImplemented>"
+                    print("\t".join([sample.name, lane, read_library, fcid.name]), file=rtsv_fh)
+
+
+
