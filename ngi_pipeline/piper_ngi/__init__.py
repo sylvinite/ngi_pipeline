@@ -17,11 +17,11 @@ import subprocess
 import time
 
 from . import workflows
-from ..common import parse_lane_from_filename, find_fastq_read_pairs, \
-                                get_flowcell_id_from_dirtree
 from ..log import minimal_logger
 from ..utils import execute_command_line, load_modules
 from ..utils.config import load_xml_config, load_yaml_config
+from ..utils.parsers import parse_lane_from_filename, find_fastq_read_pairs, \
+                                get_flowcell_id_from_dirtree
 
 LOG = minimal_logger(__name__)
 
@@ -61,7 +61,6 @@ def symlink_convert_file_names(project):
     for sample in project:
         for fcid in sample:
             for fastq in fcid:
-                #m = re.match(r'(?P<sample_name>P\d+_\d+)_(?P<index>\w+)_L\d{2}(?P<lane_num>\d)_(?P<read>R\d)_.*(?P<ext>fastq.*)', fastq)
                 m = re.match(r'(?P<sample_name>\w+)_(?P<index>[\w-]+)_L\d{2}(?P<lane_num>\d)_(?P<read_num>R\d)_.*(?P<ext>fastq.*)', fastq)
                 try:
                     args_dict = m.groupdict()

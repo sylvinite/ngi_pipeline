@@ -6,10 +6,12 @@ import string
 import tempfile
 
 
+## TODO clean up naming conventions (fcid, barcode, run_id, identifier, barcode)
+
 def generate_project_name():
     """Generate a project name in the form Y.Mom_12_34
     """
-    return "{}.{}_{}_{}".format(
+    return "{0}.{1}_{2}_{3}".format(
             random.choice(string.ascii_uppercase),
             "".join([random.choice(string.ascii_lowercase) for i in xrange(6) ]).capitalize(),
             random.randint(12,14),
@@ -19,19 +21,20 @@ def generate_sample_name(project_id=None):
     """Generate a sample name in the form P123_456
     """
     if not project_id: project_id = random.randint(100,999)
-    return "P{}_{}".format(project_id, random.randint(101,199))
+    return "P{0}_{1}".format(project_id, random.randint(101,199))
 
 
 def generate_flowcell_id():
-    """Generate a flowcell barcode in the format ABC123CXX
+    """Generate a flowcell id in the format AABC123CXX
     """
-    return "{}CXX".format("".join([random.choice(string.ascii_uppercase + string.digits) for i in xrange(6)]))
+    return "{0}{1}CXX".format(random.choice("AB"),
+            "".join([random.choice(string.ascii_uppercase + string.digits) for i in xrange(6)]))
 
 
 def generate_instrument_id(prefix="SN"):
     """Generate an instrument ID in the format SN#### or so
     """
-    return "{}{}".format(prefix, str(random.randint(101,9999)))
+    return "{0}{1}".format(prefix, str(random.randint(101,9999)))
 
 
 def generate_barcode(length=6):
@@ -56,7 +59,8 @@ def generate_sample_file_name(sample_name=None, barcode=None, lane=None, read_nu
     if not sample_name: sample_name = generate_sample_name()
     if not barcode: barcode = generate_barcode()
     if not lane: lane = random.randint(1,8)
-    return "{sample_name}_{barcode}_{lane}_R{read_num}_001.fastq.gz".format(**locals())
+    return "{sample_name}_{barcode}_L00{lane}_R{read_num}_001.fastq.gz".format(**locals())
+
 
 def generate_paired_sample_file_names(sample_name=None, barcode=None, lane=None):
     if not sample_name: sample_name = generate_sample_name()
@@ -65,6 +69,7 @@ def generate_paired_sample_file_names(sample_name=None, barcode=None, lane=None)
     return [ generate_sample_file_name(sample_name, barcode, lane, read_num) for
              read_num in (1,2) ]
 
+
 def generate_run_id(date=None, instrument_id=None, fcid=None):
     """Generate a run identifier in the format:
         <YYMMDD>_<instrument_id>_0<nnn>_<FCID>
@@ -72,19 +77,18 @@ def generate_run_id(date=None, instrument_id=None, fcid=None):
     if not date: date = datetime.date.today().strftime("%y%m%d")
     if not instrument_id: instrument_id = generate_instrument_id()
     if not fcid: fcid = generate_flowcell_id()
-    return "{date}_{instrument_id}_0{number}_{A_B}{fcid}".format(date=date,
+    return "{date}_{instrument_id}_0{number}_{fcid}".format(date=date,
                                                               instrument_id=instrument_id,
                                                               number=random.randint(101,999),
-                                                              A_B=random.choice("AB"),
                                                               fcid=fcid)
 
 
-def generate_identifier(date=None, flowcell_barcode=None):
+def generate_identifier(date=None, flowcell_id=None):
     """Generate a date_barcode identifier in the format 140704_ABC123CXX
     """
     if not date: date = datetime.date.today().strftime("%y%m%d")
-    if not flowcell_barcode: flowcell_barcode = generate_flowcell_id()
-    return "{}_{}".format(date, flowcell_barcode)
+    if not flowcell_id: flowcell_id = generate_flowcell_id()
+    return "{}_{}".format(date, flowcell_id)
 
 
 def create_demultiplexed_flowcell():
@@ -184,5 +188,3 @@ def create_project_structure(project_name=generate_project_name(),
     creates empty files if empty_files is True.
     """
     raise NotImplementedError
-    tmp_dir = tempfile.mkdtmp()
-    project_dir = os.path.join(tmp_dir, project_name)
