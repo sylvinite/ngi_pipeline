@@ -19,7 +19,7 @@ import time
 from . import workflows
 from ..log import minimal_logger
 from ..utils.filesystem import safe_makedir
-from ..utils import execute_command_line, load_modules
+from ..utils import load_modules #,execute_command_line
 from ..utils.config import load_xml_config, load_yaml_config
 from ..utils.parsers import parse_lane_from_filename, find_fastq_read_pairs, find_fastq_read_pairs_from_dir, \
                                 get_flowcell_id_from_dirtree
@@ -45,8 +45,6 @@ def main(projects_to_analyze, config_file_path):
             # Temporary until the file format switch
             convert_sthlm_to_uppsala(project)
             build_setup_xml(project, config)
-            import pdb
-            pdb.set_trace()
             build_piper_cl(project, config)
             launch_piper_jobs(project)
         ## TODO Pick a better Exception
@@ -348,6 +346,47 @@ def create_report_tsv(project):
                         raise Exception(error_msg)
                     read_library = "<NotImplemented>"
                     print("\t".join([sample.name, lane, read_library, fcid.name]), file=rtsv_fh)
+
+
+## problem with log and relative paths I want to give a try and I am tired
+def execute_command_line(cl, stdout=None, stderr=None, cwd=None):
+    """Execute a command line and return the PID.
+
+    :param cl: Can be either a list or a string, if string, gets shlex.splitted
+    :param file stdout: The filehandle destination for STDOUT (can be None)
+    :param file stderr: The filehandle destination for STDERR (can be None)
+    :param str cwd: The directory to be used as CWD for the process launched
+
+    :returns: Process ID of launched process
+    :rtype: str
+
+    :raises RuntimeError: If the OS command-line execution failed.
+    """
+    if cwd and not os.path.isdir(cwd):
+        LOG.warn("CWD specified, \"{}\", is not a valid directory for "
+                 "command \"{}\". Setting to None.".format(cwd, cl))
+        cwd = None
+    if type(cl) is str:
+        cl = shlex.split(cl)
+    LOG.info("Executing command line: {}".format(" ".join(cl)))
+    try:
+        p_handle = subprocess.Popen(cl, stdout = stdout,
+                                        stderr = stderr,
+                                        cwd = cwd)
+        error_msg = None
+    except OSError:
+        error_msg = ("Cannot execute command; missing executable on the path? "
+                     "(Command \"{}\")".format(command_line))
+    except ValueError:
+        error_msg = ("Cannot execute command; command malformed. "
+                     "(Command \"{}\")".format(command_line))
+    except subprocess.CalledProcessError as e:
+        error_msg = ("Error when executing command: \"{}\" "
+                     "(Command \"{}\")".format(e, command_line))
+    if error_msg:
+        raise RuntimeError(error_msg)
+    return p_handle.pid
+
 
 
 
