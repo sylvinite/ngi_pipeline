@@ -121,13 +121,12 @@ def convert_sthlm_to_uppsala(project):
         LOG.error(error_msg)
         ## TODO Pick better exception
         raise Exception(error_msg)
-    for ext in ["tsv", "xml"]:
-        report_src_file = os.path.join(project.base_path, project.dirname, "report.{}".format(ext))
-        if os.path.isfile(report_src_file):
-            report_dst_file = os.path.join(project.base_path, uppsala_dirname, "report.{}".format(ext))
-    # at this point report_dst_file and report_src file are initialised!!!! I hate python scoping rules they suck!!!!
-    #THIS WILL FAIL ALWAYS: report.tsv is in the run folder of UUSNP format, so we need to check each run folder but we cannot do it easily
-    #DESIGN DECISION: if sthlm2UUSNP succeeds it means that the tsv file has been properly created --> no need to this check
+    ## NOTE sthlm2UUSNP automatically creates the needed report.xml files,
+    ##      so for the moment we don't need to copy anything
+    #for ext in ["tsv", "xml"]:
+    #    report_src_file = os.path.join(project.base_path, project.dirname, "report.{}".format(ext))
+    #    if os.path.isfile(report_src_file):
+    #        report_dst_file = os.path.join(project.base_path, uppsala_dirname, "report.{}".format(ext))
     #try:
     #    shutil.copy(report_src_file, report_dst_file)
     #except NameError:
@@ -139,7 +138,9 @@ def convert_sthlm_to_uppsala(project):
     project.dirname = uppsala_dirname
     project.name = uppsala_dirname
     for sample in project.samples.values():
-        sample.dirname = "Sample_{}".format(sample.dirname) ##QUICKFIX
+        # Naming expected by Piper; might consider whether to set sample.name as well
+        if not sample.dirname.startswith("Sample_"):
+            sample.dirname = "Sample_{}".format(sample.dirname)
 
 
 def launch_piper_jobs(project):
@@ -159,15 +160,19 @@ def build_piper_cl(project, config):
     :rtype: list
     :raises ValueError: If a required configuration value is missing.
     """
+    # Find Piper global configuration:
+    #   Check environmental variable PIPER_GLOB_CONF
+    #   then the config file
+    #   then the file globalConfig.xml in the piper root dir
+    piper_global_conf = (os.environ.get("PIPER_GLOB_CONF") or
+                         config.get("piper", {}).get("path_to_piper_globalconfig") or
+                         os.path.join(config.get("piper", {}).get("path_to_piper_rootdir"),
+                                      "globalConfig.xml"))
+    if not piper_global_conf:
+        error_msg = "Could not find Piper global configuration file."
+        LOG.error(error_msg)
+        raise ValueError(error_msg)
     try:
-        # Default is the file globalConfig.xml in the piper root dir
-        try:
-            piper_globalconfig_path = config.get("piper", {}).get("path_to_piper_globalconfig")
-        except KeyError:
-            path_to_piper_rootdir = config['piper']['path_to_piper_rootdir']
-            # Default is the file globalConfig.xml in the piper root dir
-            piper_globalconfig_path = os.path.join(path_to_piper_rootdir, "globalConfig.xml")
-        path_to_piper_globalconfig = config['piper']['path_to_piper_globalconfig']
         path_to_piper_qscripts = config['piper']['path_to_piper_qscripts']
     except KeyError as e:
         error_msg = "Could not load key \"{}\" from config file; " \
