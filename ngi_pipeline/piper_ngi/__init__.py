@@ -71,14 +71,14 @@ def symlink_convert_file_names(project):
                     continue
                 args_dict.update({"date_fcid": fcid.name})
                 scilifelab_named_file = "{lane_num}_{date_fcid}_{sample_name}_{read_num}.{ext}".format(**args_dict)
-                fcid_src_path =  os.path.join(project.base_path,
-                                         project.dirname,
-                                         sample.dirname,
-                                         fcid.dirname,)
-                fcid_dst_path =  os.path.join(project.base_path,
-                                         sthlm_dirname,
-                                         sample.dirname,
-                                         fcid.dirname,)
+                fcid_src_path = os.path.join(project.base_path,
+                                             project.dirname,
+                                             sample.dirname,
+                                             fcid.dirname,)
+                fcid_dst_path = os.path.join(project.base_path,
+                                             sthlm_dirname,
+                                             sample.dirname,
+                                             fcid.dirname,)
                 src_fastq = os.path.join(fcid_src_path, fastq)
                 dst_fastq = os.path.join(fcid_dst_path, scilifelab_named_file)
                 try:
