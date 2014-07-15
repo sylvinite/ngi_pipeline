@@ -174,6 +174,7 @@ def build_piper_cl(project, config):
         LOG.error(error_msg)
         raise ValueError(error_msg)
     try:
+        ## TODO add a search for some environmental varialbe also ("PIPER_QSCRIPTS" or so)
         piper_qscripts_path = config['piper']['path_to_piper_qscripts']
     except KeyError as e:
         error_msg = "Could not load key \"{}\" from config file; " \
