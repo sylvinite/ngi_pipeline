@@ -12,7 +12,7 @@ import time
 from ngi_pipeline.piper_ngi import workflows
 from ngi_pipeline.log import minimal_logger
 from ngi_pipeline.utils.filesystem import safe_makedir
-from ngi_pipeline.utils import load_modules #,execute_command_line
+from ngi_pipeline.utils import load_modules, execute_command_line
 from ngi_pipeline.utils.config import load_xml_config, load_yaml_config
 from ngi_pipeline.utils.parsers import parse_lane_from_filename, find_fastq_read_pairs_from_dir, \
                                 get_flowcell_id_from_dirtree
@@ -42,10 +42,11 @@ def main(projects_to_analyze, config_file_path):
             launch_piper_jobs(project)
         ## TODO Pick a better Exception
         except Exception as e:
-            error_msg = "Processing project {} failed: {}".format(project, e)
+            error_msg = "Processing project {} failed:: {}".format(project, e.__repr__())
             LOG.error(error_msg)
             ## NOTE Or raise exception back to caller?
-            continue
+            #continue
+            raise
     ## TODO Need to write workflow status to database under relevant heading!
 
 
@@ -164,16 +165,16 @@ def build_piper_cl(project, config):
     #   Check environmental variable PIPER_GLOB_CONF
     #   then the config file
     #   then the file globalConfig.xml in the piper root dir
-    piper_global_conf = (os.environ.get("PIPER_GLOB_CONF") or
-                         config.get("piper", {}).get("path_to_piper_globalconfig") or
-                         os.path.join(config.get("piper", {}).get("path_to_piper_rootdir"),
-                                      "globalConfig.xml"))
-    if not piper_global_conf:
+    piper_global_config_path = (os.environ.get("PIPER_GLOB_CONF") or
+                                config.get("piper", {}).get("path_to_piper_globalconfig") or
+                                os.path.join(config.get("piper", {}).get("path_to_piper_rootdir"),
+                                             "globalConfig.xml"))
+    if not piper_global_config_path:
         error_msg = "Could not find Piper global configuration file."
         LOG.error(error_msg)
         raise ValueError(error_msg)
     try:
-        path_to_piper_qscripts = config['piper']['path_to_piper_qscripts']
+        piper_qscripts_path = config['piper']['path_to_piper_qscripts']
     except KeyError as e:
         error_msg = "Could not load key \"{}\" from config file; " \
                     "cannot continue.".format(e)
@@ -203,9 +204,9 @@ def build_piper_cl(project, config):
         raise Exception(error_msg)
     for workflow_name in generic_workflow_names_for_project:
         cl = workflows.return_cl_for_workflow(workflow_name=workflow_name,
-                                              qscripts_dir_path=path_to_piper_qscripts,
+                                              qscripts_dir_path=piper_qscripts_path,
                                               setup_xml_path=setup_xml_path,
-                                              global_config_path=piper_globalconfig_path)
+                                              global_config_path=piper_global_config_path)
         project.command_lines.append(cl)
 
 
