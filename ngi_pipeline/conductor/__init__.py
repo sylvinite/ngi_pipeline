@@ -12,26 +12,26 @@ import os
 import re
 import sys
 
-from .classes import NGIProject
-from ..log import minimal_logger
-from ..utils.filesystem import do_rsync, safe_makedir
-from ..utils.config import load_yaml_config
-from ..utils.parsers import FlowcellRunMetricsParser
+from ngi_pipeline.conductor.classes import NGIProject
+from ngi_pipeline.log import minimal_logger
+from ngi_pipeline.utils.filesystem import do_rsync, safe_makedir
+from ngi_pipeline.utils.config import load_yaml_config
+from ngi_pipeline.utils.parsers import FlowcellRunMetricsParser
 
 LOG = minimal_logger(__name__)
 
 
-def process_demultiplexed_flowcells(demux_fcid_dirs, config_file_path=None, restrict_to_projects=None, restrict_to_samples=None):
+def process_demultiplexed_flowcells(demux_fcid_dirs, restrict_to_projects=None, restrict_to_samples=None, config_file_path=None):
     """
     The main launcher method.
 
     :param list demux_fcid_dirs: The CASAVA-produced demux directory/directories.
-    :param str config_file_path: The path to the configuration file; can also be
-                                 specified via environmental variable "NGI_CONFIG"
     :param list restrict_to_projects: A list of projects; analysis will be
                                       restricted to these. Optional.
     :param list restrict_to_samples: A list of samples; analysis will be
                                      restricted to these. Optional.
+    :param str config_file_path: The path to the configuration file; can also be
+                                 specified via environmental variable "NGI_CONFIG"
     """
     if not config_file_path:
         config_file_path = os.environ.get("NGI_CONFIG") or os.path.expandvars(os.path.join("$HOME/.ngipipeline/ngi_config.yaml"))

@@ -1,11 +1,4 @@
-"""The Piper automated launcher script.
-
-For each project directory, this script needs to:
-    1. Build a report.tsv file detailing all the files
-    2. Build a runconfig.xml file using the automated thinger
-    3. Launch the Piper job via the sbatch file
-    4. Track the jobs somehow
-"""
+"""The Piper automated launcher script."""
 from __future__ import print_function
 
 import collections
@@ -16,12 +9,12 @@ import shutil
 import subprocess
 import time
 
-from . import workflows
-from ..log import minimal_logger
-from ..utils.filesystem import safe_makedir
-from ..utils import load_modules #,execute_command_line
-from ..utils.config import load_xml_config, load_yaml_config
-from ..utils.parsers import parse_lane_from_filename, find_fastq_read_pairs, find_fastq_read_pairs_from_dir, \
+from ngi_pipeline.piper_ngi import workflows
+from ngi_pipeline.log import minimal_logger
+from ngi_pipeline.utils.filesystem import safe_makedir
+from ngi_pipeline.utils import load_modules #,execute_command_line
+from ngi_pipeline.utils.config import load_xml_config, load_yaml_config
+from ngi_pipeline.utils.parsers import parse_lane_from_filename, find_fastq_read_pairs, find_fastq_read_pairs_from_dir, \
                                 get_flowcell_id_from_dirtree
 #TOD: only one between find_fastq_read_pairs and find_fastq_read_pairs_from_dir shoild be included
 
