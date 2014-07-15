@@ -1,0 +1,33 @@
+# This file should be placed under $HOME/.ngiconfig/ngi_config.yaml
+# or its path exported as the environment variable NGI_CONFIG
+
+sbatch:
+
+environment:
+    project_id: a2010002
+    #extra_slurm_params:
+    #    - "--qos=seqver"
+
+piper:
+    path_to_piper_qscripts: /proj/a2010002/software/piper/qscripts
+
+supported_genomes:
+    #"GRCh37": "/apus/data/uppnex/reference/Homo_sapiens/GRCh37/concat/Homo_sapiens.GRCh37.57.dna.concat.fa"
+    "GRCh37": "/proj/a2009002/piper_references/gatk_bundle/2.8/b37/human_g1k_v37.fasta"
+    "GRCm38": "/apus/data/uppnex/reference/Mus_musculus/GRCm38/concat/Mus_musculus.GRCm38.69.dna.concat.fa"
+    "rn4": None
+    "saccer2": None
+    "dm3": None
+    "tair9": None
+    "xentro2": None
+    "ws210": None
+    "canfam3": None
+
+project:
+    INBOX: /proj/a2010002/archive
+
+analysis:
+    analysis_engine: ngi_pipeline.piper_ngi
+    top_dir: /proj/a2010002/nobackup/mario/analysis_ready
+    log: /proj/a2010002/data/log
+    store_dir: /proj/a2010002/archive
