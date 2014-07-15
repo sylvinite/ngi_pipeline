@@ -6,7 +6,7 @@ import logging
 import sys
 
 from logbook.queues import RedisHandler
-from ngi_pipeline.utils.config import load_yaml_config
+#from ngi_pipeline.utils.config import load_yaml_config
 
 def minimal_logger(namespace, config_path=None, extra_fields=None, debug=False):
     """Make and return a minimal console logger.
@@ -27,21 +27,22 @@ def minimal_logger(namespace, config_path=None, extra_fields=None, debug=False):
     log = logbook.Logger(namespace, level=logbook.INFO)
     s_h = logbook.StreamHandler(sys.stdout, level=logbook.INFO, bubble=True)
     log.handlers.append(s_h)
-    try:
-        config = load_yaml_config(config_path)
-        host = config.get('log', 'redis_host')
-        port = config.getint('log', 'redis_port')
-        key = config.get('log', 'redis_key')
-        password = config.get('log', 'redis_password')
-        if not extra_fields:
-            extra_fields = {"program": "pm",
-                            "command": namespace}
-        r_h = RedisHandler(host=host, port=port, key=key, password=password,
-                extra_fields=extra_fields, level=logbook.INFO, bubble=True)
-        log.handlers.append(r_h)
-    except:
-        log.debug('Not loading RedisHandler')
-        pass
+    #try:
+    #    config = load_yaml_config(config_path)
+    #    host = config.get('log', 'redis_host')
+    #    port = config.getint('log', 'redis_port')
+    #    key = config.get('log', 'redis_key')
+    #    password = config.get('log', 'redis_password')
+    #    if not extra_fields:
+    #        extra_fields = {"program": "pm",
+    #                        "command": namespace}
+    #    r_h = RedisHandler(host=host, port=port, key=key, password=password,
+    #            extra_fields=extra_fields, level=logbook.INFO, bubble=True)
+    #    log.handlers.append(r_h)
+    #except:
+    #    log.debug('Not loading RedisHandler')
+    log.debug('Not loading RedisHandler')
+    #    pass
 
     # FIX ME: really don't want to hard check sys.argv like this but
     # can't figure any better way get logging started (only for debug)
