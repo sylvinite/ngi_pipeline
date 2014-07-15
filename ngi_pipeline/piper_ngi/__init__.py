@@ -18,10 +18,12 @@ import time
 
 from . import workflows
 from ..log import minimal_logger
-from ..utils import execute_command_line, load_modules
+from ..utils.filesystem import safe_makedir
+from ..utils import load_modules #,execute_command_line
 from ..utils.config import load_xml_config, load_yaml_config
-from ..utils.parsers import parse_lane_from_filename, find_fastq_read_pairs, \
+from ..utils.parsers import parse_lane_from_filename, find_fastq_read_pairs, find_fastq_read_pairs_from_dir, \
                                 get_flowcell_id_from_dirtree
+#TOD: only one between find_fastq_read_pairs and find_fastq_read_pairs_from_dir shoild be included
 
 LOG = minimal_logger(__name__)
 
@@ -39,7 +41,7 @@ def main(projects_to_analyze, config_file_path):
     load_modules(modules_to_load)
     for project in projects_to_analyze:
         try:
-            create_report_tsv(project)
+            #create_report_tsv(project) ##TODO: this is not needed as sthl_to_uppsala should take care of evrything
             # Temporary until the file format switch
             convert_sthlm_to_uppsala(project)
             build_setup_xml(project, config)
@@ -58,10 +60,15 @@ def symlink_convert_file_names(project):
     """Converts standard Illumina (and Uppsala) file-naming format to the
     Stockholm format; required atm so sthlm2UUSNP can switch them back.
     """
+    stockolm_dirname = "{}_sthl".format(project.dirname)
+    safe_makedir(os.path.join(project.base_path , stockolm_dirname))
+
     for sample in project:
+        safe_makedir(os.path.join(project.base_path , stockolm_dirname, sample.dirname))
         for fcid in sample:
+            safe_makedir(os.path.join(project.base_path , stockolm_dirname, sample.dirname, fcid.dirname))
             for fastq in fcid:
-                m = re.match(r'(?P<sample_name>\w+)_(?P<index>[\w-]+)_L\d{2}(?P<lane_num>\d)_(?P<read_num>R\d)_.*(?P<ext>fastq.*)', fastq)
+                m = re.match(r'(?P<sample_name>\w+)_(?P<index>[\w-]+)_L\d{2}(?P<lane_num>\d)_R(?P<read_num>\d)_.*(?P<ext>fastq.*)', fastq)
                 try:
                     args_dict = m.groupdict()
                 except AttributeError:
@@ -70,12 +77,17 @@ def symlink_convert_file_names(project):
                     continue
                 args_dict.update({"date_fcid": fcid.name})
                 scilifelab_named_file = "{lane_num}_{date_fcid}_{sample_name}_{read_num}.{ext}".format(**args_dict)
-                fcid_path =  os.path.join(project.base_path,
+                fcid_src_path =  os.path.join(project.base_path,
                                          project.dirname,
                                          sample.dirname,
                                          fcid.dirname,)
-                src_fastq = os.path.join(fcid_path, fastq)
-                dst_fastq = os.path.join(fcid_path, scilifelab_named_file)
+                fcid_dst_path =  os.path.join(project.base_path,
+                                         stockolm_dirname,
+                                         sample.dirname,
+                                         fcid.dirname,)
+                         
+                src_fastq = os.path.join(fcid_src_path, fastq)
+                dst_fastq = os.path.join(fcid_dst_path, scilifelab_named_file)
                 try:
                     os.symlink(src_fastq, dst_fastq)
                 except OSError as e:
@@ -83,6 +95,8 @@ def symlink_convert_file_names(project):
                         pass
                     else:
                         raise
+    project.dirname = stockolm_dirname
+    project.name = stockolm_dirname
 
 def convert_sthlm_to_uppsala(project):
     """Convert projects from Stockholm style (three-level) to Uppsala style
@@ -102,9 +116,9 @@ def convert_sthlm_to_uppsala(project):
     input_dir = os.path.join(project.base_path, project.dirname)
     uppsala_dirname = "{}_UUSNP".format(project.dirname)
     output_dir = os.path.join(project.base_path, uppsala_dirname)
-    cl = cl_template.format(input_dir=input_dir, output_dir=output_dir)
+    com = cl_template.format(input_dir=input_dir, output_dir=output_dir)
     try:
-        subprocess.check_call(shlex.split(cl))
+        subprocess.check_call(shlex.split(com))
     except subprocess.CalledProcessError as e:
         # Fails most commonly if a file/directory already exists. Should it?
         error_msg = ("Unable to convert Sthlm->UU format for "
@@ -116,16 +130,21 @@ def convert_sthlm_to_uppsala(project):
         report_src_file = os.path.join(project.base_path, project.dirname, "report.{}".format(ext))
         if os.path.isfile(report_src_file):
             report_dst_file = os.path.join(project.base_path, uppsala_dirname, "report.{}".format(ext))
-    try:
-        shutil.copy(report_src_file, report_dst_file)
-    except NameError:
-        error_msg = ("No report.tsv or report.xml file found for project {}; "
-                     "Piper processing will fail!".format(project))
-        LOG.error(error_msg)
-        ## TODO Pick better exception
-        raise Exception(error_msg)
+    # at this point report_dst_file and report_src file are initialised!!!! I hate python scoping rules they suck!!!!
+    #THIS WILL FAIL ALWAYS: report.tsv is in the run folder of UUSNP format, so we need to check each run folder but we cannot do it easily
+    #DESIGN DECISION: if sthlm2UUSNP succeeds it means that the tsv file has been properly created --> no need to this check
+    #try:
+    #    shutil.copy(report_src_file, report_dst_file)
+    #except NameError:
+    #    error_msg = ("No report.tsv or report.xml file found for project {}; "
+    #                 "Piper processing will fail!".format(project))
+    #    LOG.error(error_msg)
+    #    ## TODO Pick better exception
+    #    raise Exception(error_msg)
     project.dirname = uppsala_dirname
     project.name = uppsala_dirname
+    for sample in project.samples.values():
+        sample.dirname = "Sample_{}".format(sample.dirname) ##QUICKFIX
 
 
 def launch_piper_jobs(project):
@@ -253,7 +272,7 @@ def build_setup_xml(project, config):
         ## TODO fix this, it ain't right. It just ain't right.
         #sample_directory = os.path.join(project_top_level_dir, sample.dirname)
         for fcid in sample:
-            sample_directory = os.path.join(project_top_level_dir, fcid.dirname)
+            sample_directory = os.path.join(project_top_level_dir, fcid.dirname, sample.dirname)
             setupfilecreator_cl += " --input_sample {}".format(sample_directory)
 
     try:
@@ -282,6 +301,7 @@ def create_report_tsv(project):
 
     :param NGIProject project: The project to be converted.
     """
+    
     report_header = ("#SampleName", "Lane", "ReadLibrary", "FlowcellID")
 
     report_paths = []
@@ -296,31 +316,77 @@ def create_report_tsv(project):
         ## TODO decide if we should just overwrite
         ## TODO pick a better Exception
         raise Exception(error_msg)
+        ##Mario here there is a for sure an error I try to fix this
 
-        ## TODO Activate this check/move thing later
-        #if os.path.exists(report_tsv_path):
-        #    path, orig_filename = os.path.split(report_tsv_path)
-        #    orig_basename, orig_ext = os.path.splitext(orig_filename)
-        #    mv_filename = orig_basename + time.strftime("_%Y-%m-%d_%H:%M:%S") + orig_ext
-        #    mv_path = os.path.join(path, mv_filename)
-        #    LOG.info("Moving preexisting report.tsv file to {}".format(mv_path))
-        #    shutil.move(report_tsv_path, mv_path)
-        with open(report_tsv_path, 'w') as rtsv_fh:
-            report_paths.append(report_tsv_path)
-            LOG.info("Writing {}".format(report_tsv_path))
-            print("\t".join(report_header), file=rtsv_fh)
-            for sample in project:
-                for fcid in sample:
-                    fcid_path = os.path.join(project.base_path,
+    ## TODO Activate this check/move thing later
+    #if os.path.exists(report_tsv_path):
+    #    path, orig_filename = os.path.split(report_tsv_path)
+    #    orig_basename, orig_ext = os.path.splitext(orig_filename)
+    #    mv_filename = orig_basename + time.strftime("_%Y-%m-%d_%H:%M:%S") + orig_ext
+    #    mv_path = os.path.join(path, mv_filename)
+    #    LOG.info("Moving preexisting report.tsv file to {}".format(mv_path))
+    #    shutil.move(report_tsv_path, mv_path)
+    with open(report_tsv_path, 'w') as rtsv_fh:
+        report_paths.append(report_tsv_path)
+        LOG.info("Writing {}".format(report_tsv_path))
+        print("\t".join(report_header), file=rtsv_fh)
+        for sample in project:
+            for fcid in sample:
+                fcid_path = os.path.join(project.base_path,
                                              project.dirname,
                                              sample.dirname,
                                              fcid.dirname)
-                    for fq_pairname in find_fastq_read_pairs(directory=fcid_path).keys():
-                        try:
-                            lane = parse_lane_from_filename(fq_pairname)
-                        except ValueError as e:
-                            LOG.error("Could not get lane from filename for file {} -- skipping ({})".format(fq_pairname, e))
-                            ## TODO pick a better Exception
-                            raise Exception(error_msg)
-                        read_library = "<NotImplemented>"
-                        print("\t".join([sample.name, lane, read_library, fcid.name]), file=rtsv_fh)
+                #TODO keeps failing: there is something that breack here
+                for fq_pairname in find_fastq_read_pairs_from_dir(directory=fcid_path).keys():
+                    try:
+                        lane = parse_lane_from_filename(fq_pairname)
+                    except ValueError as e:
+                        LOG.error("Could not get lane from filename for file {} -- skipping ({})".format(fq_pairname, e))
+                        ## TODO pick a better Exception
+                        raise Exception(error_msg)
+                    read_library = "<NotImplemented>"
+                    print("\t".join([sample.name, lane, read_library, fcid.name]), file=rtsv_fh)
+
+
+## problem with log and relative paths I want to give a try and I am tired
+def execute_command_line(cl, stdout=None, stderr=None, cwd=None):
+    """Execute a command line and return the PID.
+
+    :param cl: Can be either a list or a string, if string, gets shlex.splitted
+    :param file stdout: The filehandle destination for STDOUT (can be None)
+    :param file stderr: The filehandle destination for STDERR (can be None)
+    :param str cwd: The directory to be used as CWD for the process launched
+
+    :returns: Process ID of launched process
+    :rtype: str
+
+    :raises RuntimeError: If the OS command-line execution failed.
+    """
+    if cwd and not os.path.isdir(cwd):
+        LOG.warn("CWD specified, \"{}\", is not a valid directory for "
+                 "command \"{}\". Setting to None.".format(cwd, cl))
+        cwd = None
+    if type(cl) is str:
+        cl = shlex.split(cl)
+    LOG.info("Executing command line: {}".format(" ".join(cl)))
+    try:
+        p_handle = subprocess.Popen(cl, stdout = stdout,
+                                        stderr = stderr,
+                                        cwd = cwd)
+        error_msg = None
+    except OSError:
+        error_msg = ("Cannot execute command; missing executable on the path? "
+                     "(Command \"{}\")".format(command_line))
+    except ValueError:
+        error_msg = ("Cannot execute command; command malformed. "
+                     "(Command \"{}\")".format(command_line))
+    except subprocess.CalledProcessError as e:
+        error_msg = ("Error when executing command: \"{}\" "
+                     "(Command \"{}\")".format(e, command_line))
+    if error_msg:
+        raise RuntimeError(error_msg)
+    return p_handle.pid
+
+
+
+

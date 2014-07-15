@@ -57,6 +57,8 @@ def process_demultiplexed_flowcells(demux_fcid_dirs, config_file_path=None, rest
                                                                  restrict_to_samples)
     if not projects_to_analyze:
         error_message = "No projects found to process."
+        if restrict_to_projects:
+            error_message = "No projects found to process. One or more of the speciefied projects is not present in the specified flowcells: {}".format(restrict_to_projects)
         LOG.info(error_message)
         sys.exit("Quitting: " + error_message)
     else:
