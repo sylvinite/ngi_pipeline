@@ -33,7 +33,8 @@ def main(projects_to_analyze, config_file_path):
     load_modules(modules_to_load)
     for project in projects_to_analyze:
         try:
-            #create_report_tsv(project) ##TODO: this is not needed as sthl_to_uppsala should take care of evrything
+            ## NOTE report.xml is created by sthlm2UUSNP at the moment, unsure in the long run
+            #create_report_tsv(project)
             # Temporary until the file format switch
             convert_sthlm_to_uppsala(project)
             build_setup_xml(project, config)
@@ -43,22 +44,23 @@ def main(projects_to_analyze, config_file_path):
         except Exception as e:
             error_msg = "Processing project {} failed: {}".format(project, e)
             LOG.error(error_msg)
-            ## Or raise exception back to caller?
+            ## NOTE Or raise exception back to caller?
             continue
-    # Need to write workflow status to database under relevant heading!
+    ## TODO Need to write workflow status to database under relevant heading!
 
 
 def symlink_convert_file_names(project):
     """Converts standard Illumina (and Uppsala) file-naming format to the
     Stockholm format; required atm so sthlm2UUSNP can switch them back.
     """
-    stockolm_dirname = "{}_sthl".format(project.dirname)
-    safe_makedir(os.path.join(project.base_path , stockolm_dirname))
+    # A new directory must be created as sthlm2UUSNP chokes on unexpected files/names
+    sthlm_dirname = "{}_sthlm".format(project.dirname)
+    safe_makedir(os.path.join(project.base_path, sthlm_dirname))
 
     for sample in project:
-        safe_makedir(os.path.join(project.base_path , stockolm_dirname, sample.dirname))
+        safe_makedir(os.path.join(project.base_path, sthlm_dirname, sample.dirname))
         for fcid in sample:
-            safe_makedir(os.path.join(project.base_path , stockolm_dirname, sample.dirname, fcid.dirname))
+            safe_makedir(os.path.join(project.base_path, sthlm_dirname, sample.dirname, fcid.dirname))
             for fastq in fcid:
                 m = re.match(r'(?P<sample_name>\w+)_(?P<index>[\w-]+)_L\d{2}(?P<lane_num>\d)_R(?P<read_num>\d)_.*(?P<ext>fastq.*)', fastq)
                 try:
@@ -74,10 +76,9 @@ def symlink_convert_file_names(project):
                                          sample.dirname,
                                          fcid.dirname,)
                 fcid_dst_path =  os.path.join(project.base_path,
-                                         stockolm_dirname,
+                                         sthlm_dirname,
                                          sample.dirname,
                                          fcid.dirname,)
-                         
                 src_fastq = os.path.join(fcid_src_path, fastq)
                 dst_fastq = os.path.join(fcid_dst_path, scilifelab_named_file)
                 try:
@@ -87,8 +88,10 @@ def symlink_convert_file_names(project):
                         pass
                     else:
                         raise
-    project.dirname = stockolm_dirname
-    project.name = stockolm_dirname
+    ## NOTE These should not necessarily by the same but in practice they have been so far
+    ##      and so the code treats them that way which is not ideal
+    project.dirname = sthlm_dirname
+    project.name = sthlm_dirname
 
 def convert_sthlm_to_uppsala(project):
     """Convert projects from Stockholm style (three-level) to Uppsala style
