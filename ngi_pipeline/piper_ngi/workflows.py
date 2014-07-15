@@ -4,7 +4,7 @@
 import os
 import sys
 
-from ..log import minimal_logger
+from ngi_pipeline.log import minimal_logger
 
 LOG = minimal_logger(__name__)
 

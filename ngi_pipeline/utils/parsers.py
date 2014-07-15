@@ -6,8 +6,8 @@ import re
 import xml.etree.cElementTree as ET
 import xml.parsers.expat
 
-from ..log import minimal_logger
-from .classes import memoized
+from ngi_pipeline.log import minimal_logger
+from ngi_pipeline.utils.classes import memoized
 
 LOG = minimal_logger(__name__)
 

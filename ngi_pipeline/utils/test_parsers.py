@@ -4,9 +4,9 @@ import random
 import tempfile
 import unittest
 
-from .parsers import get_flowcell_id_from_dirtree, parse_lane_from_filename, \
-                     find_fastq_read_pairs, find_fastq_read_pairs_from_dir
-from ..tests import generate_test_data as gtd
+from ngi_pipeline.utils.parsers import get_flowcell_id_from_dirtree, parse_lane_from_filename, \
+                                       find_fastq_read_pairs, find_fastq_read_pairs_from_dir
+from ngi_pipeline.tests import generate_test_data as gtd
 
 class TestCommon(unittest.TestCase):
 
