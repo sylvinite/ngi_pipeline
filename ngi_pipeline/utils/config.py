@@ -41,7 +41,6 @@ def load_yaml_config(config_file_path):
     return load_generic_config(config_file_path, config_format="yaml")
 
 
-## TODO verify that this works as expected, drinking too much coffee to test code
 def load_generic_config(config_file_path, config_format="yaml", **kwargs):
     """Parse a configuration file, returning a dict. Supports yaml, xml, and json.
 
@@ -59,7 +58,6 @@ def load_generic_config(config_file_path, config_format="yaml", **kwargs):
         file_ext = os.path.splitext(config_file_path)[1].replace(".", "")
     except (IndexError, AttributeError):
         file_ext = None
-    ## TODO Does this work? Coffee coffee
     try:
         parser_fn = parsers_dict[config_format.lower()]
     except KeyError:
