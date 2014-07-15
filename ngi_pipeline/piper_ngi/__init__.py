@@ -40,7 +40,6 @@ def main(projects_to_analyze, config_file_path):
             build_setup_xml(project, config)
             build_piper_cl(project, config)
             launch_piper_jobs(project)
-        ## TODO Pick a better Exception
         except Exception as e:
             error_msg = "Processing project {} failed:: {}".format(project, e.__repr__())
             LOG.error(error_msg)
@@ -120,8 +119,7 @@ def convert_sthlm_to_uppsala(project):
         error_msg = ("Unable to convert Sthlm->UU format for "
                      "project {}: {}".format(project, e))
         LOG.error(error_msg)
-        ## TODO Pick better exception
-        raise Exception(error_msg)
+        raise RuntimeError(error_msg)
     ## NOTE sthlm2UUSNP automatically creates the needed report.xml files,
     ##      so for the moment we don't need to copy anything
     #for ext in ["tsv", "xml"]:
@@ -135,7 +133,7 @@ def convert_sthlm_to_uppsala(project):
     #                 "Piper processing will fail!".format(project))
     #    LOG.error(error_msg)
     #    ## TODO Pick better exception
-    #    raise Exception(error_msg)
+    #    raise ValueError(error_msg)
     project.dirname = uppsala_dirname
     project.name = uppsala_dirname
     for sample in project.samples.values():
@@ -202,7 +200,7 @@ def build_piper_cl(project, config):
         error_msg = ("Project {} has no setup.xml file. Skipping project "
                      "command-line generation.".format(project))
         LOG.error(error_msg)
-        raise Exception(error_msg)
+        raise ValueError(error_msg)
     for workflow_name in generic_workflow_names_for_project:
         cl = workflows.return_cl_for_workflow(workflow_name=workflow_name,
                                               qscripts_dir_path=piper_qscripts_path,
@@ -249,8 +247,7 @@ def build_setup_xml(project, config):
                      " configuration file and cannot continue with project {}:"
                      " value \"{}\" missing".format(project, e.message))
         LOG.error(error_msg)
-        ## TODO Pick a better Exception
-        raise Exception(error_msg)
+        raise ValueError(error_msg)
 
     try:
         cl_args["sfc_binary"] = config['piper']['path_to_setupfilecreator']
@@ -284,8 +281,7 @@ def build_setup_xml(project, config):
                      "skipping project analysis. "
                      "Error is: \"{}\". .".format(project, e))
         LOG.error(error_msg)
-        ## TODO Pick a better Exception
-        raise Exception(error_msg)
+        raise RuntimeError(error_msg)
 
 
 def create_report_tsv(project):
@@ -301,7 +297,6 @@ def create_report_tsv(project):
 
     :param NGIProject project: The project to be converted.
     """
-    
     report_header = ("#SampleName", "Lane", "ReadLibrary", "FlowcellID")
 
     report_paths = []
@@ -313,12 +308,7 @@ def create_report_tsv(project):
         report_paths.append(report_xml_path)
         LOG.info("Found preexisting report.xml file for project {project}: " \
                  "{report_xml}".format(project, report_xml_path))
-        ## TODO decide if we should just overwrite
-        ## TODO pick a better Exception
-        raise Exception(error_msg)
-        ##Mario here there is a for sure an error I try to fix this
 
-    ## TODO Activate this check/move thing later
     #if os.path.exists(report_tsv_path):
     #    path, orig_filename = os.path.split(report_tsv_path)
     #    orig_basename, orig_ext = os.path.splitext(orig_filename)
@@ -336,13 +326,12 @@ def create_report_tsv(project):
                                          project.dirname,
                                          sample.dirname,
                                          fcid.dirname)
-                #TODO keeps failing: there is something that breack here
                 for fq_pairname in find_fastq_read_pairs_from_dir(directory=fcid_path).keys():
                     try:
                         lane = parse_lane_from_filename(fq_pairname)
                     except ValueError as e:
                         LOG.error("Could not get lane from filename for file {} -- skipping ({})".format(fq_pairname, e))
-                        ## TODO pick a better Exception
-                        raise Exception(error_msg)
+                        raise ValueError(error_msg)
+                    ## TODO pull from Charon database
                     read_library = "<NotImplemented>"
                     print("\t".join([sample.name, lane, read_library, fcid.name]), file=rtsv_fh)
