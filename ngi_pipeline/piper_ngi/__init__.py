@@ -235,7 +235,7 @@ def build_setup_xml(project, config):
         # sequencing_center = proj_db.get('Sequencing Center')
         cl_args["sequencing_center"] = "NGI"
     except:
-        ## TODO Put some useful thing (code??) here
+        ## Handle database connection failures here once we actually try to connect to it
         pass
 
     # Load needed data from configuration file
@@ -269,8 +269,6 @@ def build_setup_xml(project, config):
                            "--uppnex_project_id {uppmax_proj} "
                            "--reference {reference_path}".format(**cl_args))
     for sample in project.samples.values():
-        ## TODO fix this, it ain't right. It just ain't right.
-        #sample_directory = os.path.join(project_top_level_dir, sample.dirname)
         for fcid in sample:
             sample_directory = os.path.join(project_top_level_dir, fcid.dirname, sample.dirname)
             setupfilecreator_cl += " --input_sample {}".format(sample_directory)
@@ -346,47 +344,3 @@ def create_report_tsv(project):
                         raise Exception(error_msg)
                     read_library = "<NotImplemented>"
                     print("\t".join([sample.name, lane, read_library, fcid.name]), file=rtsv_fh)
-
-
-## problem with log and relative paths I want to give a try and I am tired
-def execute_command_line(cl, stdout=None, stderr=None, cwd=None):
-    """Execute a command line and return the PID.
-
-    :param cl: Can be either a list or a string, if string, gets shlex.splitted
-    :param file stdout: The filehandle destination for STDOUT (can be None)
-    :param file stderr: The filehandle destination for STDERR (can be None)
-    :param str cwd: The directory to be used as CWD for the process launched
-
-    :returns: Process ID of launched process
-    :rtype: str
-
-    :raises RuntimeError: If the OS command-line execution failed.
-    """
-    if cwd and not os.path.isdir(cwd):
-        LOG.warn("CWD specified, \"{}\", is not a valid directory for "
-                 "command \"{}\". Setting to None.".format(cwd, cl))
-        cwd = None
-    if type(cl) is str:
-        cl = shlex.split(cl)
-    LOG.info("Executing command line: {}".format(" ".join(cl)))
-    try:
-        p_handle = subprocess.Popen(cl, stdout = stdout,
-                                        stderr = stderr,
-                                        cwd = cwd)
-        error_msg = None
-    except OSError:
-        error_msg = ("Cannot execute command; missing executable on the path? "
-                     "(Command \"{}\")".format(command_line))
-    except ValueError:
-        error_msg = ("Cannot execute command; command malformed. "
-                     "(Command \"{}\")".format(command_line))
-    except subprocess.CalledProcessError as e:
-        error_msg = ("Error when executing command: \"{}\" "
-                     "(Command \"{}\")".format(e, command_line))
-    if error_msg:
-        raise RuntimeError(error_msg)
-    return p_handle.pid
-
-
-
-
