@@ -1,11 +1,4 @@
-"""The Piper automated launcher script.
-
-For each project directory, this script needs to:
-    1. Build a report.tsv file detailing all the files
-    2. Build a runconfig.xml file using the automated thinger
-    3. Launch the Piper job via the sbatch file
-    4. Track the jobs somehow
-"""
+"""The Piper automated launcher script."""
 from __future__ import print_function
 
 import collections
@@ -16,14 +9,13 @@ import shutil
 import subprocess
 import time
 
-from . import workflows
-from ..log import minimal_logger
-from ..utils.filesystem import safe_makedir
-from ..utils import load_modules #,execute_command_line
-from ..utils.config import load_xml_config, load_yaml_config
-from ..utils.parsers import parse_lane_from_filename, find_fastq_read_pairs, find_fastq_read_pairs_from_dir, \
+from ngi_pipeline.piper_ngi import workflows
+from ngi_pipeline.log import minimal_logger
+from ngi_pipeline.utils.filesystem import safe_makedir
+from ngi_pipeline.utils import load_modules, execute_command_line
+from ngi_pipeline.utils.config import load_xml_config, load_yaml_config
+from ngi_pipeline.utils.parsers import parse_lane_from_filename, find_fastq_read_pairs_from_dir, \
                                 get_flowcell_id_from_dirtree
-#TOD: only one between find_fastq_read_pairs and find_fastq_read_pairs_from_dir shoild be included
 
 LOG = minimal_logger(__name__)
 
@@ -41,7 +33,8 @@ def main(projects_to_analyze, config_file_path):
     load_modules(modules_to_load)
     for project in projects_to_analyze:
         try:
-            #create_report_tsv(project) ##TODO: this is not needed as sthl_to_uppsala should take care of evrything
+            ## NOTE report.xml is created by sthlm2UUSNP at the moment, unsure in the long run
+            #create_report_tsv(project)
             # Temporary until the file format switch
             convert_sthlm_to_uppsala(project)
             build_setup_xml(project, config)
@@ -49,24 +42,26 @@ def main(projects_to_analyze, config_file_path):
             launch_piper_jobs(project)
         ## TODO Pick a better Exception
         except Exception as e:
-            error_msg = "Processing project {} failed: {}".format(project, e)
+            error_msg = "Processing project {} failed:: {}".format(project, e.__repr__())
             LOG.error(error_msg)
-            ## Or raise exception back to caller?
-            continue
-    # Need to write workflow status to database under relevant heading!
+            ## NOTE Or raise exception back to caller?
+            #continue
+            raise
+    ## TODO Need to write workflow status to database under relevant heading!
 
 
 def symlink_convert_file_names(project):
     """Converts standard Illumina (and Uppsala) file-naming format to the
     Stockholm format; required atm so sthlm2UUSNP can switch them back.
     """
-    stockolm_dirname = "{}_sthl".format(project.dirname)
-    safe_makedir(os.path.join(project.base_path , stockolm_dirname))
+    # A new directory must be created as sthlm2UUSNP chokes on unexpected files/names
+    sthlm_dirname = "{}_sthlm".format(project.dirname)
+    safe_makedir(os.path.join(project.base_path, sthlm_dirname))
 
     for sample in project:
-        safe_makedir(os.path.join(project.base_path , stockolm_dirname, sample.dirname))
+        safe_makedir(os.path.join(project.base_path, sthlm_dirname, sample.dirname))
         for fcid in sample:
-            safe_makedir(os.path.join(project.base_path , stockolm_dirname, sample.dirname, fcid.dirname))
+            safe_makedir(os.path.join(project.base_path, sthlm_dirname, sample.dirname, fcid.dirname))
             for fastq in fcid:
                 m = re.match(r'(?P<sample_name>\w+)_(?P<index>[\w-]+)_L\d{2}(?P<lane_num>\d)_R(?P<read_num>\d)_.*(?P<ext>fastq.*)', fastq)
                 try:
@@ -77,15 +72,14 @@ def symlink_convert_file_names(project):
                     continue
                 args_dict.update({"date_fcid": fcid.name})
                 scilifelab_named_file = "{lane_num}_{date_fcid}_{sample_name}_{read_num}.{ext}".format(**args_dict)
-                fcid_src_path =  os.path.join(project.base_path,
-                                         project.dirname,
-                                         sample.dirname,
-                                         fcid.dirname,)
-                fcid_dst_path =  os.path.join(project.base_path,
-                                         stockolm_dirname,
-                                         sample.dirname,
-                                         fcid.dirname,)
-                         
+                fcid_src_path = os.path.join(project.base_path,
+                                             project.dirname,
+                                             sample.dirname,
+                                             fcid.dirname,)
+                fcid_dst_path = os.path.join(project.base_path,
+                                             sthlm_dirname,
+                                             sample.dirname,
+                                             fcid.dirname,)
                 src_fastq = os.path.join(fcid_src_path, fastq)
                 dst_fastq = os.path.join(fcid_dst_path, scilifelab_named_file)
                 try:
@@ -95,8 +89,10 @@ def symlink_convert_file_names(project):
                         pass
                     else:
                         raise
-    project.dirname = stockolm_dirname
-    project.name = stockolm_dirname
+    ## NOTE These should not necessarily by the same but in practice they have been so far
+    ##      and so the code treats them that way which is not ideal
+    project.dirname = sthlm_dirname
+    project.name = sthlm_dirname
 
 def convert_sthlm_to_uppsala(project):
     """Convert projects from Stockholm style (three-level) to Uppsala style
@@ -126,13 +122,12 @@ def convert_sthlm_to_uppsala(project):
         LOG.error(error_msg)
         ## TODO Pick better exception
         raise Exception(error_msg)
-    for ext in ["tsv", "xml"]:
-        report_src_file = os.path.join(project.base_path, project.dirname, "report.{}".format(ext))
-        if os.path.isfile(report_src_file):
-            report_dst_file = os.path.join(project.base_path, uppsala_dirname, "report.{}".format(ext))
-    # at this point report_dst_file and report_src file are initialised!!!! I hate python scoping rules they suck!!!!
-    #THIS WILL FAIL ALWAYS: report.tsv is in the run folder of UUSNP format, so we need to check each run folder but we cannot do it easily
-    #DESIGN DECISION: if sthlm2UUSNP succeeds it means that the tsv file has been properly created --> no need to this check
+    ## NOTE sthlm2UUSNP automatically creates the needed report.xml files,
+    ##      so for the moment we don't need to copy anything
+    #for ext in ["tsv", "xml"]:
+    #    report_src_file = os.path.join(project.base_path, project.dirname, "report.{}".format(ext))
+    #    if os.path.isfile(report_src_file):
+    #        report_dst_file = os.path.join(project.base_path, uppsala_dirname, "report.{}".format(ext))
     #try:
     #    shutil.copy(report_src_file, report_dst_file)
     #except NameError:
@@ -144,7 +139,9 @@ def convert_sthlm_to_uppsala(project):
     project.dirname = uppsala_dirname
     project.name = uppsala_dirname
     for sample in project.samples.values():
-        sample.dirname = "Sample_{}".format(sample.dirname) ##QUICKFIX
+        # Naming expected by Piper; might consider whether to set sample.name as well
+        if not sample.dirname.startswith("Sample_"):
+            sample.dirname = "Sample_{}".format(sample.dirname)
 
 
 def launch_piper_jobs(project):
@@ -164,16 +161,21 @@ def build_piper_cl(project, config):
     :rtype: list
     :raises ValueError: If a required configuration value is missing.
     """
+    # Find Piper global configuration:
+    #   Check environmental variable PIPER_GLOB_CONF
+    #   then the config file
+    #   then the file globalConfig.xml in the piper root dir
+    piper_global_config_path = (os.environ.get("PIPER_GLOB_CONF") or
+                                config.get("piper", {}).get("path_to_piper_globalconfig") or
+                                os.path.join(config.get("piper", {}).get("path_to_piper_rootdir"),
+                                             "globalConfig.xml"))
+    if not piper_global_config_path:
+        error_msg = "Could not find Piper global configuration file."
+        LOG.error(error_msg)
+        raise ValueError(error_msg)
     try:
-        # Default is the file globalConfig.xml in the piper root dir
-        try:
-            piper_globalconfig_path = config.get("piper", {}).get("path_to_piper_globalconfig")
-        except KeyError:
-            path_to_piper_rootdir = config['piper']['path_to_piper_rootdir']
-            # Default is the file globalConfig.xml in the piper root dir
-            piper_globalconfig_path = os.path.join(path_to_piper_rootdir, "globalConfig.xml")
-        path_to_piper_globalconfig = config['piper']['path_to_piper_globalconfig']
-        path_to_piper_qscripts = config['piper']['path_to_piper_qscripts']
+        ## TODO add a search for some environmental varialbe also ("PIPER_QSCRIPTS" or so)
+        piper_qscripts_path = config['piper']['path_to_piper_qscripts']
     except KeyError as e:
         error_msg = "Could not load key \"{}\" from config file; " \
                     "cannot continue.".format(e)
@@ -203,9 +205,9 @@ def build_piper_cl(project, config):
         raise Exception(error_msg)
     for workflow_name in generic_workflow_names_for_project:
         cl = workflows.return_cl_for_workflow(workflow_name=workflow_name,
-                                              qscripts_dir_path=path_to_piper_qscripts,
+                                              qscripts_dir_path=piper_qscripts_path,
                                               setup_xml_path=setup_xml_path,
-                                              global_config_path=piper_globalconfig_path)
+                                              global_config_path=piper_global_config_path)
         project.command_lines.append(cl)
 
 
@@ -235,7 +237,7 @@ def build_setup_xml(project, config):
         # sequencing_center = proj_db.get('Sequencing Center')
         cl_args["sequencing_center"] = "NGI"
     except:
-        ## TODO Put some useful thing (code??) here
+        ## Handle database connection failures here once we actually try to connect to it
         pass
 
     # Load needed data from configuration file
@@ -269,8 +271,6 @@ def build_setup_xml(project, config):
                            "--uppnex_project_id {uppmax_proj} "
                            "--reference {reference_path}".format(**cl_args))
     for sample in project.samples.values():
-        ## TODO fix this, it ain't right. It just ain't right.
-        #sample_directory = os.path.join(project_top_level_dir, sample.dirname)
         for fcid in sample:
             sample_directory = os.path.join(project_top_level_dir, fcid.dirname, sample.dirname)
             setupfilecreator_cl += " --input_sample {}".format(sample_directory)
@@ -333,9 +333,9 @@ def create_report_tsv(project):
         for sample in project:
             for fcid in sample:
                 fcid_path = os.path.join(project.base_path,
-                                             project.dirname,
-                                             sample.dirname,
-                                             fcid.dirname)
+                                         project.dirname,
+                                         sample.dirname,
+                                         fcid.dirname)
                 #TODO keeps failing: there is something that breack here
                 for fq_pairname in find_fastq_read_pairs_from_dir(directory=fcid_path).keys():
                     try:
@@ -346,47 +346,3 @@ def create_report_tsv(project):
                         raise Exception(error_msg)
                     read_library = "<NotImplemented>"
                     print("\t".join([sample.name, lane, read_library, fcid.name]), file=rtsv_fh)
-
-
-## problem with log and relative paths I want to give a try and I am tired
-def execute_command_line(cl, stdout=None, stderr=None, cwd=None):
-    """Execute a command line and return the PID.
-
-    :param cl: Can be either a list or a string, if string, gets shlex.splitted
-    :param file stdout: The filehandle destination for STDOUT (can be None)
-    :param file stderr: The filehandle destination for STDERR (can be None)
-    :param str cwd: The directory to be used as CWD for the process launched
-
-    :returns: Process ID of launched process
-    :rtype: str
-
-    :raises RuntimeError: If the OS command-line execution failed.
-    """
-    if cwd and not os.path.isdir(cwd):
-        LOG.warn("CWD specified, \"{}\", is not a valid directory for "
-                 "command \"{}\". Setting to None.".format(cwd, cl))
-        cwd = None
-    if type(cl) is str:
-        cl = shlex.split(cl)
-    LOG.info("Executing command line: {}".format(" ".join(cl)))
-    try:
-        p_handle = subprocess.Popen(cl, stdout = stdout,
-                                        stderr = stderr,
-                                        cwd = cwd)
-        error_msg = None
-    except OSError:
-        error_msg = ("Cannot execute command; missing executable on the path? "
-                     "(Command \"{}\")".format(command_line))
-    except ValueError:
-        error_msg = ("Cannot execute command; command malformed. "
-                     "(Command \"{}\")".format(command_line))
-    except subprocess.CalledProcessError as e:
-        error_msg = ("Error when executing command: \"{}\" "
-                     "(Command \"{}\")".format(e, command_line))
-    if error_msg:
-        raise RuntimeError(error_msg)
-    return p_handle.pid
-
-
-
-

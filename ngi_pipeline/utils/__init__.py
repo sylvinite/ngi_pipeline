@@ -10,6 +10,9 @@ import stat
 import subprocess
 import tempfile
 
+from ngi_pipeline.log import minimal_logger
+
+LOG = minimal_logger(__name__)
 
 def load_modules(modules_list):
     """
