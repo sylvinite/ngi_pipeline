@@ -14,9 +14,8 @@ from ngi_pipeline.log import minimal_logger
 from ngi_pipeline.utils.filesystem import safe_makedir
 from ngi_pipeline.utils import load_modules #,execute_command_line
 from ngi_pipeline.utils.config import load_xml_config, load_yaml_config
-from ngi_pipeline.utils.parsers import parse_lane_from_filename, find_fastq_read_pairs, find_fastq_read_pairs_from_dir, \
+from ngi_pipeline.utils.parsers import parse_lane_from_filename, find_fastq_read_pairs_from_dir, \
                                 get_flowcell_id_from_dirtree
-#TOD: only one between find_fastq_read_pairs and find_fastq_read_pairs_from_dir shoild be included
 
 LOG = minimal_logger(__name__)
 
@@ -326,9 +325,9 @@ def create_report_tsv(project):
         for sample in project:
             for fcid in sample:
                 fcid_path = os.path.join(project.base_path,
-                                             project.dirname,
-                                             sample.dirname,
-                                             fcid.dirname)
+                                         project.dirname,
+                                         sample.dirname,
+                                         fcid.dirname)
                 #TODO keeps failing: there is something that breack here
                 for fq_pairname in find_fastq_read_pairs_from_dir(directory=fcid_path).keys():
                     try:
