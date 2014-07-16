@@ -101,7 +101,8 @@ def build_piper_cl(project, workflow_name, config):
     #   Check environmental variable PIPER_GLOB_CONF_XML
     #   then the config file
     #   then the file globalConfig.xml in the piper root dir
-    piper_rootdir = os.path.get("piper", {}).get("path_to_piper_rootdir")
+
+    piper_rootdir = config.get("piper", {}).get("path_to_piper_rootdir")
     piper_global_config_path = (os.environ.get("PIPER_GLOB_CONF_XML") or
                                 config.get("piper", {}).get("path_to_piper_globalconfig") or
                                 (os.path.join(piper_rootdir, "globalConfig.xml") if
