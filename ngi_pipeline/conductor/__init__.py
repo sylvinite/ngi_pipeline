@@ -33,13 +33,7 @@ def process_demultiplexed_flowcells(demux_fcid_dirs, restrict_to_projects=None, 
     :param str config_file_path: The path to the configuration file; can also be
                                  specified via environmental variable "NGI_CONFIG"
     """
-    if not config_file_path:
-        config_file_path = os.environ.get("NGI_CONFIG") or os.path.expandvars(os.path.join("$HOME/.ngipipeline/ngi_config.yaml"))
-        if not os.path.isfile(config_file_path):
-            error_msg = ("Configuration file \"{}\" does not exist or is not a "
-                         "file. Cannot proceed.".format(config_file_path))
-            LOG.error(error_msg)
-            raise RuntimeError(error_msg)
+    if not config_file_path: config_file_path = locate_ngi_config()
     if not restrict_to_projects: restrict_to_projects = []
     if not restrict_to_samples: restrict_to_samples = []
     demux_fcid_dirs_set = set(demux_fcid_dirs)
@@ -70,16 +64,95 @@ def process_demultiplexed_flowcells(demux_fcid_dirs, restrict_to_projects=None, 
     else:
         # Don't need the dict functionality anymore; revert to list
         projects_to_analyze = projects_to_analyze.values()
+    # Launch 'em! Should handle Exceptions here possibly
+    launch_analysis_for_projects(projects_to_analyze)
 
-    analysis_engine_module_name = config.get("analysis", {}).get("analysis_engine")
-    if not analysis_engine_module_name:
-        error_msg = "No analysis engine specified in configuration file. Exiting."
-        LOG.error(error_msg)
-        raise RuntimeError(error_msg)
-    # Import the module specified in the config file (e.g. bcbio, piper)
-    analysis_module = importlib.import_module(analysis_engine_module_name)
-    analysis_module.main(projects_to_analyze=projects_to_analyze, config_file_path=config_file_path)
 
+## TODO Move to config submodule
+def locate_ngi_config():
+    if not config_file_path:
+        config_file_path = os.environ.get("NGI_CONFIG") or os.path.expandvars(os.path.join("$HOME/.ngipipeline/ngi_config.yaml"))
+        if not os.path.isfile(config_file_path):
+            error_msg = ("Configuration file \"{}\" does not exist or is not a "
+                         "file. Cannot proceed.".format(config_file_path))
+            LOG.error(error_msg)
+            raise RuntimeError(error_msg)
+    return config_file_path
+
+
+def launch_analysis_for_projects(projects_to_analyze, restrict_to_samples=None, config_file_path=None):
+    if not config_file_path: config_file_path = config_file_path = locate_ngi_config()
+    for project in projects_to_analyze:
+        # Get information from the database regarding which workflows to run
+        try:
+            workflows = get_workflows_for_project(project.name)
+        except (ValueError, IOError) as e:
+            error_msg = ("Skipping project {} because of error: {}".format(project, e))
+            LOG.error(error_msg)
+            continue
+        for workflow in workflows:
+            try:
+                analysis_engine_module_name = config["analysis"][workflow]["analysis_engine"]
+            except KeyError:
+                error_msg = ("No analysis engine for workflow {} specified "
+                             "in configuration file. Skipping this workflow "
+                             " for project {}".format(workflow, project))
+                LOG.error(error_msg)
+                raise RuntimeError(error_msg)
+            # Import the adapter module specified in the config file (e.g. piper_ngi)
+            try:
+                analysis_module = importlib.import_module(analysis_engine_module_name)
+            except ImportError as e:
+                error_msg = ("Couldn't import module {} for workflow {} "
+                             "in project {}. Skipping.".format(analysis_module,
+                                                               workflow,
+                                                               project))
+                LOG.error(error_msg)
+            try:
+                ## TODO Here we should get back some relevant information about the process,
+                ##      i.e. the PID or something, and this should be recorded somewhere
+                ##      and the database updated
+                analysis_module.analyze_project(project_to_analyze=project_to_analyze,
+                                                workflow_name=workflow,
+                                                config_file_path=config_file_path)
+                ## TODO we also need somehow to trigger a periodic evaluation
+                ##      of if there are newly-valid workflows. For example,
+                ##      when an alignment finishes, we may now have 30X coverage
+                ##      and can move on to variant calling. Will this be via
+                ##      Celery, i.e. event-driven, or via a periodic cron job?
+            except Exception as e:
+                LOG.error(e)
+
+
+def get_workflows_for_project(project_name):
+    """Get the workflows that should be run for this project from the database.
+    This not only reads the workflows for the project level from the database,
+    it also runs any validation steps to see if the workflow is valid yet.
+    For example, the dna_alignonly workflow has no prerequisites, whereas
+    the variant calling workflow requires all samples to meet some coverage
+    criteria (e.g. 30X autosomal).
+
+    :param str project_name: The name of the project
+
+    :returns: The names of the workflows that should be run.
+    :rtype: list
+    :raises ValueError: If the project cannot be found in the database
+    :raises IOError: If the database cannot be reached
+    """
+    # This should reference the database
+    return "dna_alignonly"
+    # This is a rough sketch of how I imagine this would work with fairly
+    # generic but descriptive function/variable names
+    # Keep the connection so we can pass it to the validation function
+    db_project_object = database.session.get_session_for_project(project_name)
+    workflow_list_unvalidated = db_project_object.get("workflows")
+    workflow_list_validated = [workflow for workflow in workflow_list_unvalidated if
+                               validate_workflow_for_project(db_project_object, workflow_name)]
+    return workflow_list_validated
+
+
+def validate_workflow_for_project(db_project_object, workflow_name):
+    pass
 
 def setup_analysis_directory_structure(fc_dir, config, projects_to_analyze,
                                        restrict_to_projects=None, restrict_to_samples=None):
