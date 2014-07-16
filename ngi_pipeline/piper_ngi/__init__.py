@@ -210,7 +210,7 @@ def build_piper_cl(project, config):
         raise ValueError(error_msg)
     for workflow_name in generic_workflow_names_for_project:
         cl = workflows.return_cl_for_workflow(workflow_name=workflow_name,
-                                              qscripts_dir_path=piper_qscripts_path,
+                                              qscripts_dir_path=piper_qscripts_dir,
                                               setup_xml_path=setup_xml_path,
                                               global_config_path=piper_global_config_path)
         project.command_lines.append(cl)
