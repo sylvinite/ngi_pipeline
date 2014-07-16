@@ -33,9 +33,8 @@ def main(projects_to_analyze, config_file_path):
     load_modules(modules_to_load)
     for project in projects_to_analyze:
         try:
-            ## NOTE report.xml is created by sthlm2UUSNP at the moment, unsure in the long run
-            #create_report_tsv(project)
-            # Temporary until the file format switch
+            # Temporary until the directory format switch
+            # report.xml is created by sthlm2UUSNP (in convert_sthlm_to_uppsala)
             convert_sthlm_to_uppsala(project)
             build_setup_xml(project, config)
             build_piper_cl(project, config)
@@ -49,50 +48,6 @@ def main(projects_to_analyze, config_file_path):
     ## TODO Need to write workflow status to database under relevant heading!
 
 
-def symlink_convert_file_names(project):
-    """Converts standard Illumina (and Uppsala) file-naming format to the
-    Stockholm format; required atm so sthlm2UUSNP can switch them back.
-    """
-    # A new directory must be created as sthlm2UUSNP chokes on unexpected files/names
-    sthlm_dirname = "{}_sthlm".format(project.dirname)
-    safe_makedir(os.path.join(project.base_path, sthlm_dirname))
-
-    for sample in project:
-        safe_makedir(os.path.join(project.base_path, sthlm_dirname, sample.dirname))
-        for fcid in sample:
-            safe_makedir(os.path.join(project.base_path, sthlm_dirname, sample.dirname, fcid.dirname))
-            for fastq in fcid:
-                m = re.match(r'(?P<sample_name>\w+)_(?P<index>[\w-]+)_L\d{2}(?P<lane_num>\d)_R(?P<read_num>\d)_.*(?P<ext>fastq.*)', fastq)
-                try:
-                    args_dict = m.groupdict()
-                except AttributeError:
-                    # No match
-                    LOG.error("Filename \"{}\" did not match template! Blame {}".format(fastq, "Mario"))
-                    continue
-                args_dict.update({"date_fcid": fcid.name})
-                scilifelab_named_file = "{lane_num}_{date_fcid}_{sample_name}_{read_num}.{ext}".format(**args_dict)
-                fcid_src_path = os.path.join(project.base_path,
-                                             project.dirname,
-                                             sample.dirname,
-                                             fcid.dirname,)
-                fcid_dst_path = os.path.join(project.base_path,
-                                             sthlm_dirname,
-                                             sample.dirname,
-                                             fcid.dirname,)
-                src_fastq = os.path.join(fcid_src_path, fastq)
-                dst_fastq = os.path.join(fcid_dst_path, scilifelab_named_file)
-                try:
-                    os.symlink(src_fastq, dst_fastq)
-                except OSError as e:
-                    if e.errno == 17:   # File already exists
-                        pass
-                    else:
-                        raise
-    ## NOTE These should not necessarily by the same but in practice they have been so far
-    ##      and so the code treats them that way which is not ideal
-    project.dirname = sthlm_dirname
-    project.name = sthlm_dirname
-
 def convert_sthlm_to_uppsala(project):
     """Convert projects from Stockholm style (three-level) to Uppsala style
     (two-level) using the sthlm2UUSNP Java utility.
@@ -102,9 +57,6 @@ def convert_sthlm_to_uppsala(project):
     :returns: A list of projects with Uppsala-style directories as attributes.
     :rtype: list
     """
-    # Need to convert file names from Illumina --> Sthlm format
-    # so we can convert file names from Sthlm --> Illumina format
-    symlink_convert_file_names(project)
     # Requires sthlm2UUSNP on PATH
     cl_template = "sthlm2UUSNP -i {input_dir} -o {output_dir}"
     LOG.info("Converting Sthlm project {} to UUSNP format".format(project))
@@ -120,20 +72,6 @@ def convert_sthlm_to_uppsala(project):
                      "project {}: {}".format(project, e))
         LOG.error(error_msg)
         raise RuntimeError(error_msg)
-    ## NOTE sthlm2UUSNP automatically creates the needed report.xml files,
-    ##      so for the moment we don't need to copy anything
-    #for ext in ["tsv", "xml"]:
-    #    report_src_file = os.path.join(project.base_path, project.dirname, "report.{}".format(ext))
-    #    if os.path.isfile(report_src_file):
-    #        report_dst_file = os.path.join(project.base_path, uppsala_dirname, "report.{}".format(ext))
-    #try:
-    #    shutil.copy(report_src_file, report_dst_file)
-    #except NameError:
-    #    error_msg = ("No report.tsv or report.xml file found for project {}; "
-    #                 "Piper processing will fail!".format(project))
-    #    LOG.error(error_msg)
-    #    ## TODO Pick better exception
-    #    raise ValueError(error_msg)
     project.dirname = uppsala_dirname
     project.name = uppsala_dirname
     for sample in project.samples.values():
