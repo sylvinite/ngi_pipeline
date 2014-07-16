@@ -1,4 +1,4 @@
-from ngi_pipeine.utils.classes import memoized
+from ngi_pipeline.utils.classes import memoized
 
 @memoized
 ## TODO change to use new database API
