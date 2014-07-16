@@ -27,7 +27,9 @@ project:
     INBOX: /proj/a2010002/archive
 
 analysis:
-    analysis_engine: ngi_pipeline.piper_ngi
+    workflows:
+        dna_alignonly:
+            analysis_engine: ngi_pipeline.piper_ngi
     top_dir: /proj/a2010002/nobackup/mario/analysis_ready
     log: /proj/a2010002/data/log
     store_dir: /proj/a2010002/archive

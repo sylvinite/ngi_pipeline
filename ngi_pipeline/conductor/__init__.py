@@ -70,7 +70,9 @@ def process_demultiplexed_flowcells(demux_fcid_dirs, restrict_to_projects=None, 
 
 
 def launch_analysis_for_projects(projects_to_analyze, restrict_to_samples=None, config_file_path=None):
-    if not config_file_path: config_file_path = config_file_path = locate_ngi_config()
+    if not config_file_path:
+        config_file_path = locate_ngi_config()
+    config = load_yaml_config(config_file_path)
     for project in projects_to_analyze:
         # Get information from the database regarding which workflows to run
         try:
@@ -81,11 +83,11 @@ def launch_analysis_for_projects(projects_to_analyze, restrict_to_samples=None, 
             continue
         for workflow in workflows:
             try:
-                analysis_engine_module_name = config["analysis"][workflow]["analysis_engine"]
+                analysis_engine_module_name = config["analysis"]["workflows"][workflow]["analysis_engine"]
             except KeyError:
-                error_msg = ("No analysis engine for workflow {} specified "
+                error_msg = ("No analysis engine for workflow \"{}\" specified "
                              "in configuration file. Skipping this workflow "
-                             " for project {}".format(workflow, project))
+                             "for project {}".format(workflow, project))
                 LOG.error(error_msg)
                 raise RuntimeError(error_msg)
             # Import the adapter module specified in the config file (e.g. piper_ngi)
@@ -97,11 +99,12 @@ def launch_analysis_for_projects(projects_to_analyze, restrict_to_samples=None, 
                                                                workflow,
                                                                project))
                 LOG.error(error_msg)
+                continue
             try:
                 ## TODO Here we should get back some relevant information about the process,
                 ##      i.e. the PID or something, and this should be recorded somewhere
                 ##      and the database updated
-                analysis_module.analyze_project(project_to_analyze=project_to_analyze,
+                analysis_module.analyze_project(project=project,
                                                 workflow_name=workflow,
                                                 config_file_path=config_file_path)
                 ## TODO we also need somehow to trigger a periodic evaluation
@@ -111,6 +114,7 @@ def launch_analysis_for_projects(projects_to_analyze, restrict_to_samples=None, 
                 ##      Celery, i.e. event-driven, or via a periodic cron job?
             except Exception as e:
                 LOG.error(e)
+                raise
 
 
 def get_workflows_for_project(project_name):
@@ -132,13 +136,14 @@ def get_workflows_for_project(project_name):
     #db_project_object = get_charon_session_for_project(project_name)
     #workflow_list_unvalidated = db_project_object.get("workflows")
     # Temporary until this is developed fully and the database populated
+    db_project_object=None
     workflow_list_unvalidated = ["dna_alignonly"]
     workflow_list_validated = [workflow for workflow in workflow_list_unvalidated if
-                               validate_workflow_for_project(db_project_object, workflow_name)]
+                               validate_workflow_for_project(db_project_object, workflow)]
     return workflow_list_validated
 
 
-def validate_workflow_for_project(db_project_object, workflow_name):
+def validate_workflow_for_project(db_project_object, workflow):
     return True
 
 

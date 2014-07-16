@@ -19,7 +19,7 @@ from ngi_pipeline.utils.parsers import parse_lane_from_filename, find_fastq_read
 
 LOG = minimal_logger(__name__)
 
-def analyze_project(project_to_analyze, workflow_name, config_file_path):
+def analyze_project(project, workflow_name, config_file_path):
     """The main method.
 
     :param NGIProject project_to_analyze : The project -- to analyze!!
