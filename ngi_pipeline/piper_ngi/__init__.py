@@ -37,8 +37,8 @@ def analyze_project(project, workflow_name, config_file_path):
         # report.xml is created by sthlm2UUSNP (in convert_sthlm_to_uppsala)
         convert_sthlm_to_uppsala(project)
         build_setup_xml(project, config)
-        build_piper_cl(project, workflow_name, config)
-        launch_piper_job(project)
+        command_line = build_piper_cl(project, workflow_name, config)
+        launch_piper_job(project, command_line)
     except Exception as e:
         error_msg = "Processing project {} failed: {}".format(project, e.__repr__())
         LOG.error(error_msg)
@@ -78,12 +78,12 @@ def convert_sthlm_to_uppsala(project):
             sample.dirname = "Sample_{}".format(sample.dirname)
 
 
-def launch_piper_jobs(project):
+def launch_piper_job(project, command_line):
     cwd = os.path.join(project.base_path, project.dirname)
-    for command_line in project.command_lines:
-        ## TODO Would like to log these to the log -- can we get a Logbook filehandle-like object?
-        ## TODO add exception handling
-        pid = execute_command_line(command_line, cwd=cwd)
+    ## TODO Would like to log these to the log -- can we get a Logbook filehandle-like object?
+    ## TODO add exception handling
+    pid = execute_command_line(command_line, cwd=cwd)
+    return pid
 
 
 def build_piper_cl(project, workflow_name, config):
@@ -140,7 +140,7 @@ def build_piper_cl(project, workflow_name, config):
                                           qscripts_dir_path=piper_qscripts_dir,
                                           setup_xml_path=setup_xml_path,
                                           global_config_path=piper_global_config_path)
-    project.command_lines.append(cl)
+    return cl
 
 
 def build_setup_xml(project, config):
