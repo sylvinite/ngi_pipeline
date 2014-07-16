@@ -13,9 +13,10 @@ import re
 import sys
 
 from ngi_pipeline.conductor.classes import NGIProject
+from ngi_pipeline.database.session import get_charon_session_for_project
 from ngi_pipeline.log import minimal_logger
 from ngi_pipeline.utils.filesystem import do_rsync, safe_makedir
-from ngi_pipeline.utils.config import load_yaml_config
+from ngi_pipeline.utils.config import load_yaml_config, locate_ngi_config
 from ngi_pipeline.utils.parsers import FlowcellRunMetricsParser
 
 LOG = minimal_logger(__name__)
@@ -68,18 +69,6 @@ def process_demultiplexed_flowcells(demux_fcid_dirs, restrict_to_projects=None, 
     launch_analysis_for_projects(projects_to_analyze)
 
 
-## TODO Move to config submodule
-def locate_ngi_config():
-    if not config_file_path:
-        config_file_path = os.environ.get("NGI_CONFIG") or os.path.expandvars(os.path.join("$HOME/.ngipipeline/ngi_config.yaml"))
-        if not os.path.isfile(config_file_path):
-            error_msg = ("Configuration file \"{}\" does not exist or is not a "
-                         "file. Cannot proceed.".format(config_file_path))
-            LOG.error(error_msg)
-            raise RuntimeError(error_msg)
-    return config_file_path
-
-
 def launch_analysis_for_projects(projects_to_analyze, restrict_to_samples=None, config_file_path=None):
     if not config_file_path: config_file_path = config_file_path = locate_ngi_config()
     for project in projects_to_analyze:
@@ -127,7 +116,7 @@ def launch_analysis_for_projects(projects_to_analyze, restrict_to_samples=None, 
 def get_workflows_for_project(project_name):
     """Get the workflows that should be run for this project from the database.
     This not only reads the workflows for the project level from the database,
-    it also runs any validation steps to see if the workflow is valid yet.
+    it also takes steps to determine if the workflow can be run yet.
     For example, the dna_alignonly workflow has no prerequisites, whereas
     the variant calling workflow requires all samples to meet some coverage
     criteria (e.g. 30X autosomal).
@@ -139,20 +128,19 @@ def get_workflows_for_project(project_name):
     :raises ValueError: If the project cannot be found in the database
     :raises IOError: If the database cannot be reached
     """
-    # This should reference the database
-    return "dna_alignonly"
-    # This is a rough sketch of how I imagine this would work with fairly
-    # generic but descriptive function/variable names
     # Keep the connection so we can pass it to the validation function
-    db_project_object = database.session.get_session_for_project(project_name)
-    workflow_list_unvalidated = db_project_object.get("workflows")
+    #db_project_object = get_charon_session_for_project(project_name)
+    #workflow_list_unvalidated = db_project_object.get("workflows")
+    # Temporary until this is developed fully and the database populated
+    workflow_list_unvalidated = ["dna_alignonly"]
     workflow_list_validated = [workflow for workflow in workflow_list_unvalidated if
                                validate_workflow_for_project(db_project_object, workflow_name)]
     return workflow_list_validated
 
 
 def validate_workflow_for_project(db_project_object, workflow_name):
-    pass
+    return True
+
 
 def setup_analysis_directory_structure(fc_dir, config, projects_to_analyze,
                                        restrict_to_projects=None, restrict_to_samples=None):

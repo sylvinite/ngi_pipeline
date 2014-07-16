@@ -8,7 +8,7 @@ def get_charon_session(append_url=""):
     # Double trailing slash shouldn't hurt, right?
     base_url = base_url + "/" + append_url
     api_token = api_token = {'X-Charon-API-token': API_TOKEN}
-    # Preload the session with the api_token and return it
+    # Preload the session with the api_token and the base url
     return CharonSession(api_token=api_token, base_url=base_url)
 
 def get_charon_session_for_project(project_name):

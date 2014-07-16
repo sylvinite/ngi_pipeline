@@ -4,6 +4,17 @@ import xmltodict
 import yaml
 
 
+def locate_ngi_config():
+    if not config_file_path:
+        config_file_path = os.environ.get("NGI_CONFIG") or os.path.expandvars(os.path.join("$HOME/.ngipipeline/ngi_config.yaml"))
+        if not os.path.isfile(config_file_path):
+            error_msg = ("Configuration file \"{}\" does not exist or is not a "
+                         "file. Cannot proceed.".format(config_file_path))
+            LOG.error(error_msg)
+            raise RuntimeError(error_msg)
+    return config_file_path
+
+
 def load_json_config(config_file_path):
     """Load XML config file, expanding environmental variables.
 
