@@ -159,26 +159,33 @@ def build_piper_cl(project, config):
     :rtype: list
     :raises ValueError: If a required configuration value is missing.
     """
+
     # Find Piper global configuration:
-    #   Check environmental variable PIPER_GLOB_CONF
+    #   Check environmental variable PIPER_GLOB_CONF_XML
     #   then the config file
     #   then the file globalConfig.xml in the piper root dir
-    piper_global_config_path = (os.environ.get("PIPER_GLOB_CONF") or
+    piper_global_config_path = (os.environ.get("PIPER_GLOB_CONF_XML") or
                                 config.get("piper", {}).get("path_to_piper_globalconfig") or
                                 os.path.join(config.get("piper", {}).get("path_to_piper_rootdir"),
                                              "globalConfig.xml"))
     if not piper_global_config_path:
-        error_msg = "Could not find Piper global configuration file."
+        error_msg = ("Could not find Piper global configuration file in config file, "
+                     "as environmental variable (\"PIPER_GLOB_CONF_XML\"), "
+                     "or in Piper root directory.")
         LOG.error(error_msg)
         raise ValueError(error_msg)
-    try:
-        ## TODO add a search for some environmental varialbe also ("PIPER_QSCRIPTS" or so)
-        piper_qscripts_path = config['piper']['path_to_piper_qscripts']
-    except KeyError as e:
-        error_msg = "Could not load key \"{}\" from config file; " \
-                    "cannot continue.".format(e)
+
+    # Find Piper QScripts dir:
+    #   Check environmental variable PIPER_QSCRIPTS_DIR
+    #   then the config file
+    piper_qscripts_dir = (os.environ.get("PIPER_QSCRIPTS_DIR") or
+                          config['piper']['path_to_piper_qscripts'])
+    if not piper_qscripts_dir:
+        error_msg = ("Could not find Piper QScripts directory in config file or "
+                    "as environmental variable (\"PIPER_QSCRIPTS_DIR\").")
         LOG.error(error_msg)
         raise ValueError(error_msg)
+
     LOG.info("Building workflow command lines for project {}".format(project))
     ## For NGI, all projects will go through the same workflows;
     ## later, we'll want to let some database values determine this.
