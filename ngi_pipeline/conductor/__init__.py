@@ -114,13 +114,35 @@ def launch_analysis_for_projects(projects_to_analyze, restrict_to_samples=None, 
                 LOG.error(error_msg)
                 continue
             try:
-                p_handle = analysis_module.analyze_project(project=project,
-                                                           workflow_name=workflow,
-                                                           config_file_path=config_file_path)
+                ## NOTE temporary for testing, sthlm2UUSNP doesn't handle 4-tier dir structure yet
+                #p_handle = analysis_module.analyze_project(project=project,
+                #                                           workflow_name=workflow,
+                #                                           config_file_path=config_file_path)
+                import subprocess
+                p_handle = subprocess.Popen("ls", shell=True)
+                # For now only tracking this on the project level
                 record_pid_for_workflow(p_handle, workflow, project, analysis_module, config)
             except Exception as e:
                 LOG.error(e)
                 raise
+
+
+def check_update_jobs_status(config_file_path=None, projects_to_check=None):
+    """Check and update the status of jobs associated with workflows/projects.
+
+    :param str config_file_path: The path to the configuration file (optional if
+                                 it is defined as env var or in default location)
+    :param list projects_to_check: A list of projects to check (exclusive)
+    """
+    if not config_file_path:
+        config_file_path = locate_ngi_config()
+    config = load_yaml_config(config_file_path)
+    
+
+def sync_workflow_statuses_with_charon():
+    """Synchronize workflow statuses between our local database and Charon."""
+    pass
+
 
 
 def get_workflows_for_project(project_name):
