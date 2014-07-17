@@ -1,9 +1,10 @@
 """Keeps track of running workflow processes"""
-
 import shelve
 
+from ngi_pipeline.log import minimal_logger
 from ngi_pipeline.utils.config import load_yaml_config, locate_ngi_config
 
+LOG = minimal_logger(__name__)
 
 ## TODO not sure what to use as parameters here, haven't decided when/where to call the function yet
 def get_workflow_returncode(project, sample, fcid, config):
@@ -27,7 +28,6 @@ def get_workflow_returncode(project, sample, fcid, config):
     return return_code
 
 
-## TODO need project, sample, libprep, seqrun to track these properly
 def record_pid_for_workflow(p_handle, workflow, project, analysis_module, config=None):
     """Track the PID for running workflow analysis processes.
 
@@ -44,20 +44,24 @@ def record_pid_for_workflow(p_handle, workflow, project, analysis_module, config
     ## Probably better to use an actual SQL database for this so we can
     ## filter by whatever -- project name, analysis module name, pid, etc.
     ## For the prototyping we can use shelve but later move to sqlite3 or sqlalchemy+Postgres/MySQL/whatever
+    LOG.info("Recording process id {} for project {}, " 
+             "workflow {}".format(p_handle.pid, project, workflow))
     db = get_shelve_database(config)
-    if p_handle.pid in db:
-        ## Not decided yet how to handle this. Shouldn't happen much but might happen I -think-
-        ## See http://superuser.com/a/135011/244420
-        error_msg = "Record already stored for PID {}; will not overwrite".format(p_handle.pid)
-        raise ValueError(error_msg)
-    ## TODO REDO ALL THIS
-    db[str(p_handle.pid)] = {
-                        "p_handle": p_handle,
-                        "workflow": workflow,
-                        "project": project.name,
-                        "analysis_module": analysis_module.__name__
-                        }
+    if project.name in db:
+        project_dict = db[project.name]
+    else:
+        project_dict = {}
+    if "workflows" in project_dict:
+        workflows_dict = project_dict["workflows"]
+    else:
+        workflows_dict = project_dict["workflows"] = {}
+    workflows_dict[workflow] = {"p_handle": p_handle,
+                                "analysis_module": analysis_module.__name__}
+    import ipdb; ipdb.set_trace()
+    db[project.name] = project_dict
     db.close()
+    LOG.info("Successfully recroded process id {} for project {}, " 
+             "workflow {}".format(p_handle.pid, project, workflow))
 
 
 def get_shelve_database(config):
