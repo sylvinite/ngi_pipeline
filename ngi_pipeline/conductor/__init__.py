@@ -19,11 +19,13 @@ from ngi_pipeline.database.process_tracking import get_workflow_returncode, \
 from ngi_pipeline.log import minimal_logger
 from ngi_pipeline.utils.filesystem import do_rsync, safe_makedir
 from ngi_pipeline.utils.config import load_yaml_config, locate_ngi_config
-from ngi_pipeline.utils.parsers import FlowcellRunMetricsParser
+from ngi_pipeline.utils.parsers import FlowcellRunMetricsParser, \
+                                       determine_library_prep_from_fcid
 
 LOG = minimal_logger(__name__)
 
 
+# This is called via Celery when a new flowcell is delivered from Sthlm or Uppsala
 def process_demultiplexed_flowcells(demux_fcid_dirs, restrict_to_projects=None, restrict_to_samples=None, config_file_path=None):
     """
     The main launcher method.
@@ -138,16 +140,24 @@ def get_workflows_for_project(project_name):
     """
     # Keep the connection so we can pass it to the validation function
     #db_project_object = get_charon_session_for_project(project_name)
-    #workflow_list_unvalidated = db_project_object.get("workflows")
-    # Temporary until this is developed fully and the database populated
+    ## Temporary until this is developed fully and the database populated
     db_project_object=None
+
+    ## TODO how will this workflows thing be populated? It probably makes
+    ##      sense to have a separate function that examines various characteristics
+    ##      of the project (e.g. the kit type) to determine what they will be
+    ##      For NGI samples, it will just be qc, dna_alignonly and variant_calling
+    #workflow_list_unvalidated = db_project_object.get("workflows")
+    ## Temporary until this is developed fully and the database populated
     workflow_list_unvalidated = ["dna_alignonly"]
+
     workflow_list_validated = [workflow for workflow in workflow_list_unvalidated if
                                validate_workflow_for_project(db_project_object, workflow)]
     return workflow_list_validated
 
 
 def validate_workflow_for_project(db_project_object, workflow):
+    ## TODO implement checks for the various workflows
     return True
 
 
@@ -190,8 +200,8 @@ def setup_analysis_directory_structure(fc_dir, config, projects_to_analyze,
     # From RunInfo.xml
     fc_date = fc_dir_structure['fc_date']
     # From RunInfo.xml (name) & runParameters.xml (position)
-    fc_name = fc_dir_structure['fc_name']
-    fc_run_id = "{}_{}".format(fc_date, fc_name)
+    fcid = fc_dir_structure['fc_name']
+    fc_short_run_id = "{}_{}".format(fc_date, fcid)
 
     ## This appears to be unneeded, at least for the moment.
     ##  When would these be required?
@@ -234,11 +244,20 @@ def setup_analysis_directory_structure(fc_dir, config, projects_to_analyze,
             if not os.path.exists(sample_dir): safe_makedir(sample_dir, 0770)
             # This will only create a new sample object if it doesn't already exist in the project
             sample_obj = project_obj.add_sample(name=sample_name, dirname=sample_name)
-            # Create a directory for the flowcell if it does not exist
-            dst_sample_fcid_dir = os.path.join(sample_dir, fc_run_id)
-            if not os.path.exists(dst_sample_fcid_dir): safe_makedir(dst_sample_fcid_dir, 0770)
-            # This will only create a new FCID object if it doesn't already exist in the sample
-            fcid_obj = sample_obj.add_fcid(name=fc_run_id, dirname=fc_run_id)
+
+            # Get the Library Prep ID for each file
+            pattern = re.compile(".*\.(fastq|fq)(\.gz|\.gzip|\.bz2)?$")
+            fastq_files = filter(pattern.match, sample.get('files', []))
+            seqrun_dir = None
+            for fq_file in fastq_files:
+                libprep_name = determine_library_prep_from_fcid(project_name, sample_name, fcid)
+                libprep_object = sample_obj.add_libprep(name=libprep_name, dirname=libprep_name)
+                libprep_dir = os.path.join(sample_dir, libprep_name)
+                if not os.path.exists(libprep_dir): safe_makedir(libprep_dir, 0770)
+                seqrun_object = libprep_object.add_seqrun(name=fc_short_run_id, dirname=fc_short_run_id)
+                seqrun_dir = os.path.join(libprep_dir, fc_short_run_id)
+                if not os.path.exists(seqrun_dir): safe_makedir(seqrun_dir, 0770)
+                seqrun_object.add_fastq_files(fq_file)
             # rsync the source files to the sample directory
             #    src: flowcell/data/project/sample
             #    dst: project/sample/flowcell_run
@@ -246,14 +265,12 @@ def setup_analysis_directory_structure(fc_dir, config, projects_to_analyze,
                                           project['data_dir'],
                                           project['project_dir'],
                                           sample['sample_dir'])
-            LOG.info("Copying sample files from \"{}\" to \"{}\"...".format(
-                                            src_sample_dir, dst_sample_fcid_dir))
-            sample_files = do_rsync([os.path.join(src_sample_dir, f) for f in
-                                     sample.get('files', [])], dst_sample_fcid_dir)
-            # Just want fastq files here
-            pattern = re.compile(".*\.(fastq|fq)(\.gz|\.gzip|\.bz2)?$")
-            fastq_files = filter(pattern.match, sample.get('files', []))
-            fcid_obj.add_fastq_files(fastq_files)
+            for libprep in sample_obj:
+                for seqrun in libprep:
+                    src_fastq_files = [ os.path.join(src_sample_dir, fastq_file)
+                                        for fastq_file in seqrun.fastq_files ]
+                    LOG.info("Copying fastq files from {} to {}...".format(sample_dir, seqrun_dir))
+                    do_rsync(src_fastq_files, seqrun_dir)
     return projects_to_analyze
 
 

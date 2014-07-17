@@ -4,8 +4,9 @@ import shelve
 
 from ngi_pipeline.utils.config import load_yaml_config, locate_ngi_config
 
+
 ## TODO not sure what to use as parameters here, haven't decided when/where to call the function yet
-def get_workflow_returncode(pid, config):
+def get_workflow_returncode(project, sample, fcid, config):
     """Checks to see if a workflow process is finished and if so
     gives the return code.
 
@@ -26,6 +27,7 @@ def get_workflow_returncode(pid, config):
     return return_code
 
 
+## TODO need project, sample, libprep, seqrun to track these properly
 def record_pid_for_workflow(p_handle, workflow, project, analysis_module, config=None):
     """Track the PID for running workflow analysis processes.
 
@@ -39,14 +41,16 @@ def record_pid_for_workflow(p_handle, workflow, project, analysis_module, config
     :raises RuntimeError: if the configuration file cannot be found
     :raises KeyError: If the database portion of the configuration file is missing
     """
-    ## NOTE I'm not super sure about using shelve for this but I do want to save
-    ##      the subprocess.Popen objects. I'm open to suggestions
+    ## Probably better to use an actual SQL database for this so we can
+    ## filter by whatever -- project name, analysis module name, pid, etc.
+    ## For the prototyping we can use shelve but later move to sqlite3 or sqlalchemy+Postgres/MySQL/whatever
     db = get_shelve_database(config)
     if p_handle.pid in db:
         ## Not decided yet how to handle this. Shouldn't happen much but might happen I -think-
         ## See http://superuser.com/a/135011/244420
         error_msg = "Record already stored for PID {}; will not overwrite".format(p_handle.pid)
         raise ValueError(error_msg)
+    ## TODO REDO ALL THIS
     db[str(p_handle.pid)] = {
                         "p_handle": p_handle,
                         "workflow": workflow,
