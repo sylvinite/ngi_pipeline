@@ -54,8 +54,8 @@ def execute_command_line(cl, stdout=None, stderr=None, cwd=None):
     :param file stderr: The filehandle destination for STDERR (can be None)
     :param str cwd: The directory to be used as CWD for the process launched
 
-    :returns: Process ID of launched process
-    :rtype: str
+    :returns: The subprocess.Popen object
+    :rtype: subprocess.Popen
 
     :raises RuntimeError: If the OS command-line execution failed.
     """
@@ -82,4 +82,4 @@ def execute_command_line(cl, stdout=None, stderr=None, cwd=None):
                      "(Command \"{}\")".format(e, command_line))
     if error_msg:
         raise RuntimeError(error_msg)
-    return p_handle.pid
+    return p_handle

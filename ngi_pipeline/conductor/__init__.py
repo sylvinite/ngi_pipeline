@@ -14,6 +14,8 @@ import sys
 
 from ngi_pipeline.conductor.classes import NGIProject
 from ngi_pipeline.database.session import get_charon_session_for_project
+from ngi_pipeline.database.process_tracking import get_workflow_returncode, \
+                                                   record_pid_for_workflow
 from ngi_pipeline.log import minimal_logger
 from ngi_pipeline.utils.filesystem import do_rsync, safe_makedir
 from ngi_pipeline.utils.config import load_yaml_config, locate_ngi_config
@@ -65,11 +67,20 @@ def process_demultiplexed_flowcells(demux_fcid_dirs, restrict_to_projects=None, 
     else:
         # Don't need the dict functionality anymore; revert to list
         projects_to_analyze = projects_to_analyze.values()
-    # Launch 'em! Should handle Exceptions here possibly
     launch_analysis_for_projects(projects_to_analyze)
 
 
+## NOTE This will be the function that is called by the Workflow Watcher script, or whatever we want to call it
+##      By this I mean the script that checks intermittently to determine if we can move on with the next workflow,
+##      whether this is something periodic (like a cron job) or something triggered by the completion of another part
+##      of the code (event-based, i.e. via Celery)
 def launch_analysis_for_projects(projects_to_analyze, restrict_to_samples=None, config_file_path=None):
+    """Launch the analysis of projects.
+
+    :param list projects_to_analyze: The list of projects (Project objects) to analyze
+    :param list restrict_to_samples: A list of sample names to which we will restrict our analysis
+    :param list config_file_path: The path to the NGI Pipeline configuration file.
+    """
     if not config_file_path:
         config_file_path = locate_ngi_config()
     config = load_yaml_config(config_file_path)
@@ -101,17 +112,10 @@ def launch_analysis_for_projects(projects_to_analyze, restrict_to_samples=None, 
                 LOG.error(error_msg)
                 continue
             try:
-                ## TODO Here we should get back some relevant information about the process,
-                ##      i.e. the PID or something, and this should be recorded somewhere
-                ##      and the database updated
-                analysis_module.analyze_project(project=project,
-                                                workflow_name=workflow,
-                                                config_file_path=config_file_path)
-                ## TODO we also need somehow to trigger a periodic evaluation
-                ##      of if there are newly-valid workflows. For example,
-                ##      when an alignment finishes, we may now have 30X coverage
-                ##      and can move on to variant calling. Will this be via
-                ##      Celery, i.e. event-driven, or via a periodic cron job?
+                p_handle = analysis_module.analyze_project(project=project,
+                                                           workflow_name=workflow,
+                                                           config_file_path=config_file_path)
+                record_pid_for_workflow(p_handle, workflow, project, analysis_module, config)
             except Exception as e:
                 LOG.error(e)
                 raise

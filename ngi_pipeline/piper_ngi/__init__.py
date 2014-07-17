@@ -15,7 +15,7 @@ from ngi_pipeline.utils.filesystem import safe_makedir
 from ngi_pipeline.utils import load_modules, execute_command_line
 from ngi_pipeline.utils.config import load_xml_config, load_yaml_config
 from ngi_pipeline.utils.parsers import parse_lane_from_filename, find_fastq_read_pairs_from_dir, \
-                                get_flowcell_id_from_dirtree
+                                       get_flowcell_id_from_dirtree
 
 LOG = minimal_logger(__name__)
 
@@ -25,11 +25,12 @@ def analyze_project(project, workflow_name, config_file_path):
     :param NGIProject project_to_analyze : The project -- to analyze!!
     :param str workflow_name: The workflow (e.g. alignment, variant calling)
     :param str config_file_path: The path to the configuration file.
+
+    :returns: Process ID of the launched process
+    :rtype: int
     """
     config = load_yaml_config(config_file_path)
-    ## Problem with module system java version loading at the moment
     modules_to_load = ["java/sun_jdk1.7.0_25", "R/2.15.0"]
-    ## Possibly the Java error could be non-fatal if it's available on PATH
     # Valid only for this session
     load_modules(modules_to_load)
     try:
@@ -38,12 +39,12 @@ def analyze_project(project, workflow_name, config_file_path):
         convert_sthlm_to_uppsala(project)
         build_setup_xml(project, config)
         command_line = build_piper_cl(project, workflow_name, config)
-        launch_piper_job(project, command_line)
+        pid = launch_piper_job(command_line, project)
+        return pid
     except Exception as e:
         error_msg = "Processing project {} failed: {}".format(project, e.__repr__())
         LOG.error(error_msg)
         raise
-## TODO Need to write workflow status to database under relevant heading!
 
 
 def convert_sthlm_to_uppsala(project):
@@ -65,7 +66,6 @@ def convert_sthlm_to_uppsala(project):
     try:
         subprocess.check_call(shlex.split(com))
     except subprocess.CalledProcessError as e:
-        # Fails most commonly if a file/directory already exists. Should it?
         error_msg = ("Unable to convert Sthlm->UU format for "
                      "project {}: {}".format(project, e))
         LOG.error(error_msg)
@@ -78,7 +78,15 @@ def convert_sthlm_to_uppsala(project):
             sample.dirname = "Sample_{}".format(sample.dirname)
 
 
-def launch_piper_job(project, command_line):
+def launch_piper_job(command_line, project):
+    """Launch the Piper command line.
+
+    :param str command_line: The command line to execute
+    :param Project project: The Project object (needed to set the CWD)
+
+    :returns: The Process ID of the launched process
+    :rtype: int
+    """
     cwd = os.path.join(project.base_path, project.dirname)
     ## TODO Would like to log these to the log -- can we get a Logbook filehandle-like object?
     ## TODO add exception handling
