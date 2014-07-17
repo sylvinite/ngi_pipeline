@@ -15,37 +15,36 @@ from ngi_pipeline.utils.filesystem import safe_makedir
 from ngi_pipeline.utils import load_modules, execute_command_line
 from ngi_pipeline.utils.config import load_xml_config, load_yaml_config
 from ngi_pipeline.utils.parsers import parse_lane_from_filename, find_fastq_read_pairs_from_dir, \
-                                get_flowcell_id_from_dirtree
+                                       get_flowcell_id_from_dirtree
 
 LOG = minimal_logger(__name__)
 
-def main(projects_to_analyze, config_file_path):
+def analyze_project(project, workflow_name, config_file_path):
     """The main method.
 
-    :param list flowcell_dirs_to_analyze: A lst of flowcell directories containing fastq files to analyze.
+    :param NGIProject project_to_analyze : The project -- to analyze!!
+    :param str workflow_name: The workflow (e.g. alignment, variant calling)
     :param str config_file_path: The path to the configuration file.
+
+    :returns: Process ID of the launched process
+    :rtype: int
     """
     config = load_yaml_config(config_file_path)
-    ## Problem with module system java version loading at the moment
     modules_to_load = ["java/sun_jdk1.7.0_25", "R/2.15.0"]
-    ## Possibly the Java error could be non-fatal if it's available on PATH
     # Valid only for this session
     load_modules(modules_to_load)
-    for project in projects_to_analyze:
-        try:
-            # Temporary until the directory format switch
-            # report.xml is created by sthlm2UUSNP (in convert_sthlm_to_uppsala)
-            convert_sthlm_to_uppsala(project)
-            build_setup_xml(project, config)
-            build_piper_cl(project, config)
-            launch_piper_jobs(project)
-        except Exception as e:
-            error_msg = "Processing project {} failed:: {}".format(project, e.__repr__())
-            LOG.error(error_msg)
-            ## NOTE Or raise exception back to caller?
-            #continue
-            raise
-    ## TODO Need to write workflow status to database under relevant heading!
+    try:
+        ## Temporary until the directory format switch
+        # report.xml is created by sthlm2UUSNP (in convert_sthlm_to_uppsala)
+        convert_sthlm_to_uppsala(project)
+        build_setup_xml(project, config)
+        command_line = build_piper_cl(project, workflow_name, config)
+        pid = launch_piper_job(command_line, project)
+        return pid
+    except Exception as e:
+        error_msg = "Processing project {} failed: {}".format(project, e.__repr__())
+        LOG.error(error_msg)
+        raise
 
 
 def convert_sthlm_to_uppsala(project):
@@ -67,7 +66,6 @@ def convert_sthlm_to_uppsala(project):
     try:
         subprocess.check_call(shlex.split(com))
     except subprocess.CalledProcessError as e:
-        # Fails most commonly if a file/directory already exists. Should it?
         error_msg = ("Unable to convert Sthlm->UU format for "
                      "project {}: {}".format(project, e))
         LOG.error(error_msg)
@@ -80,17 +78,26 @@ def convert_sthlm_to_uppsala(project):
             sample.dirname = "Sample_{}".format(sample.dirname)
 
 
-def launch_piper_jobs(project):
+def launch_piper_job(command_line, project):
+    """Launch the Piper command line.
+
+    :param str command_line: The command line to execute
+    :param Project project: The Project object (needed to set the CWD)
+
+    :returns: The Process ID of the launched process
+    :rtype: int
+    """
     cwd = os.path.join(project.base_path, project.dirname)
-    for command_line in project.command_lines:
-        ## TODO Would like to log these to the log -- can we get a Logbook filehandle-like object?
-        ## TODO add exception handling
-        pid = execute_command_line(command_line, cwd=cwd)
+    ## TODO Would like to log these to the log -- can we get a Logbook filehandle-like object?
+    ## TODO add exception handling
+    pid = execute_command_line(command_line, cwd=cwd)
+    return pid
 
 
-def build_piper_cl(project, config):
+def build_piper_cl(project, workflow_name, config):
     """Determine which workflow to run for a project and build the appropriate command line.
     :param NGIProject project: The project object to analyze.
+    :param str workflow_name: The name of the workflow to execute
     :param dict config: The (parsed) configuration file for this machine/environment.
 
     :returns: A list of Project objects with command lines to execute attached.
@@ -126,21 +133,10 @@ def build_piper_cl(project, config):
         LOG.error(error_msg)
         raise ValueError(error_msg)
 
-    LOG.info("Building workflow command lines for project {}".format(project))
-    ## For NGI, all projects will go through the same workflows;
-    ## later, we'll want to let some database values determine this.
-
-    ## Once the coverage is high enough (check database), we'll also
-    ## need to put them through e.g. the GATK
-
-    ## We'll want to make this a generic value in the database ("QC", "DNAAlign", "VariantCalling", etc.)
-    ##  and then map to the correct script in the config file. This way we can execute the same pipelines
-    ##  for any of the engines
-
-    ## This key will probably exist on the project level, and may have multiple values.
-    ## Workflows may imply a number of substeps (e.g. qc, alignment, etc.)
-    # workflows_for_project = proj_db.get("workflows") or something like that
-    generic_workflow_names_for_project = ["dna_alignonly"]
+    LOG.info("Building workflow command line(s) for "
+             "project {} and workflow {}".format(project, workflow_name))
+    ## NOTE This key will probably exist on the project level, and may have multiple values.
+    ##      Workflows may imply a number of substeps (e.g. basic = qc, alignment, etc.) ?
     try:
         setup_xml_path = project.setup_xml_path
     except AttributeError:
@@ -148,12 +144,11 @@ def build_piper_cl(project, config):
                      "command-line generation.".format(project))
         LOG.error(error_msg)
         raise ValueError(error_msg)
-    for workflow_name in generic_workflow_names_for_project:
-        cl = workflows.return_cl_for_workflow(workflow_name=workflow_name,
-                                              qscripts_dir_path=piper_qscripts_dir,
-                                              setup_xml_path=setup_xml_path,
-                                              global_config_path=piper_global_config_path)
-        project.command_lines.append(cl)
+    cl = workflows.return_cl_for_workflow(workflow_name=workflow_name,
+                                          qscripts_dir_path=piper_qscripts_dir,
+                                          setup_xml_path=setup_xml_path,
+                                          global_config_path=piper_global_config_path)
+    return cl
 
 
 def build_setup_xml(project, config):
