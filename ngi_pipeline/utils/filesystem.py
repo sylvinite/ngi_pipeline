@@ -17,7 +17,8 @@ def do_rsync(src_files, dst_dir):
 
 
 def safe_makedir(dname, mode=0777):
-    """Make a directory if it doesn't exist, handling concurrent race conditions.
+    """Make a directory (tree) if it doesn't exist, handling concurrent race
+    conditions.
     """
     if not os.path.exists(dname):
         # we could get an error here if multiple processes are creating
@@ -58,5 +59,3 @@ def chdir(new_dir):
         yield
     finally:
         os.chdir(cur_dir)
-
-

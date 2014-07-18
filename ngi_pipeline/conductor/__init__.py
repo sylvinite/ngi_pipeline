@@ -27,8 +27,7 @@ LOG = minimal_logger(__name__)
 
 # This is called via Celery when a new flowcell is delivered from Sthlm or Uppsala
 def process_demultiplexed_flowcells(demux_fcid_dirs, restrict_to_projects=None, restrict_to_samples=None, config_file_path=None):
-    """
-    The main launcher method.
+    """Sort demultiplexed Illumina flowcells into projects and launch their analysis.
 
     :param list demux_fcid_dirs: The CASAVA-produced demux directory/directories.
     :param list restrict_to_projects: A list of projects; analysis will be
@@ -42,7 +41,6 @@ def process_demultiplexed_flowcells(demux_fcid_dirs, restrict_to_projects=None, 
     if not restrict_to_projects: restrict_to_projects = []
     if not restrict_to_samples: restrict_to_samples = []
     demux_fcid_dirs_set = set(demux_fcid_dirs)
-    projects_to_analyze = []
     config = load_yaml_config(config_file_path)
 
     # Sort/copy each raw demux FC into project/sample/fcid format -- "analysis-ready"
@@ -89,42 +87,43 @@ def launch_analysis_for_projects(projects_to_analyze, restrict_to_samples=None, 
     for project in projects_to_analyze:
         # Get information from the database regarding which workflows to run
         try:
-            workflows = get_workflows_for_project(project.name)
+            workflow = get_workflow_for_project(project.name)
         except (ValueError, IOError) as e:
             error_msg = ("Skipping project {} because of error: {}".format(project, e))
             LOG.error(error_msg)
             continue
-        for workflow in workflows:
-            try:
-                analysis_engine_module_name = config["analysis"]["workflows"][workflow]["analysis_engine"]
-            except KeyError:
-                error_msg = ("No analysis engine for workflow \"{}\" specified "
-                             "in configuration file. Skipping this workflow "
-                             "for project {}".format(workflow, project))
-                LOG.error(error_msg)
-                raise RuntimeError(error_msg)
-            # Import the adapter module specified in the config file (e.g. piper_ngi)
-            try:
-                analysis_module = importlib.import_module(analysis_engine_module_name)
-            except ImportError as e:
-                error_msg = ("Couldn't import module {} for workflow {} "
-                             "in project {}. Skipping.".format(analysis_module,
-                                                               workflow,
-                                                               project))
-                LOG.error(error_msg)
-                continue
-            try:
-                ## NOTE temporary for testing, sthlm2UUSNP doesn't handle 4-tier dir structure yet
-                #p_handle = analysis_module.analyze_project(project=project,
-                #                                           workflow_name=workflow,
-                #                                           config_file_path=config_file_path)
-                import subprocess
-                p_handle = subprocess.Popen("ls", shell=True)
-                # For now only tracking this on the project level
-                record_pid_for_workflow(p_handle, workflow, project, analysis_module, config)
-            except Exception as e:
-                LOG.error(e)
-                raise
+        try:
+            analysis_engine_module_name = config["analysis"]["workflows"][workflow]["analysis_engine"]
+        except KeyError:
+            error_msg = ("No analysis engine for workflow \"{}\" specified "
+                         "in configuration file. Skipping this workflow "
+                         "for project {}".format(workflow, project))
+            LOG.error(error_msg)
+            raise RuntimeError(error_msg)
+        # Import the adapter module specified in the config file (e.g. piper_ngi)
+        try:
+            analysis_module = importlib.import_module(analysis_engine_module_name)
+        except ImportError as e:
+            error_msg = ("Couldn't import module {} for workflow {} "
+                         "in project {}. Skipping.".format(analysis_module,
+                                                           workflow,
+                                                           project))
+            LOG.error(error_msg)
+            continue
+        try:
+            #p_handle = analysis_module.analyze_project(project=project,
+            #                                           workflow_name=workflow,
+            #                                           config_file_path=config_file_path)
+
+            ## NOTE temporary for testing, sthlm2UUSNP doesn't handle 4-tier dir structure yet
+            import subprocess
+            p_handle = subprocess.Popen("ls", shell=True)
+
+            # For now only tracking this on the project level
+            record_pid_for_workflow(p_handle, workflow, project, analysis_module, config)
+        except Exception as e:
+            LOG.error(e)
+            raise
 
 
 def check_update_jobs_status(config_file_path=None, projects_to_check=None):
@@ -137,7 +136,7 @@ def check_update_jobs_status(config_file_path=None, projects_to_check=None):
     if not config_file_path:
         config_file_path = locate_ngi_config()
     config = load_yaml_config(config_file_path)
-    
+
 
 def sync_workflow_statuses_with_charon():
     """Synchronize workflow statuses between our local database and Charon."""
@@ -145,42 +144,22 @@ def sync_workflow_statuses_with_charon():
 
 
 
-def get_workflows_for_project(project_name):
-    """Get the workflows that should be run for this project from the database.
-    This not only reads the workflows for the project level from the database,
-    it also takes steps to determine if the workflow can be run yet.
-    For example, the dna_alignonly workflow has no prerequisites, whereas
-    the variant calling workflow requires all samples to meet some coverage
-    criteria (e.g. 30X autosomal).
+def get_workflow_for_project(project_name):
+    """Get the workflow that should be run for this project from the database.
 
     :param str project_name: The name of the project
 
-    :returns: The names of the workflows that should be run.
-    :rtype: list
+    :returns: The names of the workflow that should be run.
+    :rtype: str
     :raises ValueError: If the project cannot be found in the database
     :raises IOError: If the database cannot be reached
     """
+    ## NOTE Temporary until this is developed fully and the database populated
+    return ["dna_alignonly"]
+
     # Keep the connection so we can pass it to the validation function
     #db_project_object = get_charon_session_for_project(project_name)
-    ## Temporary until this is developed fully and the database populated
-    db_project_object=None
-
-    ## TODO how will this workflows thing be populated? It probably makes
-    ##      sense to have a separate function that examines various characteristics
-    ##      of the project (e.g. the kit type) to determine what they will be
-    ##      For NGI samples, it will just be qc, dna_alignonly and variant_calling
-    #workflow_list_unvalidated = db_project_object.get("workflows")
-    ## Temporary until this is developed fully and the database populated
-    workflow_list_unvalidated = ["dna_alignonly"]
-
-    workflow_list_validated = [workflow for workflow in workflow_list_unvalidated if
-                               validate_workflow_for_project(db_project_object, workflow)]
-    return workflow_list_validated
-
-
-def validate_workflow_for_project(db_project_object, workflow):
-    ## TODO implement checks for the various workflows
-    return True
+    #return db_project_object.get("workflow")
 
 
 def setup_analysis_directory_structure(fc_dir, config, projects_to_analyze,
@@ -225,16 +204,6 @@ def setup_analysis_directory_structure(fc_dir, config, projects_to_analyze,
     fcid = fc_dir_structure['fc_name']
     fc_short_run_id = "{}_{}".format(fc_date, fcid)
 
-    ## This appears to be unneeded, at least for the moment.
-    ##  When would these be required?
-    ##  Where should they be copied to (not the top analysis directory -- inside the project? Why?)
-    # Copy the basecall stats directory.
-    # This will be causing an issue when multiple directories are present...
-    # syncing should be done from archive, preserving the Unaligned* structures
-    #LOG.info("Copying basecall stats for run {}".format(fc_dir))
-    #_copy_basecall_stats([os.path.join(fc_dir_structure['fc_dir'], d) for d in
-    #                                    fc_dir_structure['basecall_stats_dir']],
-    #                                    analysis_top_dir)
     if not fc_dir_structure.get('projects'):
         LOG.warn("No projects found in specified flowcell directory \"{}\"".format(fc_dir))
     # Iterate over the projects in the flowcell directory
@@ -245,8 +214,9 @@ def setup_analysis_directory_structure(fc_dir, config, projects_to_analyze,
             LOG.debug("Skipping project {}".format(project_name))
             continue
         LOG.info("Setting up project {}".format(project.get("project_name")))
-        # Create a project directory if it doesn't already exist
-        project_dir = os.path.join(analysis_top_dir, project_name)
+        # Create a project directory if it doesn't already exist, including
+        # intervening "DATA" directory
+        project_dir = os.path.join(analysis_top_dir, "DATA", project_name)
         if not os.path.exists(project_dir): safe_makedir(project_dir, 0770)
         try:
             project_obj = projects_to_analyze[project_dir]
@@ -255,8 +225,9 @@ def setup_analysis_directory_structure(fc_dir, config, projects_to_analyze,
             projects_to_analyze[project_dir] = project_obj
         # Iterate over the samples in the project
         for sample in project.get('samples', []):
-            # If specific samples are specified, skip those that do not match
+            # Our SampleSheet.csv names are like Y__Mom_14_01 for some reason
             sample_name = sample['sample_name'].replace('__','.')
+            # If specific samples are specified, skip those that do not match
             if restrict_to_samples and sample_name not in restrict_to_samples:
                 LOG.debug("Skipping sample {}".format(sample_name))
                 continue
