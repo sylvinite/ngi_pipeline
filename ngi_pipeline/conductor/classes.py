@@ -27,11 +27,12 @@ class NGIObject(object):
 
 
 class NGIProject(NGIObject):
-    def __init__(self, name, dirname, base_path):
+    def __init__(self, name, dirname, project_id, base_path):
         self.base_path = base_path
         super(NGIProject, self).__init__(name, dirname, subitem_type=NGISample)
         self.samples = self._subitems
         self.add_sample = self._add_subitem
+        self.project_id = project_id
         self.command_lines = []
 
 

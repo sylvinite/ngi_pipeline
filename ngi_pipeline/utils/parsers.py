@@ -12,11 +12,11 @@ from ngi_pipeline.utils.classes import memoized
 LOG = minimal_logger(__name__)
 
 
-def determine_library_prep_from_fcid(project_name, sample_name, fcid):
+def determine_library_prep_from_fcid(project_id, sample_name, fcid):
     """Use the information in the database to get the library prep id
     from the project name, sample name, and flowcell id.
 
-    :param str project_name: The ID of the project
+    :param str project_id: The ID of the project
     :param str sample_name: The name of the sample
     :param str fcid: The flowcell ID
 
@@ -26,28 +26,35 @@ def determine_library_prep_from_fcid(project_name, sample_name, fcid):
     :raises RuntimeError: If the database could not be reached (?)
     """
     charon_session = get_charon_session()
-    url = construct_charon_url("libpreps", project_name, sample_name)
+    url = construct_charon_url("libpreps", project_id, sample_name)
     # Should return all library preps for this sample in this project
     libpreps_response = charon_session.get(url)
     if libpreps_response.status_code != 200:
-        raise ValueError("Error when accessing Charon DB: {}".format(libpreps_response.reason))
-    import ipdb; ipdb.set_trace()
-    for libprep in libpreps_response.text_as_dict['libpreps']:
+        raise RuntimeError("Error when accessing Charon DB: "
+                           "{}: {}".format(libpreps_response.status_code,
+                                           libpreps_response.reason))
+    for libprep in libpreps_response.json()['libpreps']:
         # Get the sequencing runs and see if they match the FCID we have
-        url = construct_charon_url("seqruns", project_name, sample_name, libprep)
-        all_seqruns_response = session.get(url)
+        url = construct_charon_url("seqruns", project_id, sample_name,
+                                   libprep['libprepid'])
+        all_seqruns_response = charon_session.get(url)
         if all_seqruns_response.status_code != 200:
-            raise ValueError("Error when accessing Charon DB: {}".format(all_seqruns_response.reason))
-        for seqrun in all_seqruns_response.text_as_dict['seqruns']:
-            url = construct_charon_url("seqrun", project_name, sample_name, libprep, seqrun)
-            seqrun_response = session.get(url)
+            raise RuntimeError("Error when accessing Charon DB: "
+                               "{}: {}".format(libpreps_response.status_code,
+                                               libpreps_response.reason))
+        for seqrun in all_seqruns_response.json()['seqruns']:
+            url = construct_charon_url("seqrun", project_id, sample_name,
+                                       libprep['libprepid'], seqrun['seqrunid'])
+            seqrun_response = charon_session.get(url)
             if seqrun_response.status_code != 200:
-                raise ValueError("Error when accessing Charon DB: {}".format(libpreps.reason))
-            seqrun_runid = seqrun_response.text_as_dict["runid"]
+                raise RuntimeError("Error when accessing Charon DB: "
+                                   "{}: {}".format(libpreps_response.status_code,
+                                                   libpreps_response.reason))
+            seqrun_runid = seqrun_response.json()["runid"]
             if seqrun_runid.split("_")[3] == fcid:
-                return libprep
+                return libprep['libprepid']
     raise ValueError('No library prep found for project "{}" / sample "{}" '
-                     '/ fcid "{}"'.format(project_name, sample_name, fcid))
+                     '/ fcid "{}"'.format(project_id, sample_name, fcid))
 
 
 def find_fastq_read_pairs_from_dir(directory):
