@@ -47,7 +47,7 @@ def load_modules(modules_list):
 
 
 def execute_command_line(cl, stdout=None, stderr=None, cwd=None):
-    """Execute a command line and return the PID.
+    """Execute a command line and return the subprocess.Popen object.
 
     :param cl: Can be either a list or a string, if string, gets shlex.splitted
     :param file stdout: The filehandle destination for STDOUT (can be None)

@@ -15,18 +15,19 @@ import sys
 from ngi_pipeline.conductor.classes import NGIProject
 from ngi_pipeline.database.session import get_charon_session_for_project
 from ngi_pipeline.database.process_tracking import get_workflow_returncode, \
-                                                   record_pid_for_workflow
+                                                   record_workflow_process_local
 from ngi_pipeline.log import minimal_logger
 from ngi_pipeline.utils.filesystem import do_rsync, safe_makedir
 from ngi_pipeline.utils.config import load_yaml_config, locate_ngi_config
-from ngi_pipeline.utils.parsers import FlowcellRunMetricsParser
+from ngi_pipeline.utils.parsers import FlowcellRunMetricsParser, \
+                                       determine_library_prep_from_fcid
 
 LOG = minimal_logger(__name__)
 
 
+# This is called via Celery when a new flowcell is delivered from Sthlm or Uppsala
 def process_demultiplexed_flowcells(demux_fcid_dirs, restrict_to_projects=None, restrict_to_samples=None, config_file_path=None):
-    """
-    The main launcher method.
+    """Sort demultiplexed Illumina flowcells into projects and launch their analysis.
 
     :param list demux_fcid_dirs: The CASAVA-produced demux directory/directories.
     :param list restrict_to_projects: A list of projects; analysis will be
@@ -40,7 +41,6 @@ def process_demultiplexed_flowcells(demux_fcid_dirs, restrict_to_projects=None, 
     if not restrict_to_projects: restrict_to_projects = []
     if not restrict_to_samples: restrict_to_samples = []
     demux_fcid_dirs_set = set(demux_fcid_dirs)
-    projects_to_analyze = []
     config = load_yaml_config(config_file_path)
 
     # Sort/copy each raw demux FC into project/sample/fcid format -- "analysis-ready"
@@ -74,6 +74,13 @@ def process_demultiplexed_flowcells(demux_fcid_dirs, restrict_to_projects=None, 
 ##      By this I mean the script that checks intermittently to determine if we can move on with the next workflow,
 ##      whether this is something periodic (like a cron job) or something triggered by the completion of another part
 ##      of the code (event-based, i.e. via Celery)
+##
+##      At the moment it requires a list of projects to analyze, which suggests it is called by another
+##      function that has just finished doing something with those project (i.e. the Celery approach);
+##      if it is to be called periodically, I would suggest that the periodic calling function
+##      (i.e. whatever script the cron job calls) uses another function that goes through the database
+##      and finds all Projects for which the "Status" is not "Complete" or something to that effect,
+##      and then hands that list to this function.
 def launch_analysis_for_projects(projects_to_analyze, restrict_to_samples=None, config_file_path=None):
     """Launch the analysis of projects.
 
@@ -87,68 +94,105 @@ def launch_analysis_for_projects(projects_to_analyze, restrict_to_samples=None, 
     for project in projects_to_analyze:
         # Get information from the database regarding which workflows to run
         try:
-            workflows = get_workflows_for_project(project.name)
+            workflow = get_workflow_for_project(project.name)
         except (ValueError, IOError) as e:
             error_msg = ("Skipping project {} because of error: {}".format(project, e))
             LOG.error(error_msg)
             continue
-        for workflow in workflows:
+        try:
+            analysis_engine_module_name = config["analysis"]["workflows"][workflow]["analysis_engine"]
+        except KeyError:
+            error_msg = ("No analysis engine for workflow \"{}\" specified "
+                         "in configuration file. Skipping this workflow "
+                         "for project {}".format(workflow, project))
+            LOG.error(error_msg)
+            raise RuntimeError(error_msg)
+        # Import the adapter module specified in the config file (e.g. piper_ngi)
+        try:
+            analysis_module = importlib.import_module(analysis_engine_module_name)
+        except ImportError as e:
+            error_msg = ("Couldn't import module {} for workflow {} "
+                         "in project {}. Skipping.".format(analysis_module,
+                                                           workflow,
+                                                           project))
+            LOG.error(error_msg)
+            continue
+        try:
+            #p_handle = analysis_module.analyze_project(project=project,
+            #                                           workflow_name=workflow,
+            #                                           config_file_path=config_file_path)
+
+            ## NOTE temporary for testing, sthlm2UUSNP doesn't handle 4-tier dir structure yet
+            import subprocess
+            p_handle = subprocess.Popen("ls", shell=True)
+
+            # For now only tracking this on the project level
+            record_workflow_process_local(p_handle, workflow, project, analysis_module, config)
+        except Exception as e:
+            LOG.error(e)
+            raise
+
+
+# This can be run intermittently to track the status of jobs and update the database accordingly,
+# as well as to remove entries from the local database if the job has completed (but ONLY ONLY ONLY
+# once the status has been successfully written to Charon!!)
+def check_update_jobs_status(config_file_path=None, projects_to_check=None):
+    """Check and update the status of jobs associated with workflows/projects;
+    this goes through every record kept locally, and if the job has completed
+    (either successfully or not) AND it is able to update Charon to reflect this
+    status, it deletes the local record.
+
+    :param str config_file_path: The path to the configuration file (optional if
+                                 it is defined as env var or in default location)
+    :param list projects_to_check: A list of projects to check (exclusive, optional)
+    """
+    if not config_file_path:
+        config_file_path = locate_ngi_config()
+    config = load_yaml_config(config_file_path)
+    db = get_all_tracked_processes()
+    for project_dict in db:
+        LOG.info("Checking workflow {} for project {}...".format(project_dict.workflow,
+                                                                 project))
+        return_code = project_dict["p_handle"].poll()
+        if return_code:
+            # Job completed successfully; try to update database.
+            LOG.info('Workflow "{}" for project "{}" completed '
+                     'with return code "{}". Attempting to update '
+                     'Charon database.'.format(project_dict.workflow,
+                                               project, return_code))
+            # Only if we succesfully write to Charon will we remove the record
+            # from the local db; otherwise, leave it and try again next cycle.
             try:
-                analysis_engine_module_name = config["analysis"]["workflows"][workflow]["analysis_engine"]
-            except KeyError:
-                error_msg = ("No analysis engine for workflow \"{}\" specified "
-                             "in configuration file. Skipping this workflow "
-                             "for project {}".format(workflow, project))
-                LOG.error(error_msg)
-                raise RuntimeError(error_msg)
-            # Import the adapter module specified in the config file (e.g. piper_ngi)
-            try:
-                analysis_module = importlib.import_module(analysis_engine_module_name)
-            except ImportError as e:
-                error_msg = ("Couldn't import module {} for workflow {} "
-                             "in project {}. Skipping.".format(analysis_module,
-                                                               workflow,
-                                                               project))
-                LOG.error(error_msg)
+                write_status_to_charon(project, return_code)
+                LOG.info("Successfully updated Charon database.")
+                try:
+                    # This only hits if we succesfully update Charon
+                    remove_record_from_local_tracking()
+                except RuntimeError:
+                    # I find myself compulsively double-logging
+                    LOG.error(e)
+                    continue
+            except RuntimeError as e:
+                LOG.warn(e)
                 continue
-            try:
-                p_handle = analysis_module.analyze_project(project=project,
-                                                           workflow_name=workflow,
-                                                           config_file_path=config_file_path)
-                record_pid_for_workflow(p_handle, workflow, project, analysis_module, config)
-            except Exception as e:
-                LOG.error(e)
-                raise
 
 
-def get_workflows_for_project(project_name):
-    """Get the workflows that should be run for this project from the database.
-    This not only reads the workflows for the project level from the database,
-    it also takes steps to determine if the workflow can be run yet.
-    For example, the dna_alignonly workflow has no prerequisites, whereas
-    the variant calling workflow requires all samples to meet some coverage
-    criteria (e.g. 30X autosomal).
+def get_workflow_for_project(project_name):
+    """Get the workflow that should be run for this project from the database.
 
     :param str project_name: The name of the project
 
-    :returns: The names of the workflows that should be run.
-    :rtype: list
+    :returns: The names of the workflow that should be run.
+    :rtype: str
     :raises ValueError: If the project cannot be found in the database
     :raises IOError: If the database cannot be reached
     """
+    ## NOTE Temporary until this is developed fully and the database populated
+    return ["dna_alignonly"]
+
     # Keep the connection so we can pass it to the validation function
     #db_project_object = get_charon_session_for_project(project_name)
-    #workflow_list_unvalidated = db_project_object.get("workflows")
-    # Temporary until this is developed fully and the database populated
-    db_project_object=None
-    workflow_list_unvalidated = ["dna_alignonly"]
-    workflow_list_validated = [workflow for workflow in workflow_list_unvalidated if
-                               validate_workflow_for_project(db_project_object, workflow)]
-    return workflow_list_validated
-
-
-def validate_workflow_for_project(db_project_object, workflow):
-    return True
+    #return db_project_object.get("workflow")
 
 
 def setup_analysis_directory_structure(fc_dir, config, projects_to_analyze,
@@ -190,19 +234,9 @@ def setup_analysis_directory_structure(fc_dir, config, projects_to_analyze,
     # From RunInfo.xml
     fc_date = fc_dir_structure['fc_date']
     # From RunInfo.xml (name) & runParameters.xml (position)
-    fc_name = fc_dir_structure['fc_name']
-    fc_run_id = "{}_{}".format(fc_date, fc_name)
+    fcid = fc_dir_structure['fc_name']
+    fc_short_run_id = "{}_{}".format(fc_date, fcid)
 
-    ## This appears to be unneeded, at least for the moment.
-    ##  When would these be required?
-    ##  Where should they be copied to (not the top analysis directory -- inside the project? Why?)
-    # Copy the basecall stats directory.
-    # This will be causing an issue when multiple directories are present...
-    # syncing should be done from archive, preserving the Unaligned* structures
-    #LOG.info("Copying basecall stats for run {}".format(fc_dir))
-    #_copy_basecall_stats([os.path.join(fc_dir_structure['fc_dir'], d) for d in
-    #                                    fc_dir_structure['basecall_stats_dir']],
-    #                                    analysis_top_dir)
     if not fc_dir_structure.get('projects'):
         LOG.warn("No projects found in specified flowcell directory \"{}\"".format(fc_dir))
     # Iterate over the projects in the flowcell directory
@@ -213,8 +247,9 @@ def setup_analysis_directory_structure(fc_dir, config, projects_to_analyze,
             LOG.debug("Skipping project {}".format(project_name))
             continue
         LOG.info("Setting up project {}".format(project.get("project_name")))
-        # Create a project directory if it doesn't already exist
-        project_dir = os.path.join(analysis_top_dir, project_name)
+        # Create a project directory if it doesn't already exist, including
+        # intervening "DATA" directory
+        project_dir = os.path.join(analysis_top_dir, "DATA", project_name)
         if not os.path.exists(project_dir): safe_makedir(project_dir, 0770)
         try:
             project_obj = projects_to_analyze[project_dir]
@@ -223,8 +258,9 @@ def setup_analysis_directory_structure(fc_dir, config, projects_to_analyze,
             projects_to_analyze[project_dir] = project_obj
         # Iterate over the samples in the project
         for sample in project.get('samples', []):
-            # If specific samples are specified, skip those that do not match
+            # Our SampleSheet.csv names are like Y__Mom_14_01 for some reason
             sample_name = sample['sample_name'].replace('__','.')
+            # If specific samples are specified, skip those that do not match
             if restrict_to_samples and sample_name not in restrict_to_samples:
                 LOG.debug("Skipping sample {}".format(sample_name))
                 continue
@@ -234,11 +270,20 @@ def setup_analysis_directory_structure(fc_dir, config, projects_to_analyze,
             if not os.path.exists(sample_dir): safe_makedir(sample_dir, 0770)
             # This will only create a new sample object if it doesn't already exist in the project
             sample_obj = project_obj.add_sample(name=sample_name, dirname=sample_name)
-            # Create a directory for the flowcell if it does not exist
-            dst_sample_fcid_dir = os.path.join(sample_dir, fc_run_id)
-            if not os.path.exists(dst_sample_fcid_dir): safe_makedir(dst_sample_fcid_dir, 0770)
-            # This will only create a new FCID object if it doesn't already exist in the sample
-            fcid_obj = sample_obj.add_fcid(name=fc_run_id, dirname=fc_run_id)
+
+            # Get the Library Prep ID for each file
+            pattern = re.compile(".*\.(fastq|fq)(\.gz|\.gzip|\.bz2)?$")
+            fastq_files = filter(pattern.match, sample.get('files', []))
+            seqrun_dir = None
+            for fq_file in fastq_files:
+                libprep_name = determine_library_prep_from_fcid(project_name, sample_name, fcid)
+                libprep_object = sample_obj.add_libprep(name=libprep_name, dirname=libprep_name)
+                libprep_dir = os.path.join(sample_dir, libprep_name)
+                if not os.path.exists(libprep_dir): safe_makedir(libprep_dir, 0770)
+                seqrun_object = libprep_object.add_seqrun(name=fc_short_run_id, dirname=fc_short_run_id)
+                seqrun_dir = os.path.join(libprep_dir, fc_short_run_id)
+                if not os.path.exists(seqrun_dir): safe_makedir(seqrun_dir, 0770)
+                seqrun_object.add_fastq_files(fq_file)
             # rsync the source files to the sample directory
             #    src: flowcell/data/project/sample
             #    dst: project/sample/flowcell_run
@@ -246,14 +291,12 @@ def setup_analysis_directory_structure(fc_dir, config, projects_to_analyze,
                                           project['data_dir'],
                                           project['project_dir'],
                                           sample['sample_dir'])
-            LOG.info("Copying sample files from \"{}\" to \"{}\"...".format(
-                                            src_sample_dir, dst_sample_fcid_dir))
-            sample_files = do_rsync([os.path.join(src_sample_dir, f) for f in
-                                     sample.get('files', [])], dst_sample_fcid_dir)
-            # Just want fastq files here
-            pattern = re.compile(".*\.(fastq|fq)(\.gz|\.gzip|\.bz2)?$")
-            fastq_files = filter(pattern.match, sample.get('files', []))
-            fcid_obj.add_fastq_files(fastq_files)
+            for libprep in sample_obj:
+                for seqrun in libprep:
+                    src_fastq_files = [ os.path.join(src_sample_dir, fastq_file)
+                                        for fastq_file in seqrun.fastq_files ]
+                    LOG.info("Copying fastq files from {} to {}...".format(sample_dir, seqrun_dir))
+                    do_rsync(src_fastq_files, seqrun_dir)
     return projects_to_analyze
 
 

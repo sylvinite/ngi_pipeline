@@ -26,8 +26,8 @@ def analyze_project(project, workflow_name, config_file_path):
     :param str workflow_name: The workflow (e.g. alignment, variant calling)
     :param str config_file_path: The path to the configuration file.
 
-    :returns: Process ID of the launched process
-    :rtype: int
+    :returns: The subprocess.Popen object for the process
+    :rtype: subprocess.Popen
     """
     config = load_yaml_config(config_file_path)
     modules_to_load = ["java/sun_jdk1.7.0_25", "R/2.15.0"]
@@ -39,8 +39,8 @@ def analyze_project(project, workflow_name, config_file_path):
         convert_sthlm_to_uppsala(project)
         build_setup_xml(project, config)
         command_line = build_piper_cl(project, workflow_name, config)
-        pid = launch_piper_job(command_line, project)
-        return pid
+        popen_object = launch_piper_job(command_line, project)
+        return popen_object
     except Exception as e:
         error_msg = "Processing project {} failed: {}".format(project, e.__repr__())
         LOG.error(error_msg)
@@ -84,14 +84,14 @@ def launch_piper_job(command_line, project):
     :param str command_line: The command line to execute
     :param Project project: The Project object (needed to set the CWD)
 
-    :returns: The Process ID of the launched process
-    :rtype: int
+    :returns: The subprocess.Popen object for the process
+    :rtype: subprocess.Popen
     """
     cwd = os.path.join(project.base_path, project.dirname)
     ## TODO Would like to log these to the log -- can we get a Logbook filehandle-like object?
     ## TODO add exception handling
-    pid = execute_command_line(command_line, cwd=cwd)
-    return pid
+    popen_object = execute_command_line(command_line, cwd=cwd)
+    return popen_object
 
 
 def build_piper_cl(project, workflow_name, config):
