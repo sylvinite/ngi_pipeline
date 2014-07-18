@@ -15,7 +15,7 @@ import sys
 from ngi_pipeline.conductor.classes import NGIProject
 from ngi_pipeline.database.session import get_charon_session_for_project
 from ngi_pipeline.database.process_tracking import get_workflow_returncode, \
-                                                   record_pid_for_workflow
+                                                   record_workflow_process_local
 from ngi_pipeline.log import minimal_logger
 from ngi_pipeline.utils.filesystem import do_rsync, safe_makedir
 from ngi_pipeline.utils.config import load_yaml_config, locate_ngi_config
@@ -74,6 +74,13 @@ def process_demultiplexed_flowcells(demux_fcid_dirs, restrict_to_projects=None, 
 ##      By this I mean the script that checks intermittently to determine if we can move on with the next workflow,
 ##      whether this is something periodic (like a cron job) or something triggered by the completion of another part
 ##      of the code (event-based, i.e. via Celery)
+##
+##      At the moment it requires a list of projects to analyze, which suggests it is called by another
+##      function that has just finished doing something with those project (i.e. the Celery approach);
+##      if it is to be called periodically, I would suggest that the periodic calling function
+##      (i.e. whatever script the cron job calls) uses another function that goes through the database
+##      and finds all Projects for which the "Status" is not "Complete" or something to that effect,
+##      and then hands that list to this function.
 def launch_analysis_for_projects(projects_to_analyze, restrict_to_samples=None, config_file_path=None):
     """Launch the analysis of projects.
 
@@ -120,28 +127,54 @@ def launch_analysis_for_projects(projects_to_analyze, restrict_to_samples=None, 
             p_handle = subprocess.Popen("ls", shell=True)
 
             # For now only tracking this on the project level
-            record_pid_for_workflow(p_handle, workflow, project, analysis_module, config)
+            record_workflow_process_local(p_handle, workflow, project, analysis_module, config)
         except Exception as e:
             LOG.error(e)
             raise
 
 
+# This can be run intermittently to track the status of jobs and update the database accordingly,
+# as well as to remove entries from the local database if the job has completed (but ONLY ONLY ONLY
+# once the status has been successfully written to Charon!!)
 def check_update_jobs_status(config_file_path=None, projects_to_check=None):
-    """Check and update the status of jobs associated with workflows/projects.
+    """Check and update the status of jobs associated with workflows/projects;
+    this goes through every record kept locally, and if the job has completed
+    (either successfully or not) AND it is able to update Charon to reflect this
+    status, it deletes the local record.
 
     :param str config_file_path: The path to the configuration file (optional if
                                  it is defined as env var or in default location)
-    :param list projects_to_check: A list of projects to check (exclusive)
+    :param list projects_to_check: A list of projects to check (exclusive, optional)
     """
     if not config_file_path:
         config_file_path = locate_ngi_config()
     config = load_yaml_config(config_file_path)
-
-
-def sync_workflow_statuses_with_charon():
-    """Synchronize workflow statuses between our local database and Charon."""
-    pass
-
+    db = get_all_tracked_processes()
+    for project_dict in db:
+        LOG.info("Checking workflow {} for project {}...".format(project_dict.workflow,
+                                                                 project))
+        return_code = project_dict["p_handle"].poll()
+        if return_code:
+            # Job completed successfully; try to update database.
+            LOG.info('Workflow "{}" for project "{}" completed '
+                     'with return code "{}". Attempting to update '
+                     'Charon database.'.format(project_dict.workflow,
+                                               project, return_code))
+            # Only if we succesfully write to Charon will we remove the record
+            # from the local db; otherwise, leave it and try again next cycle.
+            try:
+                write_status_to_charon(project, return_code)
+                LOG.info("Successfully updated Charon database.")
+                try:
+                    # This only hits if we succesfully update Charon
+                    remove_record_from_local_tracking()
+                except RuntimeError:
+                    # I find myself compulsively double-logging
+                    LOG.error(e)
+                    continue
+            except RuntimeError as e:
+                LOG.warn(e)
+                continue
 
 
 def get_workflow_for_project(project_name):
