@@ -14,8 +14,7 @@ import sys
 
 from ngi_pipeline.conductor.classes import NGIProject
 from ngi_pipeline.database.session import get_charon_session_for_project
-from ngi_pipeline.database.process_tracking import get_workflow_returncode, \
-                                                   record_workflow_process_local
+from ngi_pipeline.database.process_tracking import record_workflow_process_local
 from ngi_pipeline.log import minimal_logger
 from ngi_pipeline.utils.filesystem import do_rsync, safe_makedir
 from ngi_pipeline.utils.config import load_yaml_config, locate_ngi_config
@@ -188,7 +187,7 @@ def get_workflow_for_project(project_name):
     :raises IOError: If the database cannot be reached
     """
     ## NOTE Temporary until this is developed fully and the database populated
-    return ["dna_alignonly"]
+    return ["NGI"]
 
     # Keep the connection so we can pass it to the validation function
     #db_project_object = get_charon_session_for_project(project_name)
@@ -254,7 +253,8 @@ def setup_analysis_directory_structure(fc_dir, config, projects_to_analyze,
         try:
             project_obj = projects_to_analyze[project_dir]
         except KeyError:
-            project_obj = NGIProject(name=project_name, dirname=project_name, base_path=analysis_top_dir)
+            project_obj = NGIProject(name=project_name, dirname=project_name,
+                                     base_path=analysis_top_dir)
             projects_to_analyze[project_dir] = project_obj
         # Iterate over the samples in the project
         for sample in project.get('samples', []):
@@ -270,7 +270,6 @@ def setup_analysis_directory_structure(fc_dir, config, projects_to_analyze,
             if not os.path.exists(sample_dir): safe_makedir(sample_dir, 0770)
             # This will only create a new sample object if it doesn't already exist in the project
             sample_obj = project_obj.add_sample(name=sample_name, dirname=sample_name)
-
             # Get the Library Prep ID for each file
             pattern = re.compile(".*\.(fastq|fq)(\.gz|\.gzip|\.bz2)?$")
             fastq_files = filter(pattern.match, sample.get('files', []))
