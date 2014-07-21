@@ -110,7 +110,7 @@ def record_workflow_process_local(p_handle, workflow, project, analysis_module, 
     # even check for this.
     if project.name in db:
         error_msg = ("Project {} already has an entry in the local process "
-                     "tracking database -- this should not be. Overwriting!")
+                     "tracking database -- this should not be. Overwriting!".format(project.name))
         LOG.warn(error_msg)
     db[project.name] = project_dict
     db.close()
