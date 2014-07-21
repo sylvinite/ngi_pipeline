@@ -253,6 +253,11 @@ def setup_analysis_directory_structure(fc_dir, config, projects_to_analyze,
     # Iterate over the projects in the flowcell directory
     for project in fc_dir_structure.get('projects', []):
         project_name = project['project_name']
+        # If specific projects are specified, skip those that do not match
+        if restrict_to_projects and project_name not in restrict_to_projects:
+            LOG.debug("Skipping project {}".format(project_name))
+            continue
+        #now check if this project can be parsed via Charon
         try:
             ## NOTE NOTE NOTE that this means we have to be able to access Charon
             ##                to process things. I dislike this but I have no
@@ -262,10 +267,6 @@ def setup_analysis_directory_structure(fc_dir, config, projects_to_analyze,
             error_msg = ('Cannot proceed with project "{}" due to '
                          'Charon-related error: {}'.format(project_name, e))
             LOG.error(error_msg)
-            continue
-        # If specific projects are specified, skip those that do not match
-        if restrict_to_projects and project_name not in restrict_to_projects:
-            LOG.debug("Skipping project {}".format(project_name))
             continue
         LOG.info("Setting up project {}".format(project.get("project_name")))
         # Create a project directory if it doesn't already exist, including
