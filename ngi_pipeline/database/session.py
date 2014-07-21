@@ -11,7 +11,7 @@ except KeyError as e:
 
 def construct_charon_url(*args):
     """Build a Charon URL, appending any *args passed."""
-    return "{}api/v1/{}".format(CHARON_BASE_URL,'/'.join([str(s) for s in segments]))
+    return "{}api/v1/{}".format(CHARON_BASE_URL,'/'.join([str(a) for a in args]))
 
 def get_charon_session():
     """Return a requests.Session preloaded with the api_token and base_url"""
@@ -20,3 +20,7 @@ def get_charon_session():
     api_token = api_token = {'X-Charon-API-token': CHARON_API_TOKEN}
     # Preload the session with the api_token and the base url
     return CharonSession(api_token=api_token, base_url=base_url)
+
+
+def get_charon_session_for_project(project_name):
+    return get_charon_session(append_url="api/v1/project/{}".format(project_name))

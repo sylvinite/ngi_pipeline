@@ -1,6 +1,8 @@
 """Keeps track of running workflow processes"""
+import json
 import shelve
 
+from ngi_pipeline.database import construct_charon_url, get_charon_session
 from ngi_pipeline.log import minimal_logger
 from ngi_pipeline.utils.config import load_yaml_config, locate_ngi_config
 
@@ -43,24 +45,29 @@ def remove_record_from_local_tracking(project, config=None):
     db.close()
 
 
-def write_status_to_charon(project, return_code):
+def write_status_to_charon(project_id, return_code):
     """Update the status of a workflow for a project in the Charon database.
 
-    :param NGIProject project: The NGIProject object
+    :param NGIProject project_id: The name of the project
     :param int return_code: The return code of the workflow process
 
     :raises RuntimeError: If the Charon database could not be updated
     """
     charon_session = get_charon_session()
     status = "Completed" if return_code is 0 else "Failed"
-    project_url = construct_charon_url("project", project.name)
-    try:
-        project_dict = charon_session.get(get_url)
-        project_dict["status"] = status
-        charon_session.put(project_dict)
-    except HTTPError as e:
+    project_url = construct_charon_url("project", project_id)
+    project_response = charon_session.get(project_url)
+    if project_response.status_code != 200:
+        error_msg = ('Error accessing database for project "{}"; could not '
+                     'update Charon: {}'.format(project_id, project_response.reason))
+        LOG.error(error_msg)
+        raise RuntimeError(error_msg)
+    project_dict = project_response.json()
+    project_dict["status"] = status
+    response_obj = charon_session.put(json.dumps(project_dict))
+    if response_obj.status_code != 201:
         error_msg = ('Failed to update project status for "{}" '
-                     'in Charon database: {}'.format(project, e))
+                     'in Charon database: {}'.format(project_id, response_obj.reason))
         LOG.error(error_msg)
         raise RuntimeError(error_msg)
 
@@ -77,7 +84,8 @@ def record_workflow_process_local(p_handle, workflow, project, analysis_module, 
       Stored dict resembles {"J.Doe_14_01":
                                 {"workflow": "NGI",
                                  "p_handle": p_handle,
-                                 "analysis_module": analysis_module.__name__
+                                 "analysis_module": analysis_module.__name__,
+                                 "project_id": project_id
                                 }
                              "J.Johansson_14_02":
                                  ...
@@ -94,20 +102,20 @@ def record_workflow_process_local(p_handle, workflow, project, analysis_module, 
              "workflow {}".format(p_handle.pid, project, workflow))
     project_dict = { "workflow": workflow,
                      "p_handle": p_handle,
-                     "analysis_module": analysis_module.__name__
+                     "analysis_module": analysis_module.__name__,
+                     "project_id": project.project_id
                    }
     db = get_shelve_database(config)
     # I don't see how this would ever happen but it makes me nervous to not
     # even check for this.
     if project.name in db:
         error_msg = ("Project {} already has an entry in the local process "
-                     "tracking database -- this will not do. Call the schoolmaster!")
-        LOG.error(error_msg)
-        raise ValueError(error_msg)
+                     "tracking database -- this should not be. Overwriting!")
+        LOG.warn(error_msg)
     db[project.name] = project_dict
     db.close()
-    LOG.info("Successfully recorded process id {} for project {}, " 
-             "workflow {}".format(p_handle.pid, project, workflow))
+    LOG.info("Successfully recorded process id {} for project {} (ID {}), " 
+             "workflow {}".format(p_handle.pid, project, project.project_id, workflow))
 
 
 def get_shelve_database(config):

@@ -13,9 +13,11 @@ import re
 import sys
 
 from ngi_pipeline.conductor.classes import NGIProject
+from ngi_pipeline.database import get_project_id_from_name
 from ngi_pipeline.database.session import get_charon_session_for_project
-from ngi_pipeline.database.process_tracking import get_workflow_returncode, \
-                                                   record_workflow_process_local
+from ngi_pipeline.database.process_tracking import get_all_tracked_processes, \
+                                                   record_workflow_process_local, \
+                                                   write_status_to_charon
 from ngi_pipeline.log import minimal_logger
 from ngi_pipeline.utils.filesystem import do_rsync, safe_makedir
 from ngi_pipeline.utils.config import load_yaml_config, locate_ngi_config
@@ -56,12 +58,14 @@ def process_demultiplexed_flowcells(demux_fcid_dirs, restrict_to_projects=None, 
         if restrict_to_projects:
             error_message = ("No projects found to process; the specified flowcells "
                              "({fcid_dirs}) do not contain the specified project(s) "
-                             "({restrict_to_projects})").format(
+                             "({restrict_to_projects}) or there was an error "
+                             "gathering required information.").format(
                                     fcid_dirs = ",".join(demux_fcid_dirs_set),
                                     restrict_to_projects = ",".join(restrict_to_projects))
         else:
-            error_message = "No projects found to process in flowcells {}".format(
-                                                    ",".join(demux_fcid_dirs_set))
+            error_message = ("No projects found to process in flowcells {}"
+                             "or there was an error gathering required "
+                             "information.".format(",".join(demux_fcid_dirs_set)))
         LOG.info(error_message)
         sys.exit("Quitting: " + error_message)
     else:
@@ -129,8 +133,9 @@ def launch_analysis_for_projects(projects_to_analyze, restrict_to_samples=None, 
             # For now only tracking this on the project level
             record_workflow_process_local(p_handle, workflow, project, analysis_module, config)
         except Exception as e:
-            LOG.error(e)
-            raise
+            error_msg = ('Cannot process project "{}": {}'.format(project, e))
+            LOG.error(error_msg)
+            continue
 
 
 # This can be run intermittently to track the status of jobs and update the database accordingly,
@@ -144,26 +149,27 @@ def check_update_jobs_status(config_file_path=None, projects_to_check=None):
 
     :param str config_file_path: The path to the configuration file (optional if
                                  it is defined as env var or in default location)
-    :param list projects_to_check: A list of projects to check (exclusive, optional)
+    :param list projects_to_check: A list of project names to check (exclusive, optional)
     """
     if not config_file_path:
         config_file_path = locate_ngi_config()
     config = load_yaml_config(config_file_path)
     db = get_all_tracked_processes()
-    for project_dict in db:
-        LOG.info("Checking workflow {} for project {}...".format(project_dict.workflow,
-                                                                 project))
+    for project_name, project_dict in db.iteritems():
+        LOG.info("Checking workflow {} for project {}...".format(project_dict["workflow"],
+                                                                 project_name))
         return_code = project_dict["p_handle"].poll()
-        if return_code:
-            # Job completed successfully; try to update database.
+        if return_code is not None:
+            # Job finished somehow or another; try to update database.
             LOG.info('Workflow "{}" for project "{}" completed '
                      'with return code "{}". Attempting to update '
-                     'Charon database.'.format(project_dict.workflow,
-                                               project, return_code))
+                     'Charon database.'.format(project_dict['workflow'],
+                                               project_name, return_code))
             # Only if we succesfully write to Charon will we remove the record
             # from the local db; otherwise, leave it and try again next cycle.
             try:
-                write_status_to_charon(project, return_code)
+                project_id = project_dict['project_id']
+                write_status_to_charon(project_id, return_code)
                 LOG.info("Successfully updated Charon database.")
                 try:
                     # This only hits if we succesfully update Charon
@@ -175,6 +181,11 @@ def check_update_jobs_status(config_file_path=None, projects_to_check=None):
             except RuntimeError as e:
                 LOG.warn(e)
                 continue
+        else:
+            LOG.info('Workflow "{}" for project "{}" (pid {}) '
+                     'still running.'.format(project_dict['workflow'],
+                                             project_name,
+                                             project_dict['p_handle'].pid))
 
 
 def get_workflow_for_project(project_name):
@@ -188,7 +199,7 @@ def get_workflow_for_project(project_name):
     :raises IOError: If the database cannot be reached
     """
     ## NOTE Temporary until this is developed fully and the database populated
-    return ["dna_alignonly"]
+    return "NGI"
 
     # Keep the connection so we can pass it to the validation function
     #db_project_object = get_charon_session_for_project(project_name)
@@ -242,6 +253,16 @@ def setup_analysis_directory_structure(fc_dir, config, projects_to_analyze,
     # Iterate over the projects in the flowcell directory
     for project in fc_dir_structure.get('projects', []):
         project_name = project['project_name']
+        try:
+            ## NOTE NOTE NOTE that this means we have to be able to access Charon
+            ##                to process things. I dislike this but I have no
+            ##                other way to get the Project ID
+            project_id = get_project_id_from_name(project_name)
+        except (RuntimeError, ValueError) as e:
+            error_msg = ('Cannot proceed with project "{}" due to '
+                         'Charon-related error: {}'.format(project_name, e))
+            LOG.error(error_msg)
+            continue
         # If specific projects are specified, skip those that do not match
         if restrict_to_projects and project_name not in restrict_to_projects:
             LOG.debug("Skipping project {}".format(project_name))
@@ -254,7 +275,9 @@ def setup_analysis_directory_structure(fc_dir, config, projects_to_analyze,
         try:
             project_obj = projects_to_analyze[project_dir]
         except KeyError:
-            project_obj = NGIProject(name=project_name, dirname=project_name, base_path=analysis_top_dir)
+            project_obj = NGIProject(name=project_name, dirname=project_name,
+                                     project_id=project_id,
+                                     base_path=analysis_top_dir)
             projects_to_analyze[project_dir] = project_obj
         # Iterate over the samples in the project
         for sample in project.get('samples', []):
@@ -270,17 +293,18 @@ def setup_analysis_directory_structure(fc_dir, config, projects_to_analyze,
             if not os.path.exists(sample_dir): safe_makedir(sample_dir, 0770)
             # This will only create a new sample object if it doesn't already exist in the project
             sample_obj = project_obj.add_sample(name=sample_name, dirname=sample_name)
-
             # Get the Library Prep ID for each file
             pattern = re.compile(".*\.(fastq|fq)(\.gz|\.gzip|\.bz2)?$")
             fastq_files = filter(pattern.match, sample.get('files', []))
             seqrun_dir = None
             for fq_file in fastq_files:
-                libprep_name = determine_library_prep_from_fcid(project_name, sample_name, fcid)
-                libprep_object = sample_obj.add_libprep(name=libprep_name, dirname=libprep_name)
+                libprep_name = determine_library_prep_from_fcid(project_id, sample_name, fcid)
+                libprep_object = sample_obj.add_libprep(name=libprep_name,
+                                                        dirname=libprep_name)
                 libprep_dir = os.path.join(sample_dir, libprep_name)
                 if not os.path.exists(libprep_dir): safe_makedir(libprep_dir, 0770)
-                seqrun_object = libprep_object.add_seqrun(name=fc_short_run_id, dirname=fc_short_run_id)
+                seqrun_object = libprep_object.add_seqrun(name=fc_short_run_id,
+                                                          dirname=fc_short_run_id)
                 seqrun_dir = os.path.join(libprep_dir, fc_short_run_id)
                 if not os.path.exists(seqrun_dir): safe_makedir(seqrun_dir, 0770)
                 seqrun_object.add_fastq_files(fq_file)
