@@ -108,6 +108,7 @@ def record_workflow_process_local(p_handle, workflow, project, analysis_module, 
     db = get_shelve_database(config)
     # I don't see how this would ever happen but it makes me nervous to not
     # even check for this.
+    #this will happen often.... we need to check that we are not rerunning the same analysis at the same moment
     if project.name in db:
         error_msg = ("Project {} already has an entry in the local process "
                      "tracking database -- this should not be. Overwriting!".format(project.name))

@@ -92,6 +92,7 @@ def launch_analysis_for_projects(projects_to_analyze, restrict_to_samples=None, 
     :param list restrict_to_samples: A list of sample names to which we will restrict our analysis
     :param list config_file_path: The path to the NGI Pipeline configuration file.
     """
+
     if not config_file_path:
         config_file_path = locate_ngi_config()
     config = load_yaml_config(config_file_path)
@@ -122,14 +123,12 @@ def launch_analysis_for_projects(projects_to_analyze, restrict_to_samples=None, 
             LOG.error(error_msg)
             continue
         try:
-            #p_handle = analysis_module.analyze_project(project=project,
-            #                                           workflow_name=workflow,
-            #                                           config_file_path=config_file_path)
+            #this happens at project level butI need to track actions at Samples level!!!!
+            p_handle = analysis_module.analyze_project(project=project,
+                                                       workflow_name=workflow,
+                                                       config_file_path=config_file_path)
 
-            ## NOTE temporary for testing, sthlm2UUSNP doesn't handle 4-tier dir structure yet
-            import subprocess
-            p_handle = subprocess.Popen("ls", shell=True)
-
+            #this must be tracked at run level
             # For now only tracking this on the project level
             record_workflow_process_local(p_handle, workflow, project, analysis_module, config)
         except Exception as e:
@@ -210,7 +209,7 @@ def setup_analysis_directory_structure(fc_dir, config, projects_to_analyze,
                                        restrict_to_projects=None, restrict_to_samples=None):
     """
     Copy and sort files from their CASAVA-demultiplexed flowcell structure
-    into their respective project/sample/FCIDs. This collects samples
+    into their respective project/sample/libPrep/FCIDs. This collects samples
     split across multiple flowcells.
 
     :param str fc_dir: The directory created by CASAVA for this flowcell.
@@ -317,11 +316,13 @@ def setup_analysis_directory_structure(fc_dir, config, projects_to_analyze,
                                           project['project_dir'],
                                           sample['sample_dir'])
             for libprep in sample_obj:
-                for seqrun in libprep:
-                    src_fastq_files = [ os.path.join(src_sample_dir, fastq_file)
-                                        for fastq_file in seqrun.fastq_files ]
-                    LOG.info("Copying fastq files from {} to {}...".format(sample_dir, seqrun_dir))
-                    do_rsync(src_fastq_files, seqrun_dir)
+            #this function works at run_level, so I have to process a single run
+            #it might happen that in a run we have multiple lib preps for the same sample
+                #for seqrun in libprep:
+                src_fastq_files = [ os.path.join(src_sample_dir, fastq_file)
+                                    for fastq_file in seqrun_object.fastq_files ] ##MARIO: check this
+                LOG.info("Copying fastq files from {} to {}...".format(sample_dir, seqrun_dir))
+                do_rsync(src_fastq_files, seqrun_dir)
     return projects_to_analyze
 
 
@@ -367,6 +368,10 @@ def parse_casava_directory(fc_dir):
     projects = []
     fc_dir = os.path.abspath(fc_dir)
     LOG.info("Parsing flowcell directory \"{}\"...".format(fc_dir))
+    
+    import pdb
+    pdb.set_trace()
+    
     parser = FlowcellRunMetricsParser(fc_dir)
     run_info = parser.parseRunInfo()
     runparams = parser.parseRunParameters()

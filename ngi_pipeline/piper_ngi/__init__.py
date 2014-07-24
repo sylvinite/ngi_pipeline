@@ -38,7 +38,8 @@ def analyze_project(project, workflow_name, config_file_path):
         # report.xml is created by sthlm2UUSNP (in convert_sthlm_to_uppsala)
         convert_sthlm_to_uppsala(project)
         build_setup_xml(project, config)
-        command_line = build_piper_cl(project, workflow_name, config)
+        command_line = build_piper_cl(project, "dna_alignonly", config)
+
         popen_object = launch_piper_job(command_line, project)
         return popen_object
     except Exception as e:
@@ -56,12 +57,13 @@ def convert_sthlm_to_uppsala(project):
     :returns: A list of projects with Uppsala-style directories as attributes.
     :rtype: list
     """
+
     # Requires sthlm2UUSNP on PATH
     cl_template = "sthlm2UUSNP -i {input_dir} -o {output_dir}"
     LOG.info("Converting Sthlm project {} to UUSNP format".format(project))
-    input_dir = os.path.join(project.base_path, project.dirname)
+    input_dir = os.path.join(project.base_path, "DATA", project.dirname)
     uppsala_dirname = "{}_UUSNP".format(project.dirname)
-    output_dir = os.path.join(project.base_path, uppsala_dirname)
+    output_dir = os.path.join(project.base_path, "ANALYSIS", uppsala_dirname)
     com = cl_template.format(input_dir=input_dir, output_dir=output_dir)
     try:
         subprocess.check_call(shlex.split(com))
@@ -104,12 +106,10 @@ def build_piper_cl(project, workflow_name, config):
     :rtype: list
     :raises ValueError: If a required configuration value is missing.
     """
-
     # Find Piper global configuration:
     #   Check environmental variable PIPER_GLOB_CONF_XML
     #   then the config file
     #   then the file globalConfig.xml in the piper root dir
-
     piper_rootdir = config.get("piper", {}).get("path_to_piper_rootdir")
     piper_global_config_path = (os.environ.get("PIPER_GLOB_CONF_XML") or
                                 config.get("piper", {}).get("path_to_piper_globalconfig") or
@@ -161,8 +161,10 @@ def build_setup_xml(project, config):
     :returns: A list of Project objects with setup.xml paths as attributes.
     :rtype: list
     """
+    
+
     LOG.info("Building Piper setup.xml file for project {}".format(project))
-    project_top_level_dir = os.path.join(project.base_path, project.dirname)
+    project_top_level_dir = os.path.join(project.base_path, "ANALYSIS", project.dirname)
     cl_args = {'project': project.name}
 
     # Load needed data from database
@@ -209,10 +211,12 @@ def build_setup_xml(project, config):
                            "--sequencing_center {sequencing_center} "
                            "--uppnex_project_id {uppmax_proj} "
                            "--reference {reference_path}".format(**cl_args))
+    #NOTE: here I am assuming the different dir structure, it would be wiser to change the object type and have an uppsala project
     for sample in project.samples.values():
-        for fcid in sample:
-            sample_directory = os.path.join(project_top_level_dir, fcid.dirname, sample.dirname)
-            setupfilecreator_cl += " --input_sample {}".format(sample_directory)
+        for libprep in sample:
+            for fcid in libprep:
+                sample_directory = os.path.join(project_top_level_dir, fcid.dirname, sample.dirname)
+                setupfilecreator_cl += " --input_sample {}".format(sample_directory)
 
     try:
         LOG.info("Executing command line: {}".format(setupfilecreator_cl))
