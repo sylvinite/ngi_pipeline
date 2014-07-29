@@ -26,8 +26,18 @@ from ngi_pipeline.utils.parsers import FlowcellRunMetricsParser, \
 
 LOG = minimal_logger(__name__)
 
+# This is called via Celery when a new flowcell is delivered from Sthlm or Uppsala, one flowcell per time
+def process_demultiplexed_flowcell(demux_fcid_dirs, restrict_to_projects=None, restrict_to_samples=None, config_file_path=None):
+    if len(demux_fcid_dirs) > 1:
+        error_message = ("Only one flowcell can be specified at this point"
+                             "The following flowcells have been specified: {} ".format(",".join(demux_fcid_dirs))) ## better to use set
+        LOG.info(error_message)
+        sys.exit("Quitting: " + error_message)
 
-# This is called via Celery when a new flowcell is delivered from Sthlm or Uppsala
+    process_demultiplexed_flowcells(demux_fcid_dirs, restrict_to_projects, restrict_to_samples, config_file_path)
+
+
+
 def process_demultiplexed_flowcells(demux_fcid_dirs, restrict_to_projects=None, restrict_to_samples=None, config_file_path=None):
     """Sort demultiplexed Illumina flowcells into projects and launch their analysis.
 
@@ -369,8 +379,6 @@ def parse_casava_directory(fc_dir):
     fc_dir = os.path.abspath(fc_dir)
     LOG.info("Parsing flowcell directory \"{}\"...".format(fc_dir))
     
-    import pdb
-    pdb.set_trace()
     
     parser = FlowcellRunMetricsParser(fc_dir)
     run_info = parser.parseRunInfo()
