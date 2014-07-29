@@ -17,7 +17,9 @@ from ngi_pipeline.database import get_project_id_from_name
 from ngi_pipeline.database.session import get_charon_session_for_project
 from ngi_pipeline.database.process_tracking import get_all_tracked_processes, \
                                                    record_workflow_process_local, \
-                                                   write_status_to_charon
+                                                   write_status_to_charon, \
+                                                   check_if_flowcell_analysis_are_running, \
+                                                   record_workflow_process_run_local
 from ngi_pipeline.log import minimal_logger
 from ngi_pipeline.utils.filesystem import do_rsync, safe_makedir
 from ngi_pipeline.utils.config import load_yaml_config, locate_ngi_config
@@ -81,8 +83,77 @@ def process_demultiplexed_flowcells(demux_fcid_dirs, restrict_to_projects=None, 
     else:
         # Don't need the dict functionality anymore; revert to list
         projects_to_analyze = projects_to_analyze.values()
-    launch_analysis_for_projects(projects_to_analyze)
+    
+    ##project to analyse contained only in the current flowcell(s), I am ready to analyse the projects at flowcell level only
+    launch_analysis_for_projects_flowcells(projects_to_analyze)
 
+
+def launch_analysis_for_projects_flowcells(projects_to_analyze, restrict_to_samples=None, config_file_path=None):
+    """Launch the analysis of projects.
+
+    :param list projects_to_analyze: The list of projects (Project objects) to analyze
+    :param list restrict_to_samples: A list of sample names to which we will restrict our analysis
+    :param list config_file_path: The path to the NGI Pipeline configuration file.
+    """
+    if not config_file_path:
+        config_file_path = locate_ngi_config()
+    config = load_yaml_config(config_file_path)
+    for project in projects_to_analyze:
+        # Get information from the database regarding which workflows to run
+        try:
+            workflow = get_workflow_for_project(project.name)
+        except (ValueError, IOError) as e:
+            error_msg = ("Skipping project {} because of error: {}".format(project, e))
+            LOG.error(error_msg)
+            continue
+        try:
+            analysis_engine_module_name = config["analysis"]["workflows"][workflow]["analysis_engine"]
+        except KeyError:
+            error_msg = ("No analysis engine for workflow \"{}\" specified "
+                         "in configuration file. Skipping this workflow "
+                         "for project {}".format(workflow, project))
+            LOG.error(error_msg)
+            raise RuntimeError(error_msg)
+        # Import the adapter module specified in the config file (e.g. piper_ngi)
+        try:
+            analysis_module = importlib.import_module(analysis_engine_module_name)
+        except ImportError as e:
+            error_msg = ("Couldn't import module {} for workflow {} "
+                         "in project {}. Skipping.".format(analysis_module,
+                                                           workflow,
+                                                           project))
+            LOG.error(error_msg)
+            continue
+        ##now process each flowcell, one per time
+
+        for sample in project.samples.values():
+            for libprep in sample:
+                for fcid in libprep:
+                    #check that the current FlowCell is not already being analysed
+                    
+                    analysis_running = check_if_flowcell_analysis_are_running(project,
+                        sample, libprep, fcid, config)
+                    #if I am not running nothing on this run then I can start to analyse it
+                    # IMPORTANT I know that this is a run so I need to start run specific analysis
+                    # another function will take care of project specific analysis
+                    if not analysis_running: #if this flowcell run is not already being analysed
+                        try:
+                            workflow = "dna_alignonly"  #must be taken from somewhere, either config file or Charon
+                            #when I call an Engine at flowcell level I expect that the engine starts by defining its own
+                            #folder structure and subsequently start analysis at flowcell level.
+                            p_handle = analysis_module.analyze_flowcell_run(project=project,
+                                                       sample= sample,
+                                                       libprep = libprep,
+                                                       fcid = fcid,
+                                                       workflow_name=workflow,
+                                                       config_file_path=config_file_path)
+                            record_workflow_process_run_local(p_handle, workflow, project,
+                             sample, libprep, fcid, analysis_module, config)
+        
+                        except Exception as e:
+                            error_msg = ('Cannot process project "{}": {}'.format(project, e))
+                            LOG.error(error_msg)
+                            continue
 
 ## NOTE This will be the function that is called by the Workflow Watcher script, or whatever we want to call it
 ##      By this I mean the script that checks intermittently to determine if we can move on with the next workflow,

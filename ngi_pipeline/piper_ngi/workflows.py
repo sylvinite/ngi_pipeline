@@ -8,7 +8,7 @@ from ngi_pipeline.log import minimal_logger
 
 LOG = minimal_logger(__name__)
 
-def return_cl_for_workflow(workflow_name, qscripts_dir_path, setup_xml_path, global_config_path):
+def return_cl_for_workflow(workflow_name, qscripts_dir_path, setup_xml_path, global_config_path, output_dir= None):
     """Return an executable-ready Piper command line.
 
     :param str workflow_name: The name of the Piper workflow to be run.
@@ -30,7 +30,7 @@ def return_cl_for_workflow(workflow_name, qscripts_dir_path, setup_xml_path, glo
         raise NotImplementedError(error_msg)
    ## TODO need tmp, logging directory
     LOG.info("Building command line for workflow {}".format(workflow_name))
-    return workflow_function(qscripts_dir_path, setup_xml_path, global_config_path)
+    return workflow_function(qscripts_dir_path, setup_xml_path, global_config_path, output_dir)
 
 
 def workflow_dna_alignonly(*args, **kwargs):
@@ -47,7 +47,7 @@ def workflow_dna_alignonly(*args, **kwargs):
     return workflow_dna_variantcalling(*args, **kwargs) + " --alignment_and_qc"
 
 
-def workflow_dna_variantcalling(qscripts_dir_path, setup_xml_path, global_config_path):
+def workflow_dna_variantcalling(qscripts_dir_path, setup_xml_path, global_config_path, output_dir=None):
     """Return the command line for DNA Variant Calling.
 
     :param strs qscripts_dir_path: The path to the Piper qscripts directory.
@@ -74,8 +74,8 @@ def workflow_dna_variantcalling(qscripts_dir_path, setup_xml_path, global_config
             #-jobNative "${JOB_NATIVE_ARGS}" \
             #--job_walltime 345600 \
             #${RUN} ${ONLY_ALIGMENTS} ${DEBUG} 2>&1 | tee -a ${LOGS}/wholeGenome.log
-
-    return  "piper -S {workflow_qscript_path} " \
+    if output_dir == None:
+        return  "piper -S {workflow_qscript_path} " \
             "--xml_input {setup_xml_path} " \
             "--global_config {global_config_path} " \
             "--number_of_threads {num_threads} " \
@@ -83,3 +83,16 @@ def workflow_dna_variantcalling(qscripts_dir_path, setup_xml_path, global_config
             "-jobRunner Drmaa " \
             "--job_walltime {job_walltime} " \
             "-run".format(**locals())
+    else:
+        return  "piper -S {workflow_qscript_path} " \
+            "--xml_input {setup_xml_path} " \
+            "--global_config {global_config_path} " \
+            "--number_of_threads {num_threads} " \
+            "--scatter_gather 23 " \
+            "-jobRunner Drmaa " \
+            "--job_walltime {job_walltime} " \
+            "--output_directory {output_dir} " \
+            "-run".format(**locals())
+
+
+

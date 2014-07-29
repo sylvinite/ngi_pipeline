@@ -19,8 +19,45 @@ from ngi_pipeline.utils.parsers import parse_lane_from_filename, find_fastq_read
 
 LOG = minimal_logger(__name__)
 
+
+def analyze_flowcell_run(project, sample, libprep, fcid, workflow_name, config_file_path):
+    """The main method for analyse flowcells (Run Level).
+
+    :param NGIProject project_to_analyze : The project -- to analyze!!
+    :param Sample sample_to_analyze: the sample that need to be analyzed
+    :param libprep libprep: which library prep needs to be analysed
+    :fcid fcid: gueass.... which fcid need to be analysed
+    :param str workflow_name: The workflow (e.g. alignment)
+    :param str config_file_path: The path to the configuration file.
+
+    :returns: The subprocess.Popen object for the process
+    :rtype: subprocess.Popen
+    """
+    #Here I am in the Piper World: this means that I can be Engine specific!!!
+    config = load_yaml_config(config_file_path)
+    modules_to_load = ["java/sun_jdk1.7.0_25", "R/2.15.0"]
+    #things to to do
+    # 1- convert the current project/sample/libprep/fcid structure into the piper structure
+    # 2- build setup_xml specific for this fc run
+    # 3- run piper at fc run
+    try:
+        convert_sthlm_to_uppsala(project) #this converts the entire flowcell, it is not specific to the sample. Not a big deal, it will simply complain about the fact that it has alredy converted it
+        build_setup_xml(project, config, sample, libprep, fcid)
+        command_line = build_piper_cl(project, workflow_name, config)
+        popen_object = launch_piper_job(command_line, project)
+        return popen_object
+    
+    except Exception as e:
+        error_msg = "Processing project {} sample {} fcid {} failed: {}".format(project,
+        sample, fcid, e.__repr__())
+        LOG.error(error_msg)
+        raise
+    
+    LOG.info("Here I am")
+
+
 def analyze_project(project, workflow_name, config_file_path):
-    """The main method.
+    """The main method for project (samples?).
 
     :param NGIProject project_to_analyze : The project -- to analyze!!
     :param str workflow_name: The workflow (e.g. alignment, variant calling)
@@ -29,10 +66,13 @@ def analyze_project(project, workflow_name, config_file_path):
     :returns: The subprocess.Popen object for the process
     :rtype: subprocess.Popen
     """
+    import pdb
+    pdb.set_trace()
     config = load_yaml_config(config_file_path)
     modules_to_load = ["java/sun_jdk1.7.0_25", "R/2.15.0"]
     # Valid only for this session
     load_modules(modules_to_load)
+   
     try:
         ## Temporary until the directory format switch
         # report.xml is created by sthlm2UUSNP (in convert_sthlm_to_uppsala)
@@ -62,8 +102,8 @@ def convert_sthlm_to_uppsala(project):
     cl_template = "sthlm2UUSNP -i {input_dir} -o {output_dir}"
     LOG.info("Converting Sthlm project {} to UUSNP format".format(project))
     input_dir = os.path.join(project.base_path, "DATA", project.dirname)
-    uppsala_dirname = "{}_UUSNP".format(project.dirname)
-    output_dir = os.path.join(project.base_path, "ANALYSIS", uppsala_dirname)
+    uppsala_dirname = "{}".format(project.dirname)
+    output_dir = os.path.join(project.base_path, "DATA_UUSNP", uppsala_dirname)
     com = cl_template.format(input_dir=input_dir, output_dir=output_dir)
     try:
         subprocess.check_call(shlex.split(com))
@@ -147,11 +187,13 @@ def build_piper_cl(project, workflow_name, config):
     cl = workflows.return_cl_for_workflow(workflow_name=workflow_name,
                                           qscripts_dir_path=piper_qscripts_dir,
                                           setup_xml_path=setup_xml_path,
-                                          global_config_path=piper_global_config_path)
+                                          global_config_path=piper_global_config_path,
+                                          output_dir=project.analysis_dir)
     return cl
 
 
-def build_setup_xml(project, config):
+#def build_setup_xml(project, config):
+def build_setup_xml(project, config, sample = None, libprep = None, fcid = None):
     """Build the setup.xml file for each project using the CLI-interface of
     Piper's SetupFileCreator.
 
@@ -162,9 +204,17 @@ def build_setup_xml(project, config):
     :rtype: list
     """
     
+    if fcid == None:
+        LOG.info("Building Piper setup.xml file for project {} sample {}".format(project, sample))
+    else:
+        LOG.info("Building Piper setup.xml file for project {} sample {}, fcid {}".format(project,
+            sample, fcid))
+    project_top_level_dir = os.path.join(project.base_path, "DATA_UUSNP", project.dirname)
+    if not os.path.exists(os.path.join(project.base_path,"ANALYSIS", project.dirname)):
+        safe_makedir(os.path.join(project.base_path,"ANALYSIS", project.dirname), 0770)
 
-    LOG.info("Building Piper setup.xml file for project {}".format(project))
-    project_top_level_dir = os.path.join(project.base_path, "ANALYSIS", project.dirname)
+    analysis_dir = os.path.join(project.base_path,"ANALYSIS", project.dirname)
+
     cl_args = {'project': project.name}
 
     # Load needed data from database
@@ -199,10 +249,16 @@ def build_setup_xml(project, config):
         # Assume setupFileCreator is on path
         cl_args["sfc_binary"] = "setupFileCreator"
 
-    output_xml_filepath = os.path.join( project_top_level_dir,
-                                        "{}_setup.xml".format(project))
-    cl_args["output_xml_filepath"] = output_xml_filepath
-    cl_args["sequencing_tech"] = "Illumina"
+
+    if fcid == None:
+        output_xml_filepath = os.path.join( analysis_dir,
+                                        "{}_{}_setup.xml".format(project, sample))
+    else:
+        output_xml_filepath = os.path.join( analysis_dir,
+                                        "{}_{}_{}_setup.xml".format(project, sample, fcid))
+
+    cl_args["output_xml_filepath"]  = output_xml_filepath
+    cl_args["sequencing_tech"]      = "Illumina"
 
     setupfilecreator_cl = ("{sfc_binary} "
                            "--output {output_xml_filepath} "
@@ -210,18 +266,23 @@ def build_setup_xml(project, config):
                            "--sequencing_platform {sequencing_tech} "
                            "--sequencing_center {sequencing_center} "
                            "--uppnex_project_id {uppmax_proj} "
-                           "--reference {reference_path}".format(**cl_args))
+                           "--reference {reference_path} ".format(**cl_args))
     #NOTE: here I am assuming the different dir structure, it would be wiser to change the object type and have an uppsala project
-    for sample in project.samples.values():
-        for libprep in sample:
-            for fcid in libprep:
-                sample_directory = os.path.join(project_top_level_dir, fcid.dirname, sample.dirname)
-                setupfilecreator_cl += " --input_sample {}".format(sample_directory)
+    if fcid == None:
+        for sample in project.samples.values():
+            for libprep in sample:
+                for fcid in libprep:
+                    sample_directory = os.path.join(project_top_level_dir, fcid.dirname, sample.dirname)
+                    setupfilecreator_cl += " --input_sample {}".format(sample_directory)
+    else:
+        sample_directory = os.path.join(project_top_level_dir, fcid.dirname, sample.dirname)
+        setupfilecreator_cl += " --input_sample {}".format(sample_directory)
 
     try:
         LOG.info("Executing command line: {}".format(setupfilecreator_cl))
         subprocess.check_call(shlex.split(setupfilecreator_cl))
         project.setup_xml_path = output_xml_filepath
+        project.analysis_dir   = analysis_dir
     except (subprocess.CalledProcessError, OSError, ValueError) as e:
         error_msg = ("Unable to produce setup XML file for project {}; "
                      "skipping project analysis. "
@@ -281,3 +342,7 @@ def create_report_tsv(project):
                     ## TODO pull from Charon database
                     read_library = "<NotImplemented>"
                     print("\t".join([sample.name, lane, read_library, fcid.name]), file=rtsv_fh)
+
+
+
+

@@ -45,6 +45,49 @@ def remove_record_from_local_tracking(project, config=None):
     db.close()
 
 
+def check_if_flowcell_analysis_are_running( project, sample, libprep, fcid, config=None):
+    """checks if a given project/sample/library/flowcell is currently analysed.
+    
+    :param Project project: the project object
+    :param Sample sample:
+    :param LibPrep libprep:
+    :param string fcid:
+    :param dict config: The parsed configuration file (optional)
+
+    :raises RuntimeError: If the configuration file cannot be found
+    
+    :returns true/false
+    """
+    LOG.info("checking if Project {}, Sample {}, Library prep {}, fcid {} "
+             "are currently being analysed ".format(project, sample, libprep, fcid))
+    db = get_shelve_database(config)
+    if project.name in db:
+        error_msg = ("Project {},is already being analysed at project level "
+                     "This run should not exists!!! somethig terribly wrong is happening, "
+                     "Kill everything  and call Mario and Francesco".format(project))
+        LOG.info(error_msg)
+        sys.exit("Quitting: " + error_msg)
+        
+    if "{}_{}".format(project.name, sample) in db:
+        error_msg = ("Project {} and sample {}, is already being analysed at sample level "
+                     "This run should not exists!!! somethig terribly wrong is happening, "
+                     "Kill everything  and call Mario and Francesco".format(project, sample))
+        LOG.info(error_msg)
+        sys.exit("Quitting: " + error_msg)
+
+    db_key = "{}_{}_{}_{}".format(project, sample, libprep, fcid)
+    if db_key in db:
+        error_msg = ("Project {}, Sample {}, Library prep {}, fcid {} "
+                     "has an entry in the local db. Skipping this analys."
+                     "rhis should not happen".format(project, sample, libprep, fcid))
+        LOG.warn(error_msg)
+        return True
+    return False
+
+
+
+
+
 def write_status_to_charon(project_id, return_code):
     """Update the status of a workflow for a project in the Charon database.
 
@@ -72,6 +115,8 @@ def write_status_to_charon(project_id, return_code):
         raise RuntimeError(error_msg)
 
 
+
+
 def record_workflow_process_local(p_handle, workflow, project, analysis_module, config=None):
     """Track the PID for running workflow analysis processes.
 
@@ -81,15 +126,18 @@ def record_workflow_process_local(p_handle, workflow, project, analysis_module, 
     :param analysis_module: The analysis module used to execute the workflow
     :param dict config: The parsed configuration file (optional)
 
-      Stored dict resembles {"J.Doe_14_01":
+
+     Stored dict resembles {"J.Doe_14_01":
                                 {"workflow": "NGI",
                                  "p_handle": p_handle,
                                  "analysis_module": analysis_module.__name__,
                                  "project_id": project_id
                                 }
-                             "J.Johansson_14_02":
+                             "J.Johansson_14_02_P201_101_A_RUNID":
                                  ...
                             }
+
+    
 
     :raises KeyError: If the database portion of the configuration file is missing
     :raises RuntimeError: If the configuration file cannot be found
@@ -117,6 +165,35 @@ def record_workflow_process_local(p_handle, workflow, project, analysis_module, 
     db.close()
     LOG.info("Successfully recorded process id {} for project {} (ID {}), " 
              "workflow {}".format(p_handle.pid, project, project.project_id, workflow))
+
+
+def record_workflow_process_run_local(p_handle, workflow, project,
+  sample, libprep, fcid, analysis_module, config=None):
+    LOG.info("Recording process id {} for project {}, sample {}, fcid {} "
+             "workflow {}".format(p_handle.pid, project, sample, fcid, workflow))
+    project_dict = { "workflow": workflow,
+                     "p_handle": p_handle,
+                     "analysis_module": analysis_module.__name__,
+                     "project_id": project.project_id
+                   }
+    db = get_shelve_database(config)
+    # I don't see how this would ever happen but it makes me nervous to not
+    # even check for this.
+    #this will happen often.... we need to check that we are not rerunning the same analysis at the same moment
+    db_key = "{}_{}_{}_{}".format(project, sample, libprep, fcid)
+    if db_key in db:
+        error_msg = ("Project {}, Sample {}, Library prep {}, fcid {} "
+                     "has an entry in the local db. "
+                     "this should not happen --> NEED TO STOP TO AVOID MORE PROBLEMS".format(project, sample, libprep, fcid))
+        LOG.warn(error_msg)
+        return 
+
+    db[db_key] = project_dict
+    db.close()
+    LOG.info("Successfully recorded process id {} for Project {}, Sample {}, Library prep {}, fcid {}, "
+             "workflow {}".format(p_handle.pid, project, sample, libprep, fcid,   workflow))
+
+
 
 
 def get_shelve_database(config):
