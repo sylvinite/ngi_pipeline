@@ -96,6 +96,7 @@ def write_status_to_charon(project_id, return_code):
 
     :raises RuntimeError: If the Charon database could not be updated
     """
+    
     charon_session = get_charon_session()
     status = "Completed" if return_code is 0 else "Failed"
     project_url = construct_charon_url("project", project_id)
@@ -106,9 +107,9 @@ def write_status_to_charon(project_id, return_code):
         LOG.error(error_msg)
         raise RuntimeError(error_msg)
     project_dict = project_response.json()
-    project_dict["status"] = status
-    response_obj = charon_session.put(json.dumps(project_dict))
-    if response_obj.status_code != 201:
+    #project_dict["status"] = status
+    response_obj = charon_session.put(project_url, json.dumps(project_dict))
+    if response_obj.status_code != 204:
         error_msg = ('Failed to update project status for "{}" '
                      'in Charon database: {}'.format(project_id, response_obj.reason))
         LOG.error(error_msg)
