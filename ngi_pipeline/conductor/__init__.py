@@ -19,7 +19,9 @@ from ngi_pipeline.database.process_tracking import get_all_tracked_processes, \
                                                    record_workflow_process_local, \
                                                    write_status_to_charon, \
                                                    check_if_flowcell_analysis_are_running, \
-                                                   record_workflow_process_run_local
+                                                   record_workflow_process_run_local, \
+                                                   remove_record_from_local_tracking, \
+                                                   write_to_charon_alignment_results
 from ngi_pipeline.log import minimal_logger
 from ngi_pipeline.utils.filesystem import do_rsync, safe_makedir
 from ngi_pipeline.utils.config import load_yaml_config, locate_ngi_config
@@ -130,7 +132,7 @@ def launch_analysis_for_projects_flowcells(projects_to_analyze, restrict_to_samp
             for libprep in sample:
                 for fcid in libprep:
                     #check that the current FlowCell is not already being analysed
-                    
+                    #TODO: check also charon status here?
                     analysis_running = check_if_flowcell_analysis_are_running(project,
                         sample, libprep, fcid, config)
                     #if I am not running nothing on this run then I can start to analyse it
@@ -231,11 +233,12 @@ def check_update_jobs_status(config_file_path=None, projects_to_check=None):
                                  it is defined as env var or in default location)
     :param list projects_to_check: A list of project names to check (exclusive, optional)
     """
+    
     if not config_file_path:
         config_file_path = locate_ngi_config()
     config = load_yaml_config(config_file_path)
-    db = get_all_tracked_processes()
-    for project_name, project_dict in db.iteritems():
+    db_dict = get_all_tracked_processes()
+    for project_name, project_dict in db_dict.iteritems():
         LOG.info("Checking workflow {} for project {}...".format(project_dict["workflow"],
                                                                  project_name))
         return_code = project_dict["p_handle"].poll()
@@ -249,11 +252,15 @@ def check_update_jobs_status(config_file_path=None, projects_to_check=None):
             # from the local db; otherwise, leave it and try again next cycle.
             try:
                 project_id = project_dict['project_id']
-                write_status_to_charon(project_id, return_code)
+                if project_dict["workflow"] == "dna_alignonly":
+                    #in this case I need to update the run level infomration
+                    write_to_charon_alignment_results(project_name, return_code)
+                else:
+                    write_status_to_charon(project_id, return_code)
                 LOG.info("Successfully updated Charon database.")
                 try:
                     # This only hits if we succesfully update Charon
-                    remove_record_from_local_tracking()
+                    remove_record_from_local_tracking(project_name)
                 except RuntimeError:
                     # I find myself compulsively double-logging
                     LOG.error(e)

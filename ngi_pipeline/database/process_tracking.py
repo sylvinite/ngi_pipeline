@@ -5,6 +5,7 @@ import shelve
 from ngi_pipeline.database import construct_charon_url, get_charon_session
 from ngi_pipeline.log import minimal_logger
 from ngi_pipeline.utils.config import load_yaml_config, locate_ngi_config
+from ngi_pipeline.database import get_project_id_from_name
 
 LOG = minimal_logger(__name__)
 
@@ -121,7 +122,7 @@ def write_status_to_charon(project_id, return_code):
         LOG.error(error_msg)
         raise RuntimeError(error_msg)
 
-def write_to_charon_alignment_results(project_name, return_code):
+def write_to_charon_alignment_results(job_id, return_code):
     """Update the status of a sequencing run after alignment.
 
     :param NGIProject project_id: The name of the project, sample, lib prep, flowcell id
@@ -129,13 +130,34 @@ def write_to_charon_alignment_results(project_name, return_code):
 
     :raises RuntimeError: If the Charon database could not be updated
     """
+    
+    import pdb
+    pdb.set_trace()
+
     charon_session = get_charon_session()
     alignment_status = "Done" if return_code is 0 else "Aborted"
+    return_code = 1
+    
+    import re
+    ## A.Wedell_13_03_P567_102_A_130627_AH0JYUADXX
+    information_to_extract = re.compile("([a-zA-Z]\.[a-zA-Z]*_\d*_\d*)_(P\d*_\d*)_([A-Z])_(\d{6}_.*)")
+    project_name = information_to_extract.match(job_id).group(1)
+    project_id   = get_project_id_from_name(project_name)
+    sample_id    = information_to_extract.match(job_id).group(2)
+    library_id   = information_to_extract.match(job_id).group(3)
+    run_id       = information_to_extract.match(job_id).group(4)
+
+    #this returns url to all the seq runs of this library, sample, project
+    url = construct_charon_url("seqruns", project_id, sample_id, library_id)
+    #now i need to check with one is my run id, I need to match the runid field with my local run_id
+    charon_session.get(url).json()["seqruns"][0]["runid"]
+
     if return_code == 0:
         print "I need to update charon entry"
     else:
-        import re
         run_url = construct_charon_url("project", project_id)
+
+
 
 
 
