@@ -21,7 +21,11 @@ def get_all_tracked_processes(config=None):
     """
     # This function doesn't do a whole lot
     db = get_shelve_database(config)
-    return db
+    db_dict = {}
+    for job_name, job_name_obj in db.iteritems():
+        db_dict[job_name] = job_name_obj
+    db.close()
+    return db_dict
 
 
 def remove_record_from_local_tracking(project, config=None):
@@ -36,7 +40,7 @@ def remove_record_from_local_tracking(project, config=None):
              'project "{}"'.format(project))
     db = get_shelve_database(config)
     try:
-        db.pop(project.name)
+        del db[project] #POP does not remove the entry in the db
     except KeyError:
         error_msg = ('Project "{}" not found in local process '
                      'tracking database.'.format(project))
@@ -81,7 +85,9 @@ def check_if_flowcell_analysis_are_running( project, sample, libprep, fcid, conf
                      "has an entry in the local db. Skipping this analys."
                      "rhis should not happen".format(project, sample, libprep, fcid))
         LOG.warn(error_msg)
+        db.close()
         return True
+    db.close()
     return False
 
 
@@ -115,6 +121,21 @@ def write_status_to_charon(project_id, return_code):
         LOG.error(error_msg)
         raise RuntimeError(error_msg)
 
+def write_to_charon_alignment_results(project_name, return_code):
+    """Update the status of a sequencing run after alignment.
+
+    :param NGIProject project_id: The name of the project, sample, lib prep, flowcell id
+    :param int return_code: The return code of the workflow process
+
+    :raises RuntimeError: If the Charon database could not be updated
+    """
+    charon_session = get_charon_session()
+    alignment_status = "Done" if return_code is 0 else "Aborted"
+    if return_code == 0:
+        print "I need to update charon entry"
+    else:
+        import re
+        run_url = construct_charon_url("project", project_id)
 
 
 
