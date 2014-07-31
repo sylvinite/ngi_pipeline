@@ -281,7 +281,11 @@ def check_update_jobs_status(config_file_path=None, projects_to_check=None):
                                              project_name,
                                              project_dict['p_handle'].pid))
 
-
+# This function is responsable of trigger second level analyisis (i.e., sample level analysis)
+# using the information available on the Charon. Disussing with Denis we think the best way to
+# trigger this is to have an API that returns all samples with total autosomal coverage > 30X
+def trigger_sample_level_analysis():
+    return "AAAAAA"
 
 
 

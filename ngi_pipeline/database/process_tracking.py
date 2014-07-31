@@ -188,7 +188,6 @@ def write_to_charon_alignment_results(job_id, return_code, run_dir=None):
         LOG.error(error_msg)
         raise RunTimeError(error_msg)
  
-
     #At this point I can update the correct seqrun
     url = construct_charon_url("seqrun", project_id, sample_id, library_id, seq_run_to_update)
     all_algn_completed = True  # this variable is used to check that all alignments have a result
@@ -251,6 +250,45 @@ def write_to_charon_alignment_results(job_id, return_code, run_dir=None):
         seq_run_to_update_dict = delete_seq_run_update(seq_run_to_update)
 
     response_obj = charon_session.put(url, json.dumps(seq_run_to_update_dict))
+    if response_obj.status_code != 204:
+        error_msg = ('Failed to update run alignment status for run "{}" in project {} '
+                     'sample {}, library prep {} to  Charon database: {}'.format(run_id,
+                      project_id, sample_id, library_id, response_obj.reason))
+        LOG.error(error_msg)
+        raise RuntimeError(error_msg)
+    #TODO now update the sample field the total_autosomal_coverage, this will go away once Denis implements
+    # an API for this
+    url = construct_charon_url("seqruns", project_id, sample_id) #get all samples runs for this sample
+    seqruns_response = charon_session.get(url)
+    if seqruns_response.status_code != 200:
+        error_msg = ('Error accessing database while updaiting alignment statistics'
+                     'for project {} sample {}  could not '
+                     'update Charon: {}'.format(project_id, sample_id, project_response.reason))
+        LOG.error(error_msg)
+        raise RuntimeError(error_msg)
+    seqruns_dict            = seqruns_response.json()
+    total_autosomal_coverage = 0; #initialise the autosomal coverage to 0
+    for seqrun in seqruns_dict["seqruns"]:
+        if "mean_autosome_coverage" in seqrun:
+            total_autosomal_coverage += seqrun["mean_autosome_coverage"]
+    #now get the sample
+    url = construct_charon_url("sample", project_id, sample_id) #get all samples runs for this sample
+    sample_response = charon_session.get(url)
+    if sample_response.status_code != 200:
+        error_msg = ('Error accessing database while updaiting total autosomal coverage'
+                     'for project {} sample {}  could not '
+                     'update Charon: {}'.format(project_id, sample_id, project_response.reason))
+        LOG.error(error_msg)
+        raise RuntimeError(error_msg)
+    sample_dict = sample_response.json()
+    sample_dict["total_autosomal_coverage"] = total_autosomal_coverage
+
+    response_obj = charon_session.put(url, json.dumps(sample_dict))
+    if response_obj.status_code != 204:
+        error_msg = ('Failed to update total autosomal coverage for sample "{}" in project {} '
+                     ' to  Charon database: {}'.format(sample_id, project_id, response_obj.reason))
+        LOG.error(error_msg)
+        raise RuntimeError(error_msg)
 
 
 def update_seq_run(seq_run_to_update_dict, alignment_results):
