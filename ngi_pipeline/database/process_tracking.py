@@ -1,11 +1,15 @@
 """Keeps track of running workflow processes"""
 import json
 import shelve
+import os
+import glob
+import re
 
 from ngi_pipeline.database import construct_charon_url, get_charon_session
 from ngi_pipeline.log import minimal_logger
 from ngi_pipeline.utils.config import load_yaml_config, locate_ngi_config
 from ngi_pipeline.database import get_project_id_from_name
+from ngi_pipeline.utils.parsers import parse_genome_results
 
 LOG = minimal_logger(__name__)
 
@@ -122,46 +126,195 @@ def write_status_to_charon(project_id, return_code):
         LOG.error(error_msg)
         raise RuntimeError(error_msg)
 
-def write_to_charon_alignment_results(job_id, return_code):
+def write_to_charon_alignment_results(job_id, return_code, run_dir=None):
     """Update the status of a sequencing run after alignment.
 
     :param NGIProject project_id: The name of the project, sample, lib prep, flowcell id
     :param int return_code: The return code of the workflow process
+    :param string run_dir: the directory where results are stored (I know that I am running piper)
 
     :raises RuntimeError: If the Charon database could not be updated
     """
     
-    import pdb
-    pdb.set_trace()
-
     charon_session = get_charon_session()
     alignment_status = "Done" if return_code is 0 else "Aborted"
-    return_code = 1
     
-    import re
+
     ## A.Wedell_13_03_P567_102_A_130627_AH0JYUADXX
-    information_to_extract = re.compile("([a-zA-Z]\.[a-zA-Z]*_\d*_\d*)_(P\d*_\d*)_([A-Z])_(\d{6}_.*)")
+    information_to_extract = re.compile("([a-zA-Z]\.[a-zA-Z]*_\d*_\d*)_(P\d*_\d*)_([A-Z])_(\d{6})_(.*)")
     project_name = information_to_extract.match(job_id).group(1)
     project_id   = get_project_id_from_name(project_name)
     sample_id    = information_to_extract.match(job_id).group(2)
     library_id   = information_to_extract.match(job_id).group(3)
-    run_id       = information_to_extract.match(job_id).group(4)
+    run_id_piper = information_to_extract.match(job_id).group(5)
+    run_id       = "{}_{}".format(information_to_extract.match(job_id).group(4),
+                                information_to_extract.match(job_id).group(5))
 
     #this returns url to all the seq runs of this library, sample, project
     url = construct_charon_url("seqruns", project_id, sample_id, library_id)
     #now i need to check with one is my run id, I need to match the runid field with my local run_id
-    charon_session.get(url).json()["seqruns"][0]["runid"]
+    seqruns_response = charon_session.get(url)
+    if seqruns_response.status_code != 200:
+        error_msg = ('Error accessing database while updaiting alignment statistics'
+                     'for project {} sample {} library {} run {}  could not '
+                     'update Charon: {}'.format(project_id, sample_id, library_id,
+                      run_id, project_response.reason))
+        LOG.error(error_msg)
+        raise RuntimeError(error_msg)
+    #get all seqruns for this lib prep and selcet the one I have to update
+    #Charon needs to allow this in a easyer way?
+    seqruns_dict            = seqruns_response.json()
+    seq_run_to_update       = -1
+    seq_run_to_update_dict  = {}
+    for seqrun in seqruns_dict["seqruns"]:
+        run_id_charon         = seqrun["runid"]
+        run_id_charon_extract = re.compile("(\d{6})_.*_.*_(.*)")
+        #create the run id as it is stored in the jobid field
+        run_id_to_check       = "{}_{}".format(run_id_charon_extract.match(run_id_charon).group(1),
+                                    run_id_charon_extract.match(run_id_charon).group(2))
+        if run_id_to_check == run_id:
+            if seq_run_to_update > 0:
+                error_msg = ('Error while trying to update seqrun {}. Found two hits on Charon'
+                            'that match the same runid. this is not possible'.format(run_id_charon))
+                LOG.error(error_msg)
+                raise RunTimeError(error_msg)
+            #otherwise I can update this entry
+            seq_run_to_update       = seqrun["seqrunid"]
+            seq_run_to_update_dict  = seqrun
+        
+    if seq_run_to_update == -1: #in this case I did not find a seqrun matching the one I want to update
+        error_msg = ('Error while trying to update seqrun {}. No Hits found on Charon '
+                            'that match the same runid. this is not possible'.format(run_id))
+        LOG.error(error_msg)
+        raise RunTimeError(error_msg)
+ 
 
-    if return_code == 0:
-        print "I need to update charon entry"
+    #At this point I can update the correct seqrun
+    url = construct_charon_url("seqrun", project_id, sample_id, library_id, seq_run_to_update)
+    all_algn_completed = True  # this variable is used to check that all alignments have a result
+    #no I can start to put things
+    if return_code is None:
+        seq_run_to_update_dict["alignment_status"]="Working" #mark on charon that we are aligning this run
+    elif return_code == 0:
+        #in this case I need to update the alignment statistics for each lane in this seq run
+        if "alignment_status" in seq_run_to_update_dict and seq_run_to_update_dict["alignment_status"] == "Done":
+            warn_msg = ('Sequencing run {} already declered finished but now re-updaiting it '
+                        'this will couse over-writing of all fields'.format(run_id))
+            LOG.warn(warn_msg)
+            #TODO: need to delete seq_rrun_to_update_dict
+        
+        seq_run_to_update_dict["lanes"] = 0 #set this to zero so I know that I can over-write the fields
+        
+        try:
+            piper_result_dir = os.path.join(run_dir, "02_preliminary_alignment_qc")
+        except:
+            error_msg = ('Error while trying to update seqrun {}. No run_dir has been specified '
+                          'for project {}, sample {}, libprep {}'.format(run_id, project_id, sample_id,
+                          library_id))
+            LOG.error(error_msg)
+            raise RunTimeError(error_msg)
+        if not os.path.isdir(piper_result_dir):
+            #this should not happen,if return code is 0 this folder should exist but I want to check it anyway
+            all_algn_completed =False
+        else:
+            piper_qc_dir_base = "{}.{}.{}".format(sample_id, run_id_piper, sample_id)
+            piper_qc_path     = "{}*/".format(os.path.join(piper_result_dir, piper_qc_dir_base))
+            for qc_dir in glob.glob(piper_qc_path): #for each lane
+                genome_result = os.path.join(qc_dir, "genome_results.txt")
+                if not os.path.isfile(genome_result):
+                    #this should not happen,if return code is 0 this file should exist but I want to check it anyway
+                    all_algn_completed =False
+                else:
+                    alignment_results = parse_genome_results(genome_result)
+                    seq_run_to_update_dict = update_seq_run(seq_run_to_update_dict, alignment_results)
+                    
+        if not all_algn_completed:
+            error_msg = ('Alignment ended with an error: Piper returned 0 as error code but file structure is unexpected'
+                      'currently processing runid {} for project {}, sample {}, libprep {}'.format(run_id,
+                      project_id, sample_id, library_id))
+            LOG.error(error_msg)
+            seq_run_to_update_dict["alignment_status"] = "Aborted"
+        else:
+            seq_run_to_update_dict["alignment_status"] = "Done"
+
     else:
-        run_url = construct_charon_url("project", project_id)
+        #Alignment failed, store it as aborted, I will not use this until it is not fixed
+        error_msg = ('Alignment ended with an error: Piper returned non 0 return code'
+                      'currently processing runid {} for project {}, sample {}, libprep {}'.format(run_id,
+                      project_id, sample_id, library_id))
+        LOG.error(error_msg)
+        seq_run_to_update_dict["alignment_status"] = "Aborted"
+
+
+    if seq_run_to_update_dict["alignment_status"] == "Aborted":
+        #in such a case I do not update the other fields
+        seq_run_to_update_dict = delete_seq_run_update(seq_run_to_update)
+
+    response_obj = charon_session.put(url, json.dumps(seq_run_to_update_dict))
+
+
+def update_seq_run(seq_run_to_update_dict, alignment_results):
+    lanes = seq_run_to_update_dict["lanes"]
+    seq_run_to_update_dict["lanes"] += 1;
+    #get the current lane
+    extractLane = re.compile(".*\.(\d)\.bam")
+    current_lane = extractLane.match(alignment_results["bam_file"]).group(1)
+    
+    fields_to_update = ('mean_autosome_coverage',
+                        'mean_coverage',
+                        'std_coverage',
+                        'aligned_bases',
+                        'mapped_bases',
+                        'mapped_reads',
+                        'reads',
+                        'sequenced_bases',
+                        'bam_file',
+                        'output_file',
+                        'GC_percentage',
+                        'mean_mapping_quality',
+                        'bases_number',
+                        'contigs_number'
+                        )
+
+    for field in fields_to_update:
+        if field == 'mean_autosome_coverage':
+            if lanes == 0:
+                seq_run_to_update_dict[field] = alignment_results[field]
+            else:
+                seq_run_to_update_dict[field] += alignment_results[field]
+        else:
+            if lanes == 0:
+                seq_run_to_update_dict[field] = "{}_{}".format(current_lane, alignment_results[field])
+            else:
+                seq_run_to_update_dict[field] += " ; {}_{}".format(current_lane, alignment_results[field])
+
+    return seq_run_to_update_dict
+
+def delete_seq_run_update(seq_run_to_update):
+    fields_to_delete = ('mean_autosome_coverage',
+                        'mean_coverage',
+                        'std_coverage',
+                        'aligned_bases',
+                        'mapped_bases',
+                        'mapped_reads',
+                        'reads',
+                        'sequenced_bases',
+                        'bam_file',
+                        'output_file',
+                        'GC_percentage',
+                        'mean_mapping_quality',
+                        'bases_number',
+                        'contigs_number'
+                        )
+    for field in fields_to_delete:
+        if field in seq_run_to_update:
+            del(seq_run_to_update[field])
+    return seq_run_to_update
 
 
 
 
-
-def record_workflow_process_local(p_handle, workflow, project, analysis_module, config=None):
+def record_workflow_process_local(p_handle, workflow, project, analysis_module, analysis_dir, config=None):
     """Track the PID for running workflow analysis processes.
 
     :param subprocess.Popen p_handle: The subprocess.Popen object which executed the command
@@ -176,6 +329,7 @@ def record_workflow_process_local(p_handle, workflow, project, analysis_module, 
                                  "p_handle": p_handle,
                                  "analysis_module": analysis_module.__name__,
                                  "project_id": project_id
+                                 "run_dir" : running dir
                                 }
                              "J.Johansson_14_02_P201_101_A_RUNID":
                                  ...
@@ -195,7 +349,8 @@ def record_workflow_process_local(p_handle, workflow, project, analysis_module, 
     project_dict = { "workflow": workflow,
                      "p_handle": p_handle,
                      "analysis_module": analysis_module.__name__,
-                     "project_id": project.project_id
+                     "project_id": project.project_id,
+                     "run_dir": analysis_dir
                    }
     db = get_shelve_database(config)
     # I don't see how this would ever happen but it makes me nervous to not
@@ -212,13 +367,14 @@ def record_workflow_process_local(p_handle, workflow, project, analysis_module, 
 
 
 def record_workflow_process_run_local(p_handle, workflow, project,
-  sample, libprep, fcid, analysis_module, config=None):
+  sample, libprep, fcid, analysis_module, analysis_dir, config=None):
     LOG.info("Recording process id {} for project {}, sample {}, fcid {} "
              "workflow {}".format(p_handle.pid, project, sample, fcid, workflow))
     project_dict = { "workflow": workflow,
                      "p_handle": p_handle,
                      "analysis_module": analysis_module.__name__,
-                     "project_id": project.project_id
+                     "project_id": project.project_id,
+                     "run_dir": analysis_dir
                    }
     db = get_shelve_database(config)
     # I don't see how this would ever happen but it makes me nervous to not

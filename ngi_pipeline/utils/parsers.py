@@ -720,3 +720,82 @@ class FlowcellRunMetricsParser(RunMetricsParser):
 
         ## Set data
         return metrics
+
+
+
+def parse_genome_results(filename):
+    """Parse the genome_results.txt file created by piper (qualimap)
+       and stores all information into a dictionaty.
+    """
+    try:
+        fh=open(filename, 'r')
+    except IOError:
+        print "No such file"
+        raise IOError
+    else:
+        current_flag=None
+        data={}
+        cfp=re.compile('>>>>>>> ([^\n]+)')
+        #cov=re.compile('There is a ([0-9\.%]+) of reference with a coverageData >= ([0-9X]+)')
+        ccp=re.compile('^\s*[0-9]{1,2}\s[0-9]+\s[0-9]+\s([0-9\.]+)\s[0-9]+')
+        mac=0
+        for line in fh.readlines():
+            if line:
+                if ">>>>>>>" in line:
+                    current_flag=cfp.search(line).group(1)
+                    data[current_flag]={}
+            
+                else:
+                    keyval=line.split(" = ")
+
+                    if len(keyval)==2:
+                        key=re.sub('^\s+', '', keyval[0])
+                        key=re.sub('\n', '', key)
+                        val=re.sub('^\s+', '', keyval[1])
+                        val=re.sub('\n', '', val)
+                        data[current_flag][key]=val
+
+                    #if current_flag=="Coverage" and cov.search(line): 
+                    #    data[current_flag][cov.search(line).group(2)]=cov.search(line).group(1)
+
+                    if current_flag=="Coverage per contig" and ccp.search(line):
+                        mac+=float(ccp.search(line).group(1))
+#postprocess : remove useless stuff
+        mac/=22
+        data['mean_autosome_coverage']=mac
+        data['mean_coverage']=data['Coverage']['mean coverageData']
+
+
+        del(data['Coverage per contig'])
+        data['GC percentage']=data['ACTG content']['GC percentage']
+        data['std_coverage']=data['Coverage']['std coverageData']
+        data['aligned_bases']=data['Globals']['number of aligned bases']
+        data['mapped_bases']=data['Globals']['number of mapped bases']
+        data['mapped_reads']=data['Globals']['number of mapped reads']
+        data['reads']=data['Globals']['number of reads']
+        data['sequenced_bases']=data['Globals']['number of sequenced bases']
+        data['bam_file']=data['Input']['bam file']
+        data['output_file']=data['Input']['outfile']
+    
+        data['GC_percentage']=data['GC percentage']
+        data['mean_mapping_quality']=data['Mapping quality']['mean mapping quality']
+        data['bases_number']=data['Reference']['number of bases']
+        data['contigs_number']=data['Reference']['number of contigs']
+
+        data['windows']=data['Globals']['number of windows']
+
+        del data['ACTG content']
+        del data['Coverage']['mean coverageData']
+        del data['Coverage']['std coverageData']
+        del data['Coverage']
+        del(data['Globals'])
+        del(data['Input'])
+        del data['GC percentage']
+        del(data['Reference'])
+        del(data['Mapping quality'])
+
+#mean autosome coverage"
+#number of duplicates
+        return data
+
+

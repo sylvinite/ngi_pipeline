@@ -66,8 +66,7 @@ def analyze_project(project, workflow_name, config_file_path):
     :returns: The subprocess.Popen object for the process
     :rtype: subprocess.Popen
     """
-    import pdb
-    pdb.set_trace()
+    
     config = load_yaml_config(config_file_path)
     modules_to_load = ["java/sun_jdk1.7.0_25", "R/2.15.0"]
     # Valid only for this session
@@ -129,7 +128,7 @@ def launch_piper_job(command_line, project):
     :returns: The subprocess.Popen object for the process
     :rtype: subprocess.Popen
     """
-    cwd = os.path.join(project.base_path, project.dirname)
+    cwd = os.path.join(project.base_path, "ANALYSIS", project.dirname)
     ## TODO Would like to log these to the log -- can we get a Logbook filehandle-like object?
     ## TODO add exception handling
     popen_object = execute_command_line(command_line, cwd=cwd)
@@ -213,7 +212,7 @@ def build_setup_xml(project, config, sample = None, libprep = None, fcid = None)
     if not os.path.exists(os.path.join(project.base_path,"ANALYSIS", project.dirname)):
         safe_makedir(os.path.join(project.base_path,"ANALYSIS", project.dirname), 0770)
 
-    analysis_dir = os.path.join(project.base_path,"ANALYSIS", project.dirname)
+    analysis_dir = os.path.join(project.base_path, "ANALYSIS", project.dirname)
 
     cl_args = {'project': project.name}
 

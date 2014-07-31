@@ -149,8 +149,9 @@ def launch_analysis_for_projects_flowcells(projects_to_analyze, restrict_to_samp
                                                        fcid = fcid,
                                                        workflow_name=workflow,
                                                        config_file_path=config_file_path)
+                            
                             record_workflow_process_run_local(p_handle, workflow, project,
-                             sample, libprep, fcid, analysis_module, config)
+                             sample, libprep, fcid, analysis_module, project.analysis_dir, config)
         
                         except Exception as e:
                             error_msg = ('Cannot process project "{}": {}'.format(project, e))
@@ -254,7 +255,9 @@ def check_update_jobs_status(config_file_path=None, projects_to_check=None):
                 project_id = project_dict['project_id']
                 if project_dict["workflow"] == "dna_alignonly":
                     #in this case I need to update the run level infomration
-                    write_to_charon_alignment_results(project_name, return_code)
+                    #I know that:
+                    #      I am running Piper at flowcell level, I need to know the folder where results are stored!!!
+                    write_to_charon_alignment_results(project_name, return_code, project_dict["run_dir"])
                 else:
                     write_status_to_charon(project_id, return_code)
                 LOG.info("Successfully updated Charon database.")
@@ -269,10 +272,17 @@ def check_update_jobs_status(config_file_path=None, projects_to_check=None):
                 LOG.warn(e)
                 continue
         else:
+            #this code duplication can be avoided
+            if project_dict["workflow"] == "dna_alignonly":
+                #in this case I need to update the run level infomration
+                write_to_charon_alignment_results(project_name, return_code)
             LOG.info('Workflow "{}" for project "{}" (pid {}) '
                      'still running.'.format(project_dict['workflow'],
                                              project_name,
                                              project_dict['p_handle'].pid))
+
+
+
 
 
 def get_workflow_for_project(project_name):

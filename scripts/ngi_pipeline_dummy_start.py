@@ -10,14 +10,6 @@ def main(demux_fcid_dirs, test_step_1, test_step_2, restrict_to_projects=None, r
         conductor.process_demultiplexed_flowcells(demux_fcid_dirs, restrict_to_projects, restrict_to_samples)
     elif test_step_1:
         
-        #import pdb
-        #pdb.set_trace()
-        #check_update_jobs_status()
-        
-        demux_fcid_dirs = ["/proj/a2010002/INBOX/130627_D00134_0023_AH0JYUADXX/"]
-        conductor.process_demultiplexed_flowcell(demux_fcid_dirs, None, None) # this must start
-        
-        time.sleep(20) #wait for 1 minutes
         
         check_update_jobs_status()
        
@@ -26,7 +18,7 @@ def main(demux_fcid_dirs, test_step_1, test_step_2, restrict_to_projects=None, r
         
         
         print "now waiting for 1 minute ..."
-        time.sleep(10) #wait for 1 minutes
+        time.sleep(20) #wait for 1 minutes
         check_update_jobs_status()
         
         #FOR NOW SKIP THIS HAS IT SEEMS TO FAILS
@@ -34,46 +26,45 @@ def main(demux_fcid_dirs, test_step_1, test_step_2, restrict_to_projects=None, r
         #conductor.process_demultiplexed_flowcell(demux_fcid_dirs, None, None) # this should look like a typical command trigger by the Celery server
         
         print "now waiting for 1 minute ..."
-        time.sleep(10) #wait for 1 minutes
+        time.sleep(20) #wait for 1 minutes
         
         
-        demux_fcid_dirs = ["/proj/a2010002/INBOX/130611_SN7001298_0148_AH0CCVADXX/"] #A.Wedell_13_03 sample P567_101 same run
+        demux_fcid_dirs = ["/proj/a2010002/INBOX/130611_SN7001298_0148_AH0CCVADXX/"] #A.Wedell_13_03 sample P567_101
         conductor.process_demultiplexed_flowcell(demux_fcid_dirs, None, None)
         
         print "now waiting for 1 minute ..."
-        time.sleep(10) #wait for 1 minutes
+        time.sleep(20) #wait for 1 minutes
         
         
-        
-        demux_fcid_dirs =["/proj/a2010002/INBOX/130611_SN7001298_0148_AH0CCVADXX/"] # Same as above, this must fail or not be processed
-        conductor.process_demultiplexed_flowcell(demux_fcid_dirs, None, None) # this should look like a typical command trigger by the Celery server
+        demux_fcid_dirs =["/proj/a2010002/INBOX/130611_SN7001298_0148_AH0CCVADXX/"] # A.Wedell_13_03 sample P567_101 --> Same as above, this must fail or not be processed
+        conductor.process_demultiplexed_flowcell(demux_fcid_dirs, None, None)
         
         print "now waiting for 1 minute ..."
-        time.sleep(10) #wait for 1 minutes
+        time.sleep(20) #wait for 1 minutes
         
        
-        demux_fcid_dirs = ["/proj/a2010002/INBOX/130612_D00134_0019_AH056WADXX/"] # second flowcell arrives with 10 minutes delay
+        demux_fcid_dirs = ["/proj/a2010002/INBOX/130612_D00134_0019_AH056WADXX/"] # A.Wedell_13_03 sample P567_101
         conductor.process_demultiplexed_flowcell(demux_fcid_dirs, None, None) # this must start
 
         print "now waiting for 1 minute ..."
-        time.sleep(10) #wait for 1 minutes
+        time.sleep(20) #wait for 1 minutes
         
         
-        demux_fcid_dirs = ["/proj/a2010002/INBOX/130627_D00134_0023_AH0JYUADXX/"]
+        demux_fcid_dirs = ["/proj/a2010002/INBOX/130627_D00134_0023_AH0JYUADXX/"] # A.Wedell_13_03 sample P567_102
         conductor.process_demultiplexed_flowcell(demux_fcid_dirs, None, None) # this must start
 
         print "now waiting for 1 minute ..."
-        time.sleep(10) #wait for 1 minutes
+        time.sleep(20) #wait for 1 minutes
         
         
-        demux_fcid_dirs = ["/proj/a2010002/INBOX/130701_SN7001298_0152_AH0J92ADXX/"]
+        demux_fcid_dirs = ["/proj/a2010002/INBOX/130701_SN7001298_0152_AH0J92ADXX/"] # A.Wedell_13_03 sample P567_102
         conductor.process_demultiplexed_flowcell(demux_fcid_dirs, None, None) # this must start
         
         
         print "now waiting for 1 minute ..."
-        time.sleep(10) #wait for 1 minutes
+        time.sleep(20) #wait for 1 minutes
 
-        demux_fcid_dirs = ["/proj/a2010002/INBOX/130701_SN7001298_0153_BH0JMGADXX/"]
+        demux_fcid_dirs = ["/proj/a2010002/INBOX/130701_SN7001298_0153_BH0JMGADXX/"] # A.Wedell_13_03 sample P567_102
         conductor.process_demultiplexed_flowcell(demux_fcid_dirs, None, None) # this must start
 
         #and now a loop to update the DB
