@@ -24,6 +24,11 @@ if __name__ == '__main__':
     
     for project in projects_response["projects"]:
         if project["projectid"] in projects_to_clean:
+            project["pipeline"] = "NGI"
+            project["best_practice_analysis"] = "IGN"
+            url = construct_charon_url("project", project["projectid"])
+            charon_session.put(url, json.dumps(project))
+
             url =construct_charon_url("seqruns", project["projectid"])
             seqruns_response = charon_session.get(url).json()
             for seqrun in seqruns_response["seqruns"]:
@@ -52,7 +57,6 @@ if __name__ == '__main__':
                 url = construct_charon_url("seqrun", seqrun["projectid"],
                     seqrun["sampleid"], seqrun["libprepid"], seqrun["seqrunid"])
                 charon_session.put(url, json.dumps(seqrun))
-
 
 
 

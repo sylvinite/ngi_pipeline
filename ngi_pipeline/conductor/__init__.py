@@ -14,7 +14,8 @@ import sys
 
 from ngi_pipeline.conductor.classes import NGIProject
 from ngi_pipeline.database import get_project_id_from_name
-from ngi_pipeline.database.session import get_charon_session_for_project
+from ngi_pipeline.database.session import get_charon_session, \
+                                          construct_charon_url
 from ngi_pipeline.database.process_tracking import get_all_tracked_processes, \
                                                    record_workflow_process_local, \
                                                    write_status_to_charon, \
@@ -97,13 +98,14 @@ def launch_analysis_for_projects_flowcells(projects_to_analyze, restrict_to_samp
     :param list restrict_to_samples: A list of sample names to which we will restrict our analysis
     :param list config_file_path: The path to the NGI Pipeline configuration file.
     """
+  
     if not config_file_path:
         config_file_path = locate_ngi_config()
     config = load_yaml_config(config_file_path)
     for project in projects_to_analyze:
         # Get information from the database regarding which workflows to run
         try:
-            workflow = get_workflow_for_project(project.name)
+            workflow = get_workflow_for_project(project.project_id)
         except (ValueError, IOError) as e:
             error_msg = ("Skipping project {} because of error: {}".format(project, e))
             LOG.error(error_msg)
@@ -183,7 +185,7 @@ def launch_analysis_for_projects(projects_to_analyze, restrict_to_samples=None, 
     for project in projects_to_analyze:
         # Get information from the database regarding which workflows to run
         try:
-            workflow = get_workflow_for_project(project.name)
+            workflow = get_workflow_for_project(project.project_id)
         except (ValueError, IOError) as e:
             error_msg = ("Skipping project {} because of error: {}".format(project, e))
             LOG.error(error_msg)
@@ -284,27 +286,108 @@ def check_update_jobs_status(config_file_path=None, projects_to_check=None):
 # This function is responsable of trigger second level analyisis (i.e., sample level analysis)
 # using the information available on the Charon. Disussing with Denis we think the best way to
 # trigger this is to have an API that returns all samples with total autosomal coverage > 30X
-def trigger_sample_level_analysis():
-    return "AAAAAA"
+def trigger_sample_level_analysis(config_file_path=None):
+    """Triggers secondary analysis based on what is found on Charon
+    for now this will work only with Piper/IGN
+    
+    :param str config_file_path: The path to the configuration file (optional if
+                                 it is defined as env var or in default location)
+    """
+    if not config_file_path:
+        config_file_path = locate_ngi_config()
+    config = load_yaml_config(config_file_path)
+    
+    #start by getting all projects, this will likely need a specific API
+    charon_session = get_charon_session()
+    url = construct_charon_url("projects")
+    projects_response = charon_session.get(url)
+    if projects_response.status_code != 200:
+        error_msg = ('Error accessing database: could not get all projects: {}'.format(project_response.reason))
+        LOG.error(error_msg)
+        raise RuntimeError(error_msg)
+    
+    projects_dict = projects_response.json()["projects"]
+    
+    for project in projects_dict:
+        #check if the field Pipeline is set
+        project_id = project["project_id"]
+        try:
+            "Pipeline" in project
+        except:
+            LOG.error("Project {} has no field Pipeline, skipping this project".format(project_id))
+            continue
+
+        #this means that I have associeted a pipeline to this project
+        #by definition of project, all samples belonging to a project will undergo the same analysis
+        try:
+            workflow = get_workflow_for_project(project_id)
+        except (ValueError, IOError) as e:
+            error_msg = ("Skipping project {} because of error: {}".format(project_id, e))
+            LOG.error(error_msg)
+            continue
+
+        try:
+            analysis_engine_module_name = config["analysis"]["workflows"][workflow]["analysis_engine"]
+        except KeyError:
+            error_msg = ("No analysis engine for workflow \"{}\" specified "
+                         "in configuration file. Skipping this workflow "
+                         "for project {}".format(workflow, project))
+            LOG.error(error_msg)
+            raise RuntimeError(error_msg)
+        # Import the adapter module specified in the config file (e.g. piper_ngi)
+        try:
+            analysis_module = importlib.import_module(analysis_engine_module_name)
+        except ImportError as e:
+            error_msg = ("Couldn't import module {} for workflow {} "
+                            "in project {}. Skipping.".format(analysis_module,
+                                                            workflow,
+                                                            project_id))
+            LOG.error(error_msg)
+            continue
+        try:
+            p_handle = analysis_module.analyze_project(project=project,
+                                                       workflow_name=workflow,
+                                                       config_file_path=config_file_path)
+            record_workflow_process_local(p_handle, workflow, project, analysis_module, config)
+        except Exception as e:
+            error_msg = ('Cannot process project "{}": {}'.format(project, e))
+            LOG.error(error_msg)
+            continue
+
+
+            
 
 
 
-def get_workflow_for_project(project_name):
+
+def get_workflow_for_project(project_id):
     """Get the workflow that should be run for this project from the database.
 
-    :param str project_name: The name of the project
+    :param str project_id: The id_name of the project P\d*
 
     :returns: The names of the workflow that should be run.
     :rtype: str
     :raises ValueError: If the project cannot be found in the database
     :raises IOError: If the database cannot be reached
     """
-    ## NOTE Temporary until this is developed fully and the database populated
-    return "NGI"
+    charon_session = get_charon_session()
+    url = construct_charon_url("project", project_id)
+    project_response = charon_session.get(url)
+    if project_response.status_code != 200:
+        error_msg = ('Error accessing database: could not get all project {}: {}'.format(project_id, project_response.reason))
+        LOG.error(error_msg)
+        raise RuntimeError(error_msg) #MARIO I do not want to learn how to handle expection in Python...I want to proceed fast to a working solution... we will fix this things later with your help
+    
+    project_dict = project_response.json()
+    if "pipeline" not in project_dict:
+        error_msg = ('project {} has no associeted pipeline/workflow to execute'.format(projct_id))
+        LOG.error(error_msg)
+        raise RuntimeError(error_msg)
 
-    # Keep the connection so we can pass it to the validation function
-    #db_project_object = get_charon_session_for_project(project_name)
-    #return db_project_object.get("workflow")
+    #ok now I return the workflow to execute
+    return project_dict["pipeline"]
+
+
 
 
 def setup_analysis_directory_structure(fc_dir, config, projects_to_analyze,
