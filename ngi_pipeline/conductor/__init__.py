@@ -293,6 +293,8 @@ def trigger_sample_level_analysis(config_file_path=None):
     :param str config_file_path: The path to the configuration file (optional if
                                  it is defined as env var or in default location)
     """
+   
+    
     if not config_file_path:
         config_file_path = locate_ngi_config()
     config = load_yaml_config(config_file_path)
@@ -308,20 +310,15 @@ def trigger_sample_level_analysis(config_file_path=None):
     
     projects_dict = projects_response.json()["projects"]
     
+    
+ 
     for project in projects_dict:
         #check if the field Pipeline is set
-        project_id = project["project_id"]
-        try:
-            "Pipeline" in project
-        except:
-            LOG.error("Project {} has no field Pipeline, skipping this project".format(project_id))
-            continue
-
-        #this means that I have associeted a pipeline to this project
-        #by definition of project, all samples belonging to a project will undergo the same analysis
+        project_id = project["projectid"]
+        
         try:
             workflow = get_workflow_for_project(project_id)
-        except (ValueError, IOError) as e:
+        except (RuntimeError) as e:
             error_msg = ("Skipping project {} because of error: {}".format(project_id, e))
             LOG.error(error_msg)
             continue
@@ -339,23 +336,153 @@ def trigger_sample_level_analysis(config_file_path=None):
             analysis_module = importlib.import_module(analysis_engine_module_name)
         except ImportError as e:
             error_msg = ("Couldn't import module {} for workflow {} "
-                            "in project {}. Skipping.".format(analysis_module,
+                         "in project {}. Skipping.".format(analysis_module,
                                                             workflow,
                                                             project_id))
             LOG.error(error_msg)
             continue
-        try:
-            p_handle = analysis_module.analyze_project(project=project,
-                                                       workflow_name=workflow,
-                                                       config_file_path=config_file_path)
-            record_workflow_process_local(p_handle, workflow, project, analysis_module, config)
-        except Exception as e:
-            error_msg = ('Cannot process project "{}": {}'.format(project, e))
+
+        #import pdb
+        #pdb.set_trace()
+        #I know which engine I need to use to process sample ready, however only the engine
+        #knows that are the conditions that need to be made
+        LOG.info('Checking for ready to be analysed samples in project {} with workflow {}'.format(project_id, workflow))
+        #get all the samples from Charon
+
+
+        url = construct_charon_url("samples", project_id)
+        samples_response = charon_session.get(url)
+        if samples_response.status_code != 200:
+            error_msg = ('Error accessing database: could not get samples for projects: {}'.format(project_id,
+                            project_response.reason))
             LOG.error(error_msg)
-            continue
+            raise RuntimeError(error_msg)
+        samples_dict = samples_response.json()["samples"]
+        #now recreacte the project object
 
 
-            
+        analysis_top_dir = os.path.abspath(config["analysis"]["top_dir"])
+        proj_dir = os.path.join(analysis_top_dir, "DATA", project["name"])
+        projectObg = createIGNproject(analysis_top_dir, project["name"],  project_id)
+
+
+        for sample in samples_dict:
+            sample_id = sample["sampleid"]
+            try:
+                # note here I do not know if I am going to start some anlaysis or not, depends on the Engine that is called
+                p_handle = analysis_module.analyse_sample_run(sample = sample , project = projectObg,
+                                                              config_file_path=config_file_path )
+                
+                #record_workflow_process_local(p_handle, workflow, project, analysis_module, config)
+            except Exception as e:
+                error_msg = ('Cannot process sample {} in project {}: {}'.format(sample_id, project_id, e))
+                LOG.error(error_msg)
+                continue
+
+
+def createIGNproject(analysis_top_dir, project_name, project_id):
+    project_dir = os.path.join(analysis_top_dir, "DATA", project_name)
+    project_obj = NGIProject(name=project_name, dirname=project_name,
+                                     project_id=project_id,
+                                     base_path=analysis_top_dir)
+                                     
+
+    #I use the DB to build the object
+    #get the samples
+    charon_session = get_charon_session()
+    url = construct_charon_url("samples", project_id)
+    samples_response = charon_session.get(url)
+    if samples_response.status_code != 200:
+        error_msg = ('Error accessing database: could not get samples for projects: {}'.format(project_id,
+                            project_response.reason))
+        LOG.error(error_msg)
+        raise RuntimeError(error_msg)
+    #now I have all the samples
+    samples_dict = samples_response.json()["samples"]
+    for sample in samples_dict:
+        sample_id = sample["sampleid"]
+        sample_dir = os.path.join(project_dir, sample_id)
+        sample_obj = project_obj.add_sample(name=sample_id, dirname=sample_id)
+        #now get lib preps
+        url = construct_charon_url("libpreps", project_id, sample_id)
+        libpreps_response = charon_session.get(url)
+        if libpreps_response.status_code != 200:
+            error_msg = ('Error accessing database: could not get lib preps for sample {}: {}'.format(sample_id,
+                            project_response.reason))
+            LOG.error(error_msg)
+            raise RuntimeError(error_msg)
+        libpreps_dict = libpreps_response.json()["libpreps"]
+        for libprep in libpreps_dict:
+            libprep_id = libprep["libprepid"]
+            libprep_object = sample_obj.add_libprep(name=libprep_id,
+                                                        dirname=libprep_id)
+                                                        
+            url = construct_charon_url("seqruns", project_id, sample_id, libprep_id)
+            seqruns_response = charon_session.get(url)
+            if seqruns_response.status_code != 200:
+                error_msg = ('Error accessing database: could not get lib preps for sample {}: {}'.format(sample_id,
+                            seqruns_response.reason))
+                LOG.error(error_msg)
+                raise RuntimeError(error_msg)
+            seqruns_dict = seqruns_response.json()["seqruns"]
+            for seqrun in seqruns_dict:
+                runid = seqrun["runid"]
+                #140528_D00415_0049_BC423WACXX   --> 140528_BC423WACXX
+                parse_FC = re.compile("(\d{6})_(.*)_(.*)_(.*)")
+                fc_short_run_id = "{}_{}".format(parse_FC.match(runid).group(1), parse_FC.match(runid).group(4))
+                seqrun_object = libprep_object.add_seqrun(name=fc_short_run_id,
+                                                          dirname=fc_short_run_id)
+
+
+    return project_obj
+                                     
+    """
+    
+        # Iterate over the samples in the project
+        for sample in project.get('samples', []):
+            # Our SampleSheet.csv names are like Y__Mom_14_01 for some reason
+            sample_name = sample['sample_name'].replace('__','.')
+            # If specific samples are specified, skip those that do not match
+            if restrict_to_samples and sample_name not in restrict_to_samples:
+                LOG.debug("Skipping sample {}".format(sample_name))
+                continue
+            LOG.info("Setting up sample {}".format(sample_name))
+            # Create a directory for the sample if it doesn't already exist
+            sample_dir = os.path.join(project_dir, sample_name)
+            if not os.path.exists(sample_dir): safe_makedir(sample_dir, 0770)
+            # This will only create a new sample object if it doesn't already exist in the project
+            sample_obj = project_obj.add_sample(name=sample_name, dirname=sample_name)
+            # Get the Library Prep ID for each file
+            pattern = re.compile(".*\.(fastq|fq)(\.gz|\.gzip|\.bz2)?$")
+            fastq_files = filter(pattern.match, sample.get('files', []))
+            seqrun_dir = None
+            for fq_file in fastq_files:
+                libprep_name = determine_library_prep_from_fcid(project_id, sample_name, fcid)
+                libprep_object = sample_obj.add_libprep(name=libprep_name,
+                                                        dirname=libprep_name)
+                libprep_dir = os.path.join(sample_dir, libprep_name)
+                if not os.path.exists(libprep_dir): safe_makedir(libprep_dir, 0770)
+                seqrun_object = libprep_object.add_seqrun(name=fc_short_run_id,
+                                                          dirname=fc_short_run_id)
+                seqrun_dir = os.path.join(libprep_dir, fc_short_run_id)
+                if not os.path.exists(seqrun_dir): safe_makedir(seqrun_dir, 0770)
+                seqrun_object.add_fastq_files(fq_file)
+            # rsync the source files to the sample directory
+            #    src: flowcell/data/project/sample
+            #    dst: project/sample/flowcell_run
+            src_sample_dir = os.path.join(fc_dir_structure['fc_dir'],
+                                          project['data_dir'],
+                                          project['project_dir'],
+                                          sample['sample_dir'])
+            for libprep in sample_obj:
+            #this function works at run_level, so I have to process a single run
+            #it might happen that in a run we have multiple lib preps for the same sample
+                #for seqrun in libprep:
+                src_fastq_files = [ os.path.join(src_sample_dir, fastq_file)
+                                    for fastq_file in seqrun_object.fastq_files ] ##MARIO: check this
+                LOG.info("Copying fastq files from {} to {}...".format(sample_dir, seqrun_dir))
+                do_rsync(src_fastq_files, seqrun_dir)
+    """
 
 
 
@@ -380,7 +507,7 @@ def get_workflow_for_project(project_id):
     
     project_dict = project_response.json()
     if "pipeline" not in project_dict:
-        error_msg = ('project {} has no associeted pipeline/workflow to execute'.format(projct_id))
+        error_msg = ('project {} has no associeted pipeline/workflow to execute'.format(project_id))
         LOG.error(error_msg)
         raise RuntimeError(error_msg)
 

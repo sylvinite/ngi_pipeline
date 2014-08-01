@@ -43,7 +43,8 @@ def analyze_flowcell_run(project, sample, libprep, fcid, workflow_name, config_f
     try:
         convert_sthlm_to_uppsala(project) #this converts the entire flowcell, it is not specific to the sample. Not a big deal, it will simply complain about the fact that it has alredy converted it
         build_setup_xml(project, config, sample, libprep, fcid)
-        command_line = build_piper_cl(project, workflow_name, config)
+        #command_line = build_piper_cl(project, workflow_name, config)
+        command_line = build_piper_cl(project, "dna_alignonly", config)
         popen_object = launch_piper_job(command_line, project)
         return popen_object
     
@@ -53,9 +54,45 @@ def analyze_flowcell_run(project, sample, libprep, fcid, workflow_name, config_f
         LOG.error(error_msg)
         raise
     
-    LOG.info("Here I am")
 
 
+def analyse_sample_run(sample, project, config_file_path):
+    
+    sample_id = sample["sampleid"]
+    
+    config = load_yaml_config(config_file_path)
+    modules_to_load = ["java/sun_jdk1.7.0_25", "R/2.15.0"]
+    #check if I can run sample level analysis
+    if "total_autosomal_coverage" not in sample:
+        LOG.info("Sample {} not yet sequenced or not yet analysed".format(sample_id))
+    elif sample["total_autosomal_coverage"] > 30:
+        import pdb
+        pdb.set_trace()
+        
+        uppsala_dirname = "{}".format(project.dirname)
+        project.dirname = uppsala_dirname
+        project.name = uppsala_dirname
+        for sample in project.samples.values():
+            # Naming expected by Piper; might consider whether to set sample.name as well
+            if not sample.dirname.startswith("Sample_"):
+                sample.dirname = "Sample_{}".format(sample.dirname)
+        
+        
+        
+        import pdb
+        pdb.set_trace()
+        build_setup_xml(project, config, sample["sampleid"] , None, None)
+        
+        command_line = build_piper_cl(project, "dna_alignonly", config)
+    
+    
+    else:
+        LOG.info("Coverage not reached for sample {}: wait more data".format(sample_id))
+    
+
+
+
+#### I AM NOT USING THIS.....
 def analyze_project(project, workflow_name, config_file_path):
     """The main method for project (samples?).
 
@@ -96,7 +133,6 @@ def convert_sthlm_to_uppsala(project):
     :returns: A list of projects with Uppsala-style directories as attributes.
     :rtype: list
     """
-
     # Requires sthlm2UUSNP on PATH
     cl_template = "sthlm2UUSNP -i {input_dir} -o {output_dir}"
     LOG.info("Converting Sthlm project {} to UUSNP format".format(project))
@@ -104,13 +140,13 @@ def convert_sthlm_to_uppsala(project):
     uppsala_dirname = "{}".format(project.dirname)
     output_dir = os.path.join(project.base_path, "DATA_UUSNP", uppsala_dirname)
     com = cl_template.format(input_dir=input_dir, output_dir=output_dir)
-    try:
-        subprocess.check_call(shlex.split(com))
-    except subprocess.CalledProcessError as e:
-        error_msg = ("Unable to convert Sthlm->UU format for "
-                     "project {}: {}".format(project, e))
-        LOG.error(error_msg)
-        raise RuntimeError(error_msg)
+    #try:
+    #    subprocess.check_call(shlex.split(com))
+    #except subprocess.CalledProcessError as e:
+    #    error_msg = ("Unable to convert Sthlm->UU format for "
+    #                 "project {}: {}".format(project, e))
+    #    LOG.error(error_msg)
+    #    raise RuntimeError(error_msg)
     project.dirname = uppsala_dirname
     project.name = uppsala_dirname
     for sample in project.samples.values():
