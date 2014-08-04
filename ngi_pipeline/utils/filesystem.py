@@ -1,6 +1,9 @@
 import contextlib
 import os
+import shutil
+import stat
 import subprocess
+import tempfile
 
 def do_rsync(src_files, dst_dir):
     ## TODO I changed this -c because it takes for goddamn ever but I'll set it back once in Production
@@ -9,7 +12,7 @@ def do_rsync(src_files, dst_dir):
     cl.extend(src_files)
     cl.append(dst_dir)
     cl = map(str, cl)
-    # For testing, just touch the files rather than copy them
+    # Use for testing: just touch the files rather than copy them
     # for f in src_files:
     #    open(os.path.join(dst_dir,os.path.basename(f)),"w").close()
     subprocess.check_call(cl)
@@ -24,7 +27,7 @@ def safe_makedir(dname, mode=0777):
         # we could get an error here if multiple processes are creating
         # the directory at the same time. Grr, concurrency.
         try:
-            os.makedirs(dname)
+            os.makedirs(dname, mode=mode)
         except OSError:
             if not os.path.isdir(dname):
                 raise
@@ -53,7 +56,8 @@ def chdir(new_dir):
     """Context manager to temporarily change to a new directory.
     """
     cur_dir = os.getcwd()
-    safe_makedir(new_dir)
+    # This is weird behavior. I'm removing and and we'll see if anything breaks.
+    #safe_makedir(new_dir)
     os.chdir(new_dir)
     try:
         yield
