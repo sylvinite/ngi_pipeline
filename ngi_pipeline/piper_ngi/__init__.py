@@ -11,8 +11,7 @@ import time
 
 from ngi_pipeline.piper_ngi import workflows
 from ngi_pipeline.log import minimal_logger
-from ngi_pipeline.utils.filesystem import safe_makedir
-from ngi_pipeline.utils import load_modules, execute_command_line
+from ngi_pipeline.utils.filesystem import load_modules, execute_command_line, safe_makedir
 from ngi_pipeline.utils.config import load_xml_config, load_yaml_config
 from ngi_pipeline.utils.parsers import parse_lane_from_filename, find_fastq_read_pairs_from_dir, \
                                        get_flowcell_id_from_dirtree
