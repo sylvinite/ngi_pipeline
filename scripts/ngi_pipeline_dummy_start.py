@@ -4,56 +4,50 @@ import time
 
 from ngi_pipeline import conductor
 from ngi_pipeline.conductor import check_update_jobs_status
+from ngi_pipeline.conductor import trigger_sample_level_analysis
 
-def main(demux_fcid_dirs, test_step_1, test_step_2, restrict_to_projects=None, restrict_to_samples=None):
-    if not test_step_1 and not test_step_2:
+
+def main(demux_fcid_dirs, test_step_1, restrict_to_projects=None, restrict_to_samples=None):
+    if not test_step_1:
         conductor.process_demultiplexed_flowcells(demux_fcid_dirs, restrict_to_projects, restrict_to_samples)
     elif test_step_1:
-        
-        
-        check_update_jobs_status()
+        #this checks the status of the running process, it should ideally erase fields in the local db... not sure about it
+        check_update_jobs_status() #better to always rm the local db
        
+      
         demux_fcid_dirs = ["/proj/a2010002/INBOX/140528_D00415_0049_BC423WACXX"] # G.Grigelioniene_14_01
         conductor.process_demultiplexed_flowcell(demux_fcid_dirs, None, None) # this should look like a typical command trigger by the Celery server
         
-        
-        print "now waiting for 1 minute ..."
         time.sleep(20) #wait for 1 minutes
-        check_update_jobs_status()
         
-        #FOR NOW SKIP THIS HAS IT SEEMS TO FAILS
-        #demux_fcid_dirs = ["/proj/a2010002/INBOX/140702_D00415_0052_AC41A2ANXX"] # M.Kaller_14_06
-        #conductor.process_demultiplexed_flowcell(demux_fcid_dirs, None, None) # this should look like a typical command trigger by the Celery server
+        demux_fcid_dirs = ["/proj/a2010002/INBOX/140702_D00415_0052_AC41A2ANXX"] # M.Kaller_14_06
+        conductor.process_demultiplexed_flowcell(demux_fcid_dirs, None, None) # this should look like a typical command trigger by the Celery server
         
-        print "now waiting for 1 minute ..."
+
         time.sleep(20) #wait for 1 minutes
         
         
         demux_fcid_dirs = ["/proj/a2010002/INBOX/130611_SN7001298_0148_AH0CCVADXX/"] #A.Wedell_13_03 sample P567_101
         conductor.process_demultiplexed_flowcell(demux_fcid_dirs, None, None)
         
-        print "now waiting for 1 minute ..."
         time.sleep(20) #wait for 1 minutes
         
         
-        demux_fcid_dirs =["/proj/a2010002/INBOX/130611_SN7001298_0148_AH0CCVADXX/"] # A.Wedell_13_03 sample P567_101 --> Same as above, this must fail or not be processed
-        conductor.process_demultiplexed_flowcell(demux_fcid_dirs, None, None)
-        
-        print "now waiting for 1 minute ..."
-        time.sleep(20) #wait for 1 minutes
+#        demux_fcid_dirs =["/proj/a2010002/INBOX/130611_SN7001298_0148_AH0CCVADXX/"] # A.Wedell_13_03 sample P567_101 DUPLICLATED!!!!
+#        conductor.process_demultiplexed_flowcell(demux_fcid_dirs, None, None)
+#
+#        time.sleep(20) #wait for 1 minutes
         
        
         demux_fcid_dirs = ["/proj/a2010002/INBOX/130612_D00134_0019_AH056WADXX/"] # A.Wedell_13_03 sample P567_101
         conductor.process_demultiplexed_flowcell(demux_fcid_dirs, None, None) # this must start
 
-        print "now waiting for 1 minute ..."
         time.sleep(20) #wait for 1 minutes
         
         
         demux_fcid_dirs = ["/proj/a2010002/INBOX/130627_D00134_0023_AH0JYUADXX/"] # A.Wedell_13_03 sample P567_102
         conductor.process_demultiplexed_flowcell(demux_fcid_dirs, None, None) # this must start
 
-        print "now waiting for 1 minute ..."
         time.sleep(20) #wait for 1 minutes
         
         
@@ -61,7 +55,6 @@ def main(demux_fcid_dirs, test_step_1, test_step_2, restrict_to_projects=None, r
         conductor.process_demultiplexed_flowcell(demux_fcid_dirs, None, None) # this must start
         
         
-        print "now waiting for 1 minute ..."
         time.sleep(20) #wait for 1 minutes
 
         demux_fcid_dirs = ["/proj/a2010002/INBOX/130701_SN7001298_0153_BH0JMGADXX/"] # A.Wedell_13_03 sample P567_102
@@ -70,10 +63,12 @@ def main(demux_fcid_dirs, test_step_1, test_step_2, restrict_to_projects=None, r
         #and now a loop to update the DB
         while True:
             check_update_jobs_status()
-            time.sleep(60)
+            trigger_sample_level_analysis()
+            #check status every half an hour
+            time.sleep(1800)
 
-    else:
-        print "testing A.Wedell variant calling"
+
+
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser("Quick launcher for testing purposes.")
@@ -89,10 +84,7 @@ if __name__ == '__main__':
             help=("The path to the Illumina demultiplexed fc directories "
                   "to process."))
     parser.add_argument("-t1", "--test_step_1", dest= "test_step_1",  action='store_true', default=False,
-            help=("Process one run per time of A.Wedell project "))
-
-    parser.add_argument("-t2", "--test_step_2", dest= "test_step_2", action='store_true', default=False,
-            help=("Checks if A.Wedell is ready to be analysed further"))
+            help=("Simulation of pipeline behaviour using A.Wedell_13_03, M.Kaller_14_06, and G.Grigelione..."))
 
 
     args_dict = vars(parser.parse_args())

@@ -17,10 +17,12 @@ from ngi_pipeline.database import get_project_id_from_name
 from ngi_pipeline.database.session import get_charon_session, \
                                           construct_charon_url
 from ngi_pipeline.database.process_tracking import get_all_tracked_processes, \
+                                                   record_process_flowcell, \
+                                                   record_process_sample, \
                                                    record_workflow_process_local, \
                                                    write_status_to_charon, \
+                                                   write_to_charon_NGI_results, \
                                                    check_if_flowcell_analysis_are_running, \
-                                                   record_workflow_process_run_local, \
                                                    remove_record_from_local_tracking, \
                                                    write_to_charon_alignment_results
 from ngi_pipeline.log import minimal_logger
@@ -88,10 +90,10 @@ def process_demultiplexed_flowcells(demux_fcid_dirs, restrict_to_projects=None, 
         projects_to_analyze = projects_to_analyze.values()
     
     ##project to analyse contained only in the current flowcell(s), I am ready to analyse the projects at flowcell level only
-    launch_analysis_for_projects_flowcells(projects_to_analyze)
+    launch_analysis_for_flowcells(projects_to_analyze)
 
 
-def launch_analysis_for_projects_flowcells(projects_to_analyze, restrict_to_samples=None, config_file_path=None):
+def launch_analysis_for_flowcells(projects_to_analyze, restrict_to_samples=None, config_file_path=None):
     """Launch the analysis of projects.
 
     :param list projects_to_analyze: The list of projects (Project objects) to analyze
@@ -128,7 +130,6 @@ def launch_analysis_for_projects_flowcells(projects_to_analyze, restrict_to_samp
                                                            project))
             LOG.error(error_msg)
             continue
-        ##now process each flowcell, one per time
 
         for sample in project.samples.values():
             for libprep in sample:
@@ -142,6 +143,8 @@ def launch_analysis_for_projects_flowcells(projects_to_analyze, restrict_to_samp
                     # another function will take care of project specific analysis
                     if not analysis_running: #if this flowcell run is not already being analysed
                         try:
+                            #import pdb
+                            #pdb.set_trace()
                             workflow = "dna_alignonly"  #must be taken from somewhere, either config file or Charon
                             #when I call an Engine at flowcell level I expect that the engine starts by defining its own
                             #folder structure and subsequently start analysis at flowcell level.
@@ -152,14 +155,14 @@ def launch_analysis_for_projects_flowcells(projects_to_analyze, restrict_to_samp
                                                        workflow_name=workflow,
                                                        config_file_path=config_file_path)
                             
-                            record_workflow_process_run_local(p_handle, workflow, project,
+                            record_process_flowcell(p_handle, workflow, project,
                              sample, libprep, fcid, analysis_module, project.analysis_dir, config)
         
                         except Exception as e:
                             error_msg = ('Cannot process project "{}": {}'.format(project, e))
                             LOG.error(error_msg)
                             continue
-
+##NOT USING THIS
 ## NOTE This will be the function that is called by the Workflow Watcher script, or whatever we want to call it
 ##      By this I mean the script that checks intermittently to determine if we can move on with the next workflow,
 ##      whether this is something periodic (like a cron job) or something triggered by the completion of another part
@@ -241,31 +244,34 @@ def check_update_jobs_status(config_file_path=None, projects_to_check=None):
         config_file_path = locate_ngi_config()
     config = load_yaml_config(config_file_path)
     db_dict = get_all_tracked_processes()
-    for project_name, project_dict in db_dict.iteritems():
+    for job_name, project_dict in db_dict.iteritems():
         LOG.info("Checking workflow {} for project {}...".format(project_dict["workflow"],
-                                                                 project_name))
+                                                                 job_name))
         return_code = project_dict["p_handle"].poll()
         if return_code is not None:
             # Job finished somehow or another; try to update database.
             LOG.info('Workflow "{}" for project "{}" completed '
                      'with return code "{}". Attempting to update '
                      'Charon database.'.format(project_dict['workflow'],
-                                               project_name, return_code))
+                                               job_name, return_code))
             # Only if we succesfully write to Charon will we remove the record
             # from the local db; otherwise, leave it and try again next cycle.
             try:
                 project_id = project_dict['project_id']
+                ### THIS IS NOT REALLY CORRECT, HERE TRIGGER KNOWS DETAILS ABOUT ENGINE!!!!
                 if project_dict["workflow"] == "dna_alignonly":
                     #in this case I need to update the run level infomration
                     #I know that:
-                    #      I am running Piper at flowcell level, I need to know the folder where results are stored!!!
-                    write_to_charon_alignment_results(project_name, return_code, project_dict["run_dir"])
+                    # I am running Piper at flowcell level, I need to know the folder where results are stored!!!
+                    write_to_charon_alignment_results(job_name, return_code, project_dict["run_dir"])
+                elif project_dict["workflow"] == "NGI":
+                    write_to_charon_NGI_results(job_name, return_code, project_dict["run_dir"])
                 else:
                     write_status_to_charon(project_id, return_code)
                 LOG.info("Successfully updated Charon database.")
                 try:
                     # This only hits if we succesfully update Charon
-                    remove_record_from_local_tracking(project_name)
+                    remove_record_from_local_tracking(job_name)
                 except RuntimeError:
                     # I find myself compulsively double-logging
                     LOG.error(e)
@@ -277,10 +283,13 @@ def check_update_jobs_status(config_file_path=None, projects_to_check=None):
             #this code duplication can be avoided
             if project_dict["workflow"] == "dna_alignonly":
                 #in this case I need to update the run level infomration
-                write_to_charon_alignment_results(project_name, return_code)
+                write_to_charon_alignment_results(job_name, return_code)
+            elif project_dict["workflow"] == "NGI":
+                    write_to_charon_NGI_results(job_name, return_code, project_dict["run_dir"])
+
             LOG.info('Workflow "{}" for project "{}" (pid {}) '
                      'still running.'.format(project_dict['workflow'],
-                                             project_name,
+                                             job_name,
                                              project_dict['p_handle'].pid))
 
 # This function is responsable of trigger second level analyisis (i.e., sample level analysis)
@@ -310,8 +319,6 @@ def trigger_sample_level_analysis(config_file_path=None):
     
     projects_dict = projects_response.json()["projects"]
     
-    
- 
     for project in projects_dict:
         #check if the field Pipeline is set
         project_id = project["projectid"]
@@ -342,8 +349,7 @@ def trigger_sample_level_analysis(config_file_path=None):
             LOG.error(error_msg)
             continue
 
-        #import pdb
-        #pdb.set_trace()
+
         #I know which engine I need to use to process sample ready, however only the engine
         #knows that are the conditions that need to be made
         LOG.info('Checking for ready to be analysed samples in project {} with workflow {}'.format(project_id, workflow))
@@ -363,17 +369,21 @@ def trigger_sample_level_analysis(config_file_path=None):
 
         analysis_top_dir = os.path.abspath(config["analysis"]["top_dir"])
         proj_dir = os.path.join(analysis_top_dir, "DATA", project["name"])
-        projectObg = createIGNproject(analysis_top_dir, project["name"],  project_id)
+        projectObj = createIGNproject(analysis_top_dir, project["name"],  project_id)
 
+        analysis_dir = os.path.join(analysis_top_dir, "ANALYSIS", project["name"] )
 
         for sample in samples_dict:
             sample_id = sample["sampleid"]
             try:
                 # note here I do not know if I am going to start some anlaysis or not, depends on the Engine that is called
-                p_handle = analysis_module.analyse_sample_run(sample = sample , project = projectObg,
+                #I am here even with project that have no analysis ... maybe better to define a flag?
+                p_handle = analysis_module.analyse_sample_run(sample = sample , project = projectObj,
                                                               config_file_path=config_file_path )
-                
-                #record_workflow_process_local(p_handle, workflow, project, analysis_module, config)
+                #p_handle is None when the engine decided that there is nothing to be done
+                if p_handle != 1:
+                    record_process_sample(p_handle, workflow, projectObj, sample_id, analysis_module,
+                            analysis_dir, config)
             except Exception as e:
                 error_msg = ('Cannot process sample {} in project {}: {}'.format(sample_id, project_id, e))
                 LOG.error(error_msg)
@@ -385,10 +395,13 @@ def createIGNproject(analysis_top_dir, project_name, project_id):
     project_obj = NGIProject(name=project_name, dirname=project_name,
                                      project_id=project_id,
                                      base_path=analysis_top_dir)
+    
                                      
 
     #I use the DB to build the object
     #get the samples
+    
+    
     charon_session = get_charon_session()
     url = construct_charon_url("samples", project_id)
     samples_response = charon_session.get(url)
@@ -609,6 +622,7 @@ def setup_analysis_directory_structure(fc_dir, config, projects_to_analyze,
             pattern = re.compile(".*\.(fastq|fq)(\.gz|\.gzip|\.bz2)?$")
             fastq_files = filter(pattern.match, sample.get('files', []))
             seqrun_dir = None
+
             for fq_file in fastq_files:
                 libprep_name = determine_library_prep_from_fcid(project_id, sample_name, fcid)
                 libprep_object = sample_obj.add_libprep(name=libprep_name,

@@ -47,6 +47,20 @@ def workflow_dna_alignonly(*args, **kwargs):
     return workflow_dna_variantcalling(*args, **kwargs) + " --alignment_and_qc"
 
 
+def workflow_merge_process_variantCall(*args, **kwargs):
+    """Return the command line for best practice analysis: merging, procesing and variant calling.
+
+    :param strs qscripts_dir_path: The path to the Piper qscripts directory.
+    :param str setup_xml_path: The path to the setup.xml file.
+    :param dict global_config_path: The path to the Piper-specific globalConfig file.
+
+    :returns: The Piper command to be executed.
+    :rtype: str
+    """
+    # Same command line but with one additional option
+    return workflow_dna_variantcalling(*args, **kwargs) +  " --merge_alignments --data_processing --variant_calling"
+
+
 def workflow_dna_variantcalling(qscripts_dir_path, setup_xml_path, global_config_path, output_dir=None):
     """Return the command line for DNA Variant Calling.
 

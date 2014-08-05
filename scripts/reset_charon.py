@@ -28,7 +28,19 @@ if __name__ == '__main__':
             project["best_practice_analysis"] = "IGN"
             url = construct_charon_url("project", project["projectid"])
             charon_session.put(url, json.dumps(project))
-
+            
+            """
+            url = construct_charon_url("samples", project["projectid"])
+            samples_response = charon_session.get(url).json()
+            for sample in samples_response["samples"]:
+                if "total_autosomal_coverage" in sample:
+                    del sample["total_autosomal_coverage"]
+                sample["total_autosomal_coverage"] = 0.0
+                if "status" in sample:
+                    del sample["status"]
+                url = construct_charon_url("sample", project["projectid"], sample["sampleid"])
+                charon_session.put(url, json.dumps(sample))
+            
             url =construct_charon_url("seqruns", project["projectid"])
             seqruns_response = charon_session.get(url).json()
             for seqrun in seqruns_response["seqruns"]:
@@ -48,18 +60,24 @@ if __name__ == '__main__':
                         'bases_number',
                         'contigs_number',
                         'lanes'
+                        'alignment_status'
                         )
                 
                 for field in fields_to_delete:
                     if field in seqrun:
                         del(seqrun[field])
                 
+                #import pdb
+                #pdb.set_trace()
+                
+                seqrun['mean_autosome_coverage'] = 0
+
                 url = construct_charon_url("seqrun", seqrun["projectid"],
                     seqrun["sampleid"], seqrun["libprepid"], seqrun["seqrunid"])
                 charon_session.put(url, json.dumps(seqrun))
 
 
-
+            """
 
 
 

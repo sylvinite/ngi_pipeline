@@ -126,6 +126,48 @@ def write_status_to_charon(project_id, return_code):
         LOG.error(error_msg)
         raise RuntimeError(error_msg)
 
+def write_to_charon_NGI_results(job_id, return_code, run_dir=None):
+    """Update the status of a sequencing run after alignment.
+
+    :param NGIProject project_id: The name of the project, sample, lib prep, flowcell id
+    :param int return_code: The return code of the workflow process
+    :param string run_dir: the directory where results are stored (I know that I am running piper)
+
+    :raises RuntimeError: If the Charon database could not be updated
+    """
+    
+    charon_session = get_charon_session()
+    if return_code is  None:
+        IGN_status = "Working"
+    elif return_code == 0:
+        IGN_status = "Done"
+    else:
+        IGN_status = "Aborted"
+
+    ## A.Wedell_13_03_P567_102
+    information_to_extract = re.compile("([a-zA-Z]\.[a-zA-Z]*_\d*_\d*)_(P\d*_\d*)")
+    project_name = information_to_extract.match(job_id).group(1)
+    project_id   = get_project_id_from_name(project_name)
+    sample_id    = information_to_extract.match(job_id).group(2)
+
+    url = construct_charon_url("sample", project_id, sample_id)
+
+    sample_response = charon_session.get(url)
+    if sample_response.status_code != 200:
+        error_msg = ('Error accessing database for project "{}" Sample {}; could not '
+                     'update Charon while performing Best Practice: {}'.format(project_id, sample_id,  project_response.reason))
+        LOG.error(error_msg)
+        raise RuntimeError(error_msg)
+    sample_dict = sample_response.json()
+    #project_dict["status"] = status
+    response_obj = charon_session.put(url, json.dumps(sample_dict))
+    if response_obj.status_code != 204:
+        error_msg = ('Failed to update project status for "{}" Sample {}'
+                     'in Charon database: {}'.format(project_id, sample_id, response_obj.reason))
+        LOG.error(error_msg)
+        raise RuntimeError(error_msg)
+
+
 def write_to_charon_alignment_results(job_id, return_code, run_dir=None):
     """Update the status of a sequencing run after alignment.
 
@@ -137,8 +179,13 @@ def write_to_charon_alignment_results(job_id, return_code, run_dir=None):
     """
     
     charon_session = get_charon_session()
-    alignment_status = "Done" if return_code is 0 else "Aborted"
-    
+
+    if return_code is  None:
+        alignment_status = "Working"
+    elif return_code == 0:
+        alignment_status = "Done"
+    else:
+        alignment_status = "Aborted"
 
     ## A.Wedell_13_03_P567_102_A_130627_AH0JYUADXX
     information_to_extract = re.compile("([a-zA-Z]\.[a-zA-Z]*_\d*_\d*)_(P\d*_\d*)_([A-Z])_(\d{6})_(.*)")
@@ -197,7 +244,7 @@ def write_to_charon_alignment_results(job_id, return_code, run_dir=None):
     elif return_code == 0:
         #in this case I need to update the alignment statistics for each lane in this seq run
         if "alignment_status" in seq_run_to_update_dict and seq_run_to_update_dict["alignment_status"] == "Done":
-            warn_msg = ('Sequencing run {} already declered finished but now re-updaiting it '
+            warn_msg = ('Sequencing run {} already declared finished but now re-updaiting it '
                         'this will couse over-writing of all fields'.format(run_id))
             LOG.warn(warn_msg)
             #TODO: need to delete seq_rrun_to_update_dict
@@ -249,6 +296,7 @@ def write_to_charon_alignment_results(job_id, return_code, run_dir=None):
         #in such a case I do not update the other fields
         seq_run_to_update_dict = delete_seq_run_update(seq_run_to_update)
 
+
     response_obj = charon_session.put(url, json.dumps(seq_run_to_update_dict))
     if response_obj.status_code != 204:
         error_msg = ('Failed to update run alignment status for run "{}" in project {} '
@@ -270,7 +318,7 @@ def write_to_charon_alignment_results(job_id, return_code, run_dir=None):
     total_autosomal_coverage = 0; #initialise the autosomal coverage to 0
     for seqrun in seqruns_dict["seqruns"]:
         if "mean_autosome_coverage" in seqrun:
-            total_autosomal_coverage += seqrun["mean_autosome_coverage"]
+            total_autosomal_coverage += float(seqrun["mean_autosome_coverage"])
     #now get the sample
     url = construct_charon_url("sample", project_id, sample_id) #get all samples runs for this sample
     sample_response = charon_session.get(url)
@@ -404,7 +452,7 @@ def record_workflow_process_local(p_handle, workflow, project, analysis_module, 
              "workflow {}".format(p_handle.pid, project, project.project_id, workflow))
 
 
-def record_workflow_process_run_local(p_handle, workflow, project,
+def record_process_flowcell(p_handle, workflow, project,
   sample, libprep, fcid, analysis_module, analysis_dir, config=None):
     LOG.info("Recording process id {} for project {}, sample {}, fcid {} "
              "workflow {}".format(p_handle.pid, project, sample, fcid, workflow))
@@ -421,8 +469,7 @@ def record_workflow_process_run_local(p_handle, workflow, project,
     db_key = "{}_{}_{}_{}".format(project, sample, libprep, fcid)
     if db_key in db:
         error_msg = ("Project {}, Sample {}, Library prep {}, fcid {} "
-                     "has an entry in the local db. "
-                     "this should not happen --> NEED TO STOP TO AVOID MORE PROBLEMS".format(project, sample, libprep, fcid))
+                     "has an entry in the local db. ".format(project, sample, libprep, fcid))
         LOG.warn(error_msg)
         return 
 
@@ -431,7 +478,30 @@ def record_workflow_process_run_local(p_handle, workflow, project,
     LOG.info("Successfully recorded process id {} for Project {}, Sample {}, Library prep {}, fcid {}, "
              "workflow {}".format(p_handle.pid, project, sample, libprep, fcid,   workflow))
 
+def record_process_sample(p_handle, workflow, project, sample, analysis_module, analysis_dir, config=None):
+    LOG.info("Recording process id {} for project {}, sample {}, "
+             "workflow {}".format(p_handle.pid, project, sample, workflow))
+    project_dict = { "workflow": workflow,
+                     "p_handle": p_handle,
+                     "analysis_module": analysis_module.__name__,
+                     "project_id": project.project_id,
+                     "run_dir": analysis_dir
+                   }
+    db = get_shelve_database(config)
+    # I don't see how this would ever happen but it makes me nervous to not
+    # even check for this.
+    #this will happen often.... we need to check that we are not rerunning the same analysis at the same moment
+    db_key = "{}_{}".format(project, sample)
+    if db_key in db:
+        error_msg = ("Project {}, Sample {} "
+                     "has an entry in the local db. ".format(project, sample))
+        LOG.warn(error_msg)
+        return 
 
+    db[db_key] = project_dict
+    db.close()
+    LOG.info("Successfully recorded process id {} for Project {}, Sample {} "
+             "workflow {}".format(p_handle.pid, project, sample, workflow))
 
 
 def get_shelve_database(config):
@@ -450,3 +520,12 @@ def get_shelve_database(config):
                      "from provided configuration: key missing: {}".format(e))
         raise KeyError(error_msg)
     return shelve.open(database_path)
+
+
+
+
+
+
+
+
+
