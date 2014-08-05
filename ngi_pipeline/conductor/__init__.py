@@ -13,11 +13,11 @@ import re
 import sys
 
 from ngi_pipeline.conductor.classes import NGIProject
-from ngi_pipeline.database import get_project_id_from_name
-from ngi_pipeline.database.session import get_charon_session_for_project
+from ngi_pipeline.database.communicate import get_project_id_from_name
 from ngi_pipeline.database.process_tracking import get_all_tracked_processes, \
                                                    record_workflow_process_local, \
                                                    write_status_to_charon
+from ngi_pipeline.database.session import get_charon_session_for_project
 from ngi_pipeline.log import minimal_logger
 from ngi_pipeline.utils.filesystem import do_rsync, safe_makedir
 from ngi_pipeline.utils.config import load_yaml_config, locate_ngi_config
