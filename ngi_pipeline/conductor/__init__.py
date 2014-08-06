@@ -23,6 +23,7 @@ from ngi_pipeline.database.process_tracking import get_all_tracked_processes, \
                                                    write_status_to_charon, \
                                                    write_to_charon_NGI_results, \
                                                    check_if_flowcell_analysis_are_running, \
+                                                   check_if_sample_analysis_are_running, \
                                                    remove_record_from_local_tracking, \
                                                    write_to_charon_alignment_results
 from ngi_pipeline.log import minimal_logger
@@ -143,8 +144,6 @@ def launch_analysis_for_flowcells(projects_to_analyze, restrict_to_samples=None,
                     # another function will take care of project specific analysis
                     if not analysis_running: #if this flowcell run is not already being analysed
                         try:
-                            #import pdb
-                            #pdb.set_trace()
                             workflow = "dna_alignonly"  #must be taken from somewhere, either config file or Charon
                             #when I call an Engine at flowcell level I expect that the engine starts by defining its own
                             #folder structure and subsequently start analysis at flowcell level.
@@ -373,21 +372,30 @@ def trigger_sample_level_analysis(config_file_path=None):
 
         analysis_dir = os.path.join(analysis_top_dir, "ANALYSIS", project["name"] )
 
-        for sample in samples_dict:
+        for sample in samples_dict: #sample_dict is a charon object
             sample_id = sample["sampleid"]
-            try:
-                # note here I do not know if I am going to start some anlaysis or not, depends on the Engine that is called
-                #I am here even with project that have no analysis ... maybe better to define a flag?
-                p_handle = analysis_module.analyse_sample_run(sample = sample , project = projectObj,
+            #check that it is not already running
+            analysis_running = check_if_sample_analysis_are_running(projectObj, projectObj.samples[sample_id], config)
+            #check that this analysis is not already done
+            if "status" in sample and sample["status"] == "done":
+                analysis_done = True
+            else:
+                analysis_done = False
+
+            if not analysis_running and not analysis_done: #I need to avoid start process if things are done
+                try:
+                    # note here I do not know if I am going to start some anlaysis or not, depends on the Engine that is called
+                    #I am here even with project that have no analysis ... maybe better to define a flag?
+                    p_handle = analysis_module.analyse_sample_run(sample = sample , project = projectObj,
                                                               config_file_path=config_file_path )
-                #p_handle is None when the engine decided that there is nothing to be done
-                if p_handle != 1:
-                    record_process_sample(p_handle, workflow, projectObj, sample_id, analysis_module,
+                    #p_handle is None when the engine decided that there is nothing to be done
+                    if p_handle != 1:
+                        record_process_sample(p_handle, workflow, projectObj, sample_id, analysis_module,
                             analysis_dir, config)
-            except Exception as e:
-                error_msg = ('Cannot process sample {} in project {}: {}'.format(sample_id, project_id, e))
-                LOG.error(error_msg)
-                continue
+                except Exception as e:
+                    error_msg = ('Cannot process sample {} in project {}: {}'.format(sample_id, project_id, e))
+                    LOG.error(error_msg)
+                    continue
 
 
 def createIGNproject(analysis_top_dir, project_name, project_id):

@@ -18,48 +18,50 @@ def main(demux_fcid_dirs, test_step_1, restrict_to_projects=None, restrict_to_sa
         demux_fcid_dirs = ["/proj/a2010002/INBOX/140528_D00415_0049_BC423WACXX"] # G.Grigelioniene_14_01
         conductor.process_demultiplexed_flowcell(demux_fcid_dirs, None, None) # this should look like a typical command trigger by the Celery server
         
-        time.sleep(20) #wait for 1 minutes
+        time.sleep(60) #wait for 1 minutes
         
         demux_fcid_dirs = ["/proj/a2010002/INBOX/140702_D00415_0052_AC41A2ANXX"] # M.Kaller_14_06
         conductor.process_demultiplexed_flowcell(demux_fcid_dirs, None, None) # this should look like a typical command trigger by the Celery server
         
 
-        time.sleep(20) #wait for 1 minutes
+        time.sleep(60) #wait for 1 minutes
         
         
         demux_fcid_dirs = ["/proj/a2010002/INBOX/130611_SN7001298_0148_AH0CCVADXX/"] #A.Wedell_13_03 sample P567_101
         conductor.process_demultiplexed_flowcell(demux_fcid_dirs, None, None)
         
-        time.sleep(20) #wait for 1 minutes
+        time.sleep(60) #wait for 1 minutes
         
         
-#        demux_fcid_dirs =["/proj/a2010002/INBOX/130611_SN7001298_0148_AH0CCVADXX/"] # A.Wedell_13_03 sample P567_101 DUPLICLATED!!!!
-#        conductor.process_demultiplexed_flowcell(demux_fcid_dirs, None, None)
-#
-#        time.sleep(20) #wait for 1 minutes
+##        demux_fcid_dirs =["/proj/a2010002/INBOX/130611_SN7001298_0148_AH0CCVADXX/"] # A.Wedell_13_03 sample P567_101 DUPLICLATED!!!!
+##        conductor.process_demultiplexed_flowcell(demux_fcid_dirs, None, None)
+##
+##        time.sleep(60) #wait for 1 minutes
         
        
         demux_fcid_dirs = ["/proj/a2010002/INBOX/130612_D00134_0019_AH056WADXX/"] # A.Wedell_13_03 sample P567_101
         conductor.process_demultiplexed_flowcell(demux_fcid_dirs, None, None) # this must start
 
-        time.sleep(20) #wait for 1 minutes
+        time.sleep(60) #wait for 1 minutes
         
         
         demux_fcid_dirs = ["/proj/a2010002/INBOX/130627_D00134_0023_AH0JYUADXX/"] # A.Wedell_13_03 sample P567_102
         conductor.process_demultiplexed_flowcell(demux_fcid_dirs, None, None) # this must start
 
-        time.sleep(20) #wait for 1 minutes
+        time.sleep(60) #wait for 1 minutes
         
         
         demux_fcid_dirs = ["/proj/a2010002/INBOX/130701_SN7001298_0152_AH0J92ADXX/"] # A.Wedell_13_03 sample P567_102
         conductor.process_demultiplexed_flowcell(demux_fcid_dirs, None, None) # this must start
         
         
-        time.sleep(20) #wait for 1 minutes
+        time.sleep(60) #wait for 1 minutes
 
         demux_fcid_dirs = ["/proj/a2010002/INBOX/130701_SN7001298_0153_BH0JMGADXX/"] # A.Wedell_13_03 sample P567_102
         conductor.process_demultiplexed_flowcell(demux_fcid_dirs, None, None) # this must start
 
+        time.sleep(60) #wait for 1 minutes
+        
         #and now a loop to update the DB
         while True:
             check_update_jobs_status()

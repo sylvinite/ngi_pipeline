@@ -86,16 +86,56 @@ def check_if_flowcell_analysis_are_running( project, sample, libprep, fcid, conf
 
     db_key = "{}_{}_{}_{}".format(project, sample, libprep, fcid)
     if db_key in db:
-        error_msg = ("Project {}, Sample {}, Library prep {}, fcid {} "
-                     "has an entry in the local db. Skipping this analys."
-                     "rhis should not happen".format(project, sample, libprep, fcid))
-        LOG.warn(error_msg)
+        warn_msg = ("Project {}, Sample {}, Library prep {}, fcid {} "
+                     "has an entry in the local db. Analysis are ongoing.".format(project, sample, libprep, fcid))
+        LOG.warn(warn_msg)
         db.close()
         return True
     db.close()
     return False
 
 
+def check_if_sample_analysis_are_running( project, sample, config=None):
+    """checks if a given project/sample is currently analysed. 
+    Also check the no project working on that samples (maybe at flowcell level are running)
+    
+    :param Project project: the project object
+    :param Sample sample:
+    :param dict config: The parsed configuration file (optional)
+
+    :raises RuntimeError: If the configuration file cannot be found
+    
+    :returns true/false
+    """
+    
+    
+    LOG.info("checking if Project {}, Sample {}   "
+             "are currently being analysed ".format(project.name, sample))
+    db = get_shelve_database(config)
+    #get all keys, i.e., get all running projects
+    running_processes = db.keys()
+    #check that project_sample are not involved in any running process
+    process_to_be_searched = "{}_{}".format(project, sample)
+    information_to_extract = re.compile("([a-zA-Z]\.[a-zA-Z]*_\d*_\d*)_(P\d*_\d*)(.*)")
+    
+    
+    for running_process in running_processes:
+        projectName_of_running_process    = information_to_extract.match(running_process).group(1)
+        sampleName_of_running_process     = information_to_extract.match(running_process).group(2)
+        libprep_fcid_of_running_process   = information_to_extract.match(running_process).group(3)
+        project_sample_of_running_process = "{}_{}".format(projectName_of_running_process,sampleName_of_running_process)
+        if project_sample_of_running_process == process_to_be_searched:
+            #match found, either this sample level analysis is already ongoing or I am still waiting for a fc level analysis to finish
+            if libprep_fcid_of_running_process == "": #in this case I am running sample level analysis
+                warn_msg = ("Project {}, Sample {} "
+                     "has an entry in the local db. Sample level analysis are ongoing.".format(project, sample))
+            else:
+                warn_msg = ("Project {}, Sample {}  "
+                     "has an entry in the local db. Waiting for a flowcell analysis to finish.".format(project, sample))
+            LOG.warn(warn_msg)
+            db.close()
+            return True
+    return False
 
 
 
@@ -138,11 +178,11 @@ def write_to_charon_NGI_results(job_id, return_code, run_dir=None):
     
     charon_session = get_charon_session()
     if return_code is  None:
-        IGN_status = "Working"
+        IGN_status = "working"
     elif return_code == 0:
-        IGN_status = "Done"
+        IGN_status = "done"
     else:
-        IGN_status = "Aborted"
+        IGN_status = "aborted"
 
     ## A.Wedell_13_03_P567_102
     information_to_extract = re.compile("([a-zA-Z]\.[a-zA-Z]*_\d*_\d*)_(P\d*_\d*)")
@@ -159,7 +199,7 @@ def write_to_charon_NGI_results(job_id, return_code, run_dir=None):
         LOG.error(error_msg)
         raise RuntimeError(error_msg)
     sample_dict = sample_response.json()
-    #project_dict["status"] = status
+    sample_dict["status"] = IGN_status
     response_obj = charon_session.put(url, json.dumps(sample_dict))
     if response_obj.status_code != 204:
         error_msg = ('Failed to update project status for "{}" Sample {}'
