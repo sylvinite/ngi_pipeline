@@ -2,7 +2,7 @@
 import json
 import shelve
 
-from ngi_pipeline.database import construct_charon_url, get_charon_session
+from ngi_pipeline.database.session import construct_charon_url, get_charon_session
 from ngi_pipeline.log import minimal_logger
 from ngi_pipeline.utils.config import load_yaml_config, locate_ngi_config
 
