@@ -24,6 +24,7 @@ from ngi_pipeline.database.process_tracking import get_all_tracked_processes, \
                                                    check_if_sample_analysis_are_running, \
                                                    remove_record_from_local_tracking, \
                                                    write_to_charon_alignment_results
+from ngi_pipeline.database.session import get_charon_session, construct_charon_url
 from ngi_pipeline.log import minimal_logger
 from ngi_pipeline.utils.filesystem import do_rsync, safe_makedir
 from ngi_pipeline.utils.config import load_yaml_config, locate_ngi_config
