@@ -8,7 +8,7 @@ import re
 from ngi_pipeline.database.session import construct_charon_url, get_charon_session
 from ngi_pipeline.log import minimal_logger
 from ngi_pipeline.utils.config import load_yaml_config, locate_ngi_config
-from ngi_pipeline.database import get_project_id_from_name
+from ngi_pipeline.database.communicate import get_project_id_from_name
 from ngi_pipeline.utils.parsers import parse_genome_results
 
 LOG = minimal_logger(__name__)
