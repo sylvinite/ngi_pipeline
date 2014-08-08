@@ -5,11 +5,11 @@ import yaml
 
 
 def locate_ngi_config():
-    config_file_path = os.environ.get("NGI_CONFIG") or os.path.expandvars(os.path.join("$HOME/.ngipipeline/ngi_config.yaml"))
+    config_file_path = os.environ.get("NGI_CONFIG") or os.path.expandvars("$HOME/.ngipipeline/ngi_config.yaml")
     if not os.path.isfile(config_file_path):
         error_msg = ("Configuration file \"{}\" does not exist or is not a "
                      "file. Cannot proceed.".format(config_file_path))
-        LOG.error(error_msg)
+        #LOG.error(error_msg)
         raise RuntimeError(error_msg)
     return config_file_path
 
@@ -26,6 +26,8 @@ def load_json_config(config_file_path):
     return load_generic_config(config_file_path, config_format="json")
 
 
+# This doesn't actually return the exact dict that would be used to write the XML file
+# because it wants to make my life more difficult
 def load_xml_config(config_file_path, xml_attribs=None):
     """Load XML config file, expanding environmental variables.
 
@@ -59,34 +61,22 @@ def load_generic_config(config_file_path, config_format="yaml", **kwargs):
 
     :returns: A dict of the configuration file with environment variables expanded.
     :rtype: dict
-    :raises IOError: If config file cannot be opened.
+    :raises IOError: If the config file could not be opened.
+    :raises ValueError: If config file could not be parsed.
     """
     parsers_dict = {"json": json.load,
                     "xml": xmltodict.parse,
                     "yaml": yaml.load,}
     try:
-        file_ext = os.path.splitext(config_file_path)[1].replace(".", "")
-    except (IndexError, AttributeError):
-        file_ext = None
-    try:
         parser_fn = parsers_dict[config_format.lower()]
     except KeyError:
-        try:
-            # If the user-supplied format fails, try parsing using the format
-            # specified by the file extension
-            parser_fn = parsers_dict[file_ext.lower()]
-        except:
-            raise IOError("Cannot parse config files in format specified "
-                          "(not supported): \"{}\"".format(config_format))
+        raise ValueError("Cannot parse config files in format specified "
+                         "(\"{}\"): format not supported.".format(config_format))
     try:
         with open(config_file_path) as in_handle:
-            try:
-                config = parser_fn(in_handle, **kwargs)
-            except:
-                # User-supplied kwargs may be bad
-                config = parser_fn(in_handle)
-        config = _expand_paths(config)
-        return config
+            config = parser_fn(in_handle, **kwargs)
+            config = _expand_paths(config)
+            return config
     except IOError as e:
         raise IOError("Could not open configuration file \"{}\".".format(config_file_path))
 
