@@ -13,9 +13,7 @@ import re
 import sys
 
 from ngi_pipeline.conductor.classes import NGIProject
-from ngi_pipeline.database import get_project_id_from_name
-from ngi_pipeline.database.session import get_charon_session, \
-                                          construct_charon_url
+from ngi_pipeline.database.communicate import get_project_id_from_name
 from ngi_pipeline.database.process_tracking import get_all_tracked_processes, \
                                                    record_process_flowcell, \
                                                    record_process_sample, \
@@ -115,7 +113,7 @@ def launch_analysis_for_flowcells(projects_to_analyze, restrict_to_samples=None,
     :param list restrict_to_samples: A list of sample names to which we will restrict our analysis
     :param list config_file_path: The path to the NGI Pipeline configuration file.
     """
-  
+
     if not config_file_path:
         config_file_path = locate_ngi_config()
     config = load_yaml_config(config_file_path)
@@ -252,7 +250,7 @@ def check_update_jobs_status(config_file_path=None, projects_to_check=None):
                                  it is defined as env var or in default location)
     :param list projects_to_check: A list of project names to check (exclusive, optional)
     """
-    
+
     if not config_file_path:
         config_file_path = locate_ngi_config()
     config = load_yaml_config(config_file_path)
@@ -419,10 +417,10 @@ def createIGNproject(analysis_top_dir, project_name, project_id):
     project_obj = NGIProject(name=project_name, dirname=project_name,
                                      project_id=project_id,
                                      base_path=analysis_top_dir)
- 
+
     #I use the DB to build the object
     #get the samples
-    
+
     charon_session = get_charon_session()
     url = construct_charon_url("samples", project_id)
     samples_response = charon_session.get(url)
@@ -450,7 +448,7 @@ def createIGNproject(analysis_top_dir, project_name, project_id):
             libprep_id = libprep["libprepid"]
             libprep_object = sample_obj.add_libprep(name=libprep_id,
                                                         dirname=libprep_id)
-                                                        
+
             url = construct_charon_url("seqruns", project_id, sample_id, libprep_id)
             seqruns_response = charon_session.get(url)
             if seqruns_response.status_code != 200:
@@ -469,8 +467,7 @@ def createIGNproject(analysis_top_dir, project_name, project_id):
 
 
     return project_obj
-                                     
- 
+
 
 def get_workflow_for_project(project_id):
     """Get the workflow that should be run for this project from the database.
@@ -489,7 +486,7 @@ def get_workflow_for_project(project_id):
         error_msg = ('Error accessing database: could not get all project {}: {}'.format(project_id, project_response.reason))
         LOG.error(error_msg)
         raise RuntimeError(error_msg) #MARIO I do not want to learn how to handle expection in Python...I want to proceed fast to a working solution... we will fix this things later with your help
-    
+
     project_dict = project_response.json()
     if "pipeline" not in project_dict:
         error_msg = ('project {} has no associeted pipeline/workflow to execute'.format(project_id))
@@ -498,7 +495,6 @@ def get_workflow_for_project(project_id):
 
     #ok now I return the workflow to execute
     return project_dict["pipeline"]
-
 
 
 
@@ -666,8 +662,6 @@ def parse_casava_directory(fc_dir):
     projects = []
     fc_dir = os.path.abspath(fc_dir)
     LOG.info("Parsing flowcell directory \"{}\"...".format(fc_dir))
-    
-    
     parser = FlowcellRunMetricsParser(fc_dir)
     run_info = parser.parseRunInfo()
     runparams = parser.parseRunParameters()

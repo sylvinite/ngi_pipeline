@@ -289,6 +289,13 @@ class XmlToList(list):
                 # Set dict for attributes
                 self.append({k:v for k,v in element.items()})
 
+
+def xmltodict_file(config_file):
+    tree = ET.parse(config_file)
+    root = tree.getroot()
+    return XmlToDict(root)
+
+
 class XmlToDict(dict):
     '''
     Example usage:
