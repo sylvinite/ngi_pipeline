@@ -25,10 +25,6 @@ def determine_library_prep_from_fcid(project_id, sample_name, fcid):
     :raises ValueError: If no match was found.
     :raises RuntimeError: If the database could not be reached (?)
     """
-    #if "AH056WADXX" == fcid:
-    #    import pdb
-    #    pdb.set_trace()
-    
     charon_session = get_charon_session()
     url = construct_charon_url("libpreps", project_id, sample_name)
     # Should return all library preps for this sample in this project

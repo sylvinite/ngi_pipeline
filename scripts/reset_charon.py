@@ -67,8 +67,7 @@ if __name__ == '__main__':
                     if field in seqrun:
                         del(seqrun[field])
                 
-                #import pdb
-                #pdb.set_trace()
+                
                 
                 seqrun['mean_autosome_coverage'] = 0
 

@@ -34,7 +34,9 @@ from ngi_pipeline.utils.parsers import FlowcellRunMetricsParser, \
 
 LOG = minimal_logger(__name__)
 
-# This is called via Celery when a new flowcell is delivered from Sthlm or Uppsala, one flowcell per time
+## NOTE
+## This is called the key function that needs to be called by Celery when  a new flowcell is delivered
+## from Sthlm or Uppsala
 def process_demultiplexed_flowcell(demux_fcid_dirs, restrict_to_projects=None, restrict_to_samples=None, config_file_path=None):
     if len(demux_fcid_dirs) > 1:
         error_message = ("Only one flowcell can be specified at this point"
@@ -93,9 +95,21 @@ def process_demultiplexed_flowcells(demux_fcid_dirs, restrict_to_projects=None, 
     ##project to analyse contained only in the current flowcell(s), I am ready to analyse the projects at flowcell level only
     launch_analysis_for_flowcells(projects_to_analyze)
 
-
+## NOTE This will be the function that is called by the Workflow Watcher script, or whatever we want to call it.
+##      This is the part responsable to start flocell-level analysis, i.e., those analysis that can be run on each
+##      project and each sample soon after they are sequenced.
+##
+##      This function should be called only by process_demultipled_flowcells, or by a part of the Helper to automatically
+##      start analysis at flowcell level.
+##      Check the ngi_pipeline_dummy_start.py to have an idea on how
+##      the process will work.
+##      In this context projects_to_analyse contains only the projects (and hence samples) present in the currently
+##      under-investigation flowcell.
+##
+##
 def launch_analysis_for_flowcells(projects_to_analyze, restrict_to_samples=None, config_file_path=None):
-    """Launch the analysis of projects.
+    """Launch the analysis for fc-run, i.e., launch the correct analysis for each sample of each project 
+    contained in the current flwcell(s).
 
     :param list projects_to_analyze: The list of projects (Project objects) to analyze
     :param list restrict_to_samples: A list of sample names to which we will restrict our analysis
@@ -161,7 +175,7 @@ def launch_analysis_for_flowcells(projects_to_analyze, restrict_to_samples=None,
                             error_msg = ('Cannot process project "{}": {}'.format(project, e))
                             LOG.error(error_msg)
                             continue
-##NOT USING THIS
+
 ## NOTE This will be the function that is called by the Workflow Watcher script, or whatever we want to call it
 ##      By this I mean the script that checks intermittently to determine if we can move on with the next workflow,
 ##      whether this is something periodic (like a cron job) or something triggered by the completion of another part
@@ -173,56 +187,56 @@ def launch_analysis_for_flowcells(projects_to_analyze, restrict_to_samples=None,
 ##      (i.e. whatever script the cron job calls) uses another function that goes through the database
 ##      and finds all Projects for which the "Status" is not "Complete" or something to that effect,
 ##      and then hands that list to this function.
-def launch_analysis_for_projects(projects_to_analyze, restrict_to_samples=None, config_file_path=None):
-    """Launch the analysis of projects.
-
-    :param list projects_to_analyze: The list of projects (Project objects) to analyze
-    :param list restrict_to_samples: A list of sample names to which we will restrict our analysis
-    :param list config_file_path: The path to the NGI Pipeline configuration file.
-    """
-
-    if not config_file_path:
-        config_file_path = locate_ngi_config()
-    config = load_yaml_config(config_file_path)
-    for project in projects_to_analyze:
-        # Get information from the database regarding which workflows to run
-        try:
-            workflow = get_workflow_for_project(project.project_id)
-        except (ValueError, IOError) as e:
-            error_msg = ("Skipping project {} because of error: {}".format(project, e))
-            LOG.error(error_msg)
-            continue
-        try:
-            analysis_engine_module_name = config["analysis"]["workflows"][workflow]["analysis_engine"]
-        except KeyError:
-            error_msg = ("No analysis engine for workflow \"{}\" specified "
-                         "in configuration file. Skipping this workflow "
-                         "for project {}".format(workflow, project))
-            LOG.error(error_msg)
-            raise RuntimeError(error_msg)
-        # Import the adapter module specified in the config file (e.g. piper_ngi)
-        try:
-            analysis_module = importlib.import_module(analysis_engine_module_name)
-        except ImportError as e:
-            error_msg = ("Couldn't import module {} for workflow {} "
-                         "in project {}. Skipping.".format(analysis_module,
-                                                           workflow,
-                                                           project))
-            LOG.error(error_msg)
-            continue
-        try:
-            #this happens at project level butI need to track actions at Samples level!!!!
-            p_handle = analysis_module.analyze_project(project=project,
-                                                       workflow_name=workflow,
-                                                       config_file_path=config_file_path)
-
-            #this must be tracked at run level
-            # For now only tracking this on the project level
-            record_workflow_process_local(p_handle, workflow, project, analysis_module, config)
-        except Exception as e:
-            error_msg = ('Cannot process project "{}": {}'.format(project, e))
-            LOG.error(error_msg)
-            continue
+#def launch_analysis_for_projects(projects_to_analyze, restrict_to_samples=None, config_file_path=None):
+#    """Launch the analysis of projects.
+#
+#    :param list projects_to_analyze: The list of projects (Project objects) to analyze
+#    :param list restrict_to_samples: A list of sample names to which we will restrict our analysis
+#    :param list config_file_path: The path to the NGI Pipeline configuration file.
+#    """
+#
+#    if not config_file_path:
+#        config_file_path = locate_ngi_config()
+#    config = load_yaml_config(config_file_path)
+#    for project in projects_to_analyze:
+#        # Get information from the database regarding which workflows to run
+#        try:
+#            workflow = get_workflow_for_project(project.project_id)
+#        except (ValueError, IOError) as e:
+#            error_msg = ("Skipping project {} because of error: {}".format(project, e))
+#            LOG.error(error_msg)
+#            continue
+#        try:
+#            analysis_engine_module_name = config["analysis"]["workflows"][workflow]["analysis_engine"]
+#        except KeyError:
+#            error_msg = ("No analysis engine for workflow \"{}\" specified "
+#                         "in configuration file. Skipping this workflow "
+#                         "for project {}".format(workflow, project))
+#            LOG.error(error_msg)
+#            raise RuntimeError(error_msg)
+#        # Import the adapter module specified in the config file (e.g. piper_ngi)
+#        try:
+#            analysis_module = importlib.import_module(analysis_engine_module_name)
+#        except ImportError as e:
+#            error_msg = ("Couldn't import module {} for workflow {} "
+#                         "in project {}. Skipping.".format(analysis_module,
+#                                                           workflow,
+#                                                           project))
+#            LOG.error(error_msg)
+#            continue
+#        try:
+#            #this happens at project level butI need to track actions at Samples level!!!!
+#            p_handle = analysis_module.analyze_project(project=project,
+#                                                       workflow_name=workflow,
+#                                                       config_file_path=config_file_path)
+#
+#            #this must be tracked at run level
+#            # For now only tracking this on the project level
+#            record_workflow_process_local(p_handle, workflow, project, analysis_module, config)
+#        except Exception as e:
+#            error_msg = ('Cannot process project "{}": {}'.format(project, e))
+#            LOG.error(error_msg)
+#            continue
 
 
 # This can be run intermittently to track the status of jobs and update the database accordingly,
@@ -291,9 +305,10 @@ def check_update_jobs_status(config_file_path=None, projects_to_check=None):
                                              job_name,
                                              project_dict['p_handle'].pid))
 
-# This function is responsable of trigger second level analyisis (i.e., sample level analysis)
-# using the information available on the Charon. Disussing with Denis we think the best way to
-# trigger this is to have an API that returns all samples with total autosomal coverage > 30X
+## NOTE
+## This function is responsable of trigger second level analyisis (i.e., sample level analysis)
+## using the information available on the Charon.
+## TOO MANY CALLS TO CHARON ARE MADE HERE: we need to restrict them
 def trigger_sample_level_analysis(config_file_path=None):
     """Triggers secondary analysis based on what is found on Charon
     for now this will work only with Piper/IGN
@@ -353,8 +368,6 @@ def trigger_sample_level_analysis(config_file_path=None):
         #knows that are the conditions that need to be made
         LOG.info('Checking for ready to be analysed samples in project {} with workflow {}'.format(project_id, workflow))
         #get all the samples from Charon
-
-
         url = construct_charon_url("samples", project_id)
         samples_response = charon_session.get(url)
         if samples_response.status_code != 200:
@@ -364,8 +377,6 @@ def trigger_sample_level_analysis(config_file_path=None):
             raise RuntimeError(error_msg)
         samples_dict = samples_response.json()["samples"]
         #now recreacte the project object
-
-
         analysis_top_dir = os.path.abspath(config["analysis"]["top_dir"])
         proj_dir = os.path.join(analysis_top_dir, "DATA", project["name"])
         projectObj = createIGNproject(analysis_top_dir, project["name"],  project_id)
@@ -396,6 +407,11 @@ def trigger_sample_level_analysis(config_file_path=None):
                     error_msg = ('Cannot process sample {} in project {}: {}'.format(sample_id, project_id, e))
                     LOG.error(error_msg)
                     continue
+            elif analysis_done:
+                LOG.info("Project {}, Sample {}  "
+                     "have been succesfully processed.".format(project_id, sample_id))
+
+
 
 
 def createIGNproject(analysis_top_dir, project_name, project_id):
@@ -403,12 +419,9 @@ def createIGNproject(analysis_top_dir, project_name, project_id):
     project_obj = NGIProject(name=project_name, dirname=project_name,
                                      project_id=project_id,
                                      base_path=analysis_top_dir)
-    
-                                     
-
+ 
     #I use the DB to build the object
     #get the samples
-    
     
     charon_session = get_charon_session()
     url = construct_charon_url("samples", project_id)
@@ -457,56 +470,7 @@ def createIGNproject(analysis_top_dir, project_name, project_id):
 
     return project_obj
                                      
-    """
-    
-        # Iterate over the samples in the project
-        for sample in project.get('samples', []):
-            # Our SampleSheet.csv names are like Y__Mom_14_01 for some reason
-            sample_name = sample['sample_name'].replace('__','.')
-            # If specific samples are specified, skip those that do not match
-            if restrict_to_samples and sample_name not in restrict_to_samples:
-                LOG.debug("Skipping sample {}".format(sample_name))
-                continue
-            LOG.info("Setting up sample {}".format(sample_name))
-            # Create a directory for the sample if it doesn't already exist
-            sample_dir = os.path.join(project_dir, sample_name)
-            if not os.path.exists(sample_dir): safe_makedir(sample_dir, 0770)
-            # This will only create a new sample object if it doesn't already exist in the project
-            sample_obj = project_obj.add_sample(name=sample_name, dirname=sample_name)
-            # Get the Library Prep ID for each file
-            pattern = re.compile(".*\.(fastq|fq)(\.gz|\.gzip|\.bz2)?$")
-            fastq_files = filter(pattern.match, sample.get('files', []))
-            seqrun_dir = None
-            for fq_file in fastq_files:
-                libprep_name = determine_library_prep_from_fcid(project_id, sample_name, fcid)
-                libprep_object = sample_obj.add_libprep(name=libprep_name,
-                                                        dirname=libprep_name)
-                libprep_dir = os.path.join(sample_dir, libprep_name)
-                if not os.path.exists(libprep_dir): safe_makedir(libprep_dir, 0770)
-                seqrun_object = libprep_object.add_seqrun(name=fc_short_run_id,
-                                                          dirname=fc_short_run_id)
-                seqrun_dir = os.path.join(libprep_dir, fc_short_run_id)
-                if not os.path.exists(seqrun_dir): safe_makedir(seqrun_dir, 0770)
-                seqrun_object.add_fastq_files(fq_file)
-            # rsync the source files to the sample directory
-            #    src: flowcell/data/project/sample
-            #    dst: project/sample/flowcell_run
-            src_sample_dir = os.path.join(fc_dir_structure['fc_dir'],
-                                          project['data_dir'],
-                                          project['project_dir'],
-                                          sample['sample_dir'])
-            for libprep in sample_obj:
-            #this function works at run_level, so I have to process a single run
-            #it might happen that in a run we have multiple lib preps for the same sample
-                #for seqrun in libprep:
-                src_fastq_files = [ os.path.join(src_sample_dir, fastq_file)
-                                    for fastq_file in seqrun_object.fastq_files ] ##MARIO: check this
-                LOG.info("Copying fastq files from {} to {}...".format(sample_dir, seqrun_dir))
-                do_rsync(src_fastq_files, seqrun_dir)
-    """
-
-
-
+ 
 
 def get_workflow_for_project(project_id):
     """Get the workflow that should be run for this project from the database.
