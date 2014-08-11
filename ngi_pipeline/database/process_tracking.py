@@ -7,8 +7,8 @@ import re
 
 from ngi_pipeline.database.session import construct_charon_url, get_charon_session
 from ngi_pipeline.log import minimal_logger
-from ngi_pipeline.utils.config import load_yaml_config, locate_ngi_config
 from ngi_pipeline.database.communicate import get_project_id_from_name
+from ngi_pipeline.utils.classes import with_ngi_config
 from ngi_pipeline.utils.parsers import parse_genome_results
 
 LOG = minimal_logger(__name__)
@@ -479,9 +479,6 @@ def record_workflow_process_local(p_handle, workflow, project, analysis_module, 
                      "run_dir": analysis_dir
                    }
     db = get_shelve_database(config)
-    # I don't see how this would ever happen but it makes me nervous to not
-    # even check for this.
-    #this will happen often.... we need to check that we are not rerunning the same analysis at the same moment
     if project.name in db:
         error_msg = ("Project {} already has an entry in the local process "
                      "tracking database -- this should not be. Overwriting!".format(project.name))
@@ -492,8 +489,8 @@ def record_workflow_process_local(p_handle, workflow, project, analysis_module, 
              "workflow {}".format(p_handle.pid, project, project.project_id, workflow))
 
 
-def record_process_flowcell(p_handle, workflow, project,
-  sample, libprep, fcid, analysis_module, analysis_dir, config=None):
+def record_process_flowcell(p_handle, workflow, project, sample, libprep, fcid,
+                            analysis_module, analysis_dir, config=None):
     LOG.info("Recording process id {} for project {}, sample {}, fcid {} "
              "workflow {}".format(p_handle.pid, project, sample, fcid, workflow))
     project_dict = { "workflow": workflow,
@@ -503,9 +500,6 @@ def record_process_flowcell(p_handle, workflow, project,
                      "run_dir": analysis_dir
                    }
     db = get_shelve_database(config)
-    # I don't see how this would ever happen but it makes me nervous to not
-    # even check for this.
-    #this will happen often.... we need to check that we are not rerunning the same analysis at the same moment
     db_key = "{}_{}_{}_{}".format(project, sample, libprep, fcid)
     if db_key in db:
         error_msg = ("Project {}, Sample {}, Library prep {}, fcid {} "
@@ -528,9 +522,6 @@ def record_process_sample(p_handle, workflow, project, sample, analysis_module, 
                      "run_dir": analysis_dir
                    }
     db = get_shelve_database(config)
-    # I don't see how this would ever happen but it makes me nervous to not
-    # even check for this.
-    #this will happen often.... we need to check that we are not rerunning the same analysis at the same moment
     db_key = "{}_{}".format(project, sample)
     if db_key in db:
         error_msg = ("Project {}, Sample {} "
@@ -544,15 +535,8 @@ def record_process_sample(p_handle, workflow, project, sample, analysis_module, 
              "workflow {}".format(p_handle.pid, project, sample, workflow))
 
 
-def get_shelve_database(config):
-    if not config:
-        try:
-            config_file_path = locate_ngi_config()
-            config = load_yaml_config(config_file_path)
-        except RuntimeError:
-            error_msg = ("No configuration passed and could not find file "
-                         "in default locations.")
-            raise RuntimeError(error_msg)
+@with_ngi_config
+def get_shelve_database(config=None, config_file_path=None):
     try:
         database_path = config["database"]["record_tracking_db_path"]
     except KeyError as e:
@@ -560,12 +544,3 @@ def get_shelve_database(config):
                      "from provided configuration: key missing: {}".format(e))
         raise KeyError(error_msg)
     return shelve.open(database_path)
-
-
-
-
-
-
-
-
-

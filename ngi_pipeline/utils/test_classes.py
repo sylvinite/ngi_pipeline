@@ -5,5 +5,5 @@ from ngi_pipeline.utils.classes import with_ngi_config
 # attempted to address this inside the with_config definition
 # with functools.update_wrapper. Wtf!
 @with_ngi_config
-def test_with_config(self, config_file_path=None):
-    assert(config_file_path)
+def test_with_ngi_config_no_path(config=None, config_file_path=None):
+    assert(config)

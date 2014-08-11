@@ -1,11 +1,12 @@
 import collections
 import functools
 
-from ngi_pipeline.utils.config import locate_ngi_config
+from ngi_pipeline.utils.config import load_yaml_config, locate_ngi_config
 
 class with_ngi_config(object):
     """
-    Try to load the configuration file from a list of default locations.
+    If no parsed config is passed, loads the config from the config_file_path argument.
+    If config_file_path is not passed, tries to find it using a list of default locations.
     """
     def __init__(self, f):
         self.f = f
@@ -13,9 +14,13 @@ class with_ngi_config(object):
         # original names, but it doesn't seem to be working as I expect
         functools.update_wrapper(self, f)
 
+    # I'm not super happy with how this works -- it requires the function
+    # it wraps to have both the "config" and "config_file_path" parameters
     def __call__(self, *args, **kwargs):
-        if "config_file_path" not in kwargs:
-            kwargs["config_file_path"] = locate_ngi_config()
+        if "config" not in kwargs:
+            if "config_file_path" not in kwargs:
+                kwargs["config_file_path"] = locate_ngi_config()
+            kwargs["config"] = load_yaml_config(kwargs["config_file_path"])
         return self.f(*args, **kwargs)
 
 

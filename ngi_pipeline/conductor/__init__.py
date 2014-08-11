@@ -26,27 +26,30 @@ from ngi_pipeline.database.process_tracking import get_all_tracked_processes, \
                                                    write_to_charon_alignment_results
 from ngi_pipeline.database.session import get_charon_session, construct_charon_url
 from ngi_pipeline.log import minimal_logger
+from ngi_pipeline.utils.classes import with_ngi_config
 from ngi_pipeline.utils.filesystem import do_rsync, safe_makedir
-from ngi_pipeline.utils.config import load_yaml_config, locate_ngi_config
 from ngi_pipeline.utils.parsers import FlowcellRunMetricsParser, \
                                        determine_library_prep_from_fcid
 
 LOG = minimal_logger(__name__)
 
+
 ## NOTE
 ## This is called the key function that needs to be called by Celery when  a new flowcell is delivered
 ## from Sthlm or Uppsala
 def process_demultiplexed_flowcell(demux_fcid_dirs, restrict_to_projects=None, restrict_to_samples=None, config_file_path=None):
+    demux_fcid_dirs = list(set(demux_fcid_dirs))
     if len(demux_fcid_dirs) > 1:
         error_message = ("Only one flowcell can be specified at this point"
-                             "The following flowcells have been specified: {} ".format(",".join(demux_fcid_dirs))) ## better to use set
+                         "The following flowcells have been specified: "
+                         "{} ".format(",".join(demux_fcid_dirs)))
         LOG.info(error_message)
         sys.exit("Quitting: " + error_message)
 
     process_demultiplexed_flowcells(demux_fcid_dirs, restrict_to_projects, restrict_to_samples, config_file_path)
 
 
-
+@with_ngi_config
 def process_demultiplexed_flowcells(demux_fcid_dirs, restrict_to_projects=None, restrict_to_samples=None, config_file_path=None):
     """Sort demultiplexed Illumina flowcells into projects and launch their analysis.
 
@@ -55,15 +58,12 @@ def process_demultiplexed_flowcells(demux_fcid_dirs, restrict_to_projects=None, 
                                       restricted to these. Optional.
     :param list restrict_to_samples: A list of samples; analysis will be
                                      restricted to these. Optional.
-    :param str config_file_path: The path to the configuration file; can also be
-                                 specified via environmental variable "NGI_CONFIG"
+    :param dict config: The parsed NGI configuration file; optional.
+    :param str config_file_path: The path to the NGI configuration file; optional.
     """
-    if not config_file_path: config_file_path = locate_ngi_config()
     if not restrict_to_projects: restrict_to_projects = []
     if not restrict_to_samples: restrict_to_samples = []
     demux_fcid_dirs_set = set(demux_fcid_dirs)
-    config = load_yaml_config(config_file_path)
-
     # Sort/copy each raw demux FC into project/sample/fcid format -- "analysis-ready"
     projects_to_analyze = dict()
     for demux_fcid_dir in demux_fcid_dirs_set:
@@ -90,9 +90,9 @@ def process_demultiplexed_flowcells(demux_fcid_dirs, restrict_to_projects=None, 
     else:
         # Don't need the dict functionality anymore; revert to list
         projects_to_analyze = projects_to_analyze.values()
-    
     ##project to analyse contained only in the current flowcell(s), I am ready to analyse the projects at flowcell level only
     launch_analysis_for_flowcells(projects_to_analyze)
+
 
 ## NOTE This will be the function that is called by the Workflow Watcher script, or whatever we want to call it.
 ##      This is the part responsable to start flocell-level analysis, i.e., those analysis that can be run on each
@@ -106,18 +106,16 @@ def process_demultiplexed_flowcells(demux_fcid_dirs, restrict_to_projects=None, 
 ##      under-investigation flowcell.
 ##
 ##
-def launch_analysis_for_flowcells(projects_to_analyze, restrict_to_samples=None, config_file_path=None):
+@with_ngi_config
+def launch_analysis_for_flowcells(projects_to_analyze, restrict_to_samples=None, config=None, config_file_path=None):
     """Launch the analysis for fc-run, i.e., launch the correct analysis for each sample of each project 
     contained in the current flwcell(s).
 
     :param list projects_to_analyze: The list of projects (Project objects) to analyze
     :param list restrict_to_samples: A list of sample names to which we will restrict our analysis
-    :param list config_file_path: The path to the NGI Pipeline configuration file.
+    :param dict config: The parsed NGI configuration file; optional.
+    :param list config_file_path: The path to the NGI configuration file; optional.
     """
-
-    if not config_file_path:
-        config_file_path = locate_ngi_config()
-    config = load_yaml_config(config_file_path)
     for project in projects_to_analyze:
         # Get information from the database regarding which workflows to run
         try:
@@ -166,10 +164,10 @@ def launch_analysis_for_flowcells(projects_to_analyze, restrict_to_samples=None,
                                                        fcid = fcid,
                                                        workflow_name=workflow,
                                                        config_file_path=config_file_path)
-                            
+
                             record_process_flowcell(p_handle, workflow, project,
                              sample, libprep, fcid, analysis_module, project.analysis_dir, config)
-        
+
                         except Exception as e:
                             error_msg = ('Cannot process project "{}": {}'.format(project, e))
                             LOG.error(error_msg)
@@ -241,20 +239,17 @@ def launch_analysis_for_flowcells(projects_to_analyze, restrict_to_samples=None,
 # This can be run intermittently to track the status of jobs and update the database accordingly,
 # as well as to remove entries from the local database if the job has completed (but ONLY ONLY ONLY
 # once the status has been successfully written to Charon!!)
-def check_update_jobs_status(config_file_path=None, projects_to_check=None):
+@with_ngi_config
+def check_update_jobs_status(projects_to_check=None, config=None, config_file_path=None):
     """Check and update the status of jobs associated with workflows/projects;
     this goes through every record kept locally, and if the job has completed
     (either successfully or not) AND it is able to update Charon to reflect this
     status, it deletes the local record.
 
-    :param str config_file_path: The path to the configuration file (optional if
-                                 it is defined as env var or in default location)
     :param list projects_to_check: A list of project names to check (exclusive, optional)
+    :param dict config: The parsed NGI configuration file; optional.
+    :param list config_file_path: The path to the NGI configuration file; optional.
     """
-
-    if not config_file_path:
-        config_file_path = locate_ngi_config()
-    config = load_yaml_config(config_file_path)
     db_dict = get_all_tracked_processes()
     for job_name, project_dict in db_dict.iteritems():
         LOG.info("Checking workflow {} for project {}...".format(project_dict["workflow"],
@@ -308,19 +303,14 @@ def check_update_jobs_status(config_file_path=None, projects_to_check=None):
 ## This function is responsable of trigger second level analyisis (i.e., sample level analysis)
 ## using the information available on the Charon.
 ## TOO MANY CALLS TO CHARON ARE MADE HERE: we need to restrict them
-def trigger_sample_level_analysis(config_file_path=None):
+@with_ngi_config
+def trigger_sample_level_analysis(config=None, config_file_path=None):
     """Triggers secondary analysis based on what is found on Charon
     for now this will work only with Piper/IGN
-    
-    :param str config_file_path: The path to the configuration file (optional if
-                                 it is defined as env var or in default location)
+
+    :param dict config: The parsed NGI configuration file; optional.
+    :param list config_file_path: The path to the NGI configuration file; optional.
     """
-   
-    
-    if not config_file_path:
-        config_file_path = locate_ngi_config()
-    config = load_yaml_config(config_file_path)
-    
     #start by getting all projects, this will likely need a specific API
     charon_session = get_charon_session()
     url = construct_charon_url("projects")
@@ -329,13 +319,13 @@ def trigger_sample_level_analysis(config_file_path=None):
         error_msg = ('Error accessing database: could not get all projects: {}'.format(project_response.reason))
         LOG.error(error_msg)
         raise RuntimeError(error_msg)
-    
+
     projects_dict = projects_response.json()["projects"]
-    
+
     for project in projects_dict:
         #check if the field Pipeline is set
         project_id = project["projectid"]
-        
+
         try:
             workflow = get_workflow_for_project(project_id)
         except (RuntimeError) as e:
