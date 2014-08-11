@@ -25,6 +25,7 @@ def process_demultiplexed_flowcell(demux_fcid_dirs, restrict_to_projects=None, r
     process_demultiplexed_flowcells(demux_fcid_dirs, restrict_to_projects, restrict_to_samples, config_file_path)
 
 
+@with_ngi_config
 def process_demultiplexed_flowcells(demux_fcid_dirs, restrict_to_projects=None, restrict_to_samples=None, config_file_path=None):
     """Sort demultiplexed Illumina flowcells into projects and launch their analysis.
 
@@ -33,14 +34,12 @@ def process_demultiplexed_flowcells(demux_fcid_dirs, restrict_to_projects=None, 
                                       restricted to these. Optional.
     :param list restrict_to_samples: A list of samples; analysis will be
                                      restricted to these. Optional.
-    :param str config_file_path: The path to the configuration file; can also be
-                                 specified via environmental variable "NGI_CONFIG"
+    :param dict config: The parsed NGI configuration file; optional.
+    :param str config_file_path: The path to the NGI configuration file; optional.
     """
-    if not config_file_path: config_file_path = locate_ngi_config()
     if not restrict_to_projects: restrict_to_projects = []
     if not restrict_to_samples: restrict_to_samples = []
     demux_fcid_dirs_set = set(demux_fcid_dirs)
-    config = load_yaml_config(config_file_path)
     # Sort/copy each raw demux FC into project/sample/fcid format -- "analysis-ready"
     projects_to_analyze = dict()
     for demux_fcid_dir in demux_fcid_dirs_set:
@@ -69,6 +68,8 @@ def process_demultiplexed_flowcells(demux_fcid_dirs, restrict_to_projects=None, 
         projects_to_analyze = projects_to_analyze.values()
     ##project to analyse contained only in the current flowcell(s), I am ready to analyse the projects at flowcell level only
     launch_analysis_for_flowcells(projects_to_analyze)
+
+
 
 
 def setup_analysis_directory_structure(fc_dir, config, projects_to_analyze,
@@ -284,5 +285,3 @@ def parse_casava_directory(fc_dir):
             'fc_date': fc_date,
             'basecall_stats_dir': basecall_stats_dir,
             'projects': projects}
-
-
