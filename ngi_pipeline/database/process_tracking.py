@@ -32,6 +32,70 @@ def get_all_tracked_processes(config=None):
     db.close()
     return db_dict
 
+# This can be run intermittently to track the status of jobs and update the database accordingly,
+# as well as to remove entries from the local database if the job has completed (but ONLY ONLY ONLY
+# once the status has been successfully written to Charon!!)
+@with_ngi_config
+def check_update_jobs_status(projects_to_check=None, config=None, config_file_path=None):
+    """Check and update the status of jobs associated with workflows/projects;
+    this goes through every record kept locally, and if the job has completed
+    (either successfully or not) AND it is able to update Charon to reflect this
+    status, it deletes the local record.
+
+    :param list projects_to_check: A list of project names to check (exclusive, optional)
+    :param dict config: The parsed NGI configuration file; optional.
+    :param list config_file_path: The path to the NGI configuration file; optional.
+    """
+    db_dict = get_all_tracked_processes()
+    for job_name, project_dict in db_dict.iteritems():
+        LOG.info("Checking workflow {} for project {}...".format(project_dict["workflow"],
+                                                                 job_name))
+        return_code = project_dict["p_handle"].poll()
+        if return_code is not None:
+            # Job finished somehow or another; try to update database.
+            LOG.info('Workflow "{}" for project "{}" completed '
+                     'with return code "{}". Attempting to update '
+                     'Charon database.'.format(project_dict['workflow'],
+                                               job_name, return_code))
+            # Only if we succesfully write to Charon will we remove the record
+            # from the local db; otherwise, leave it and try again next cycle.
+            try:
+                project_id = project_dict['project_id']
+                ## FIXME
+                ### THIS IS NOT REALLY CORRECT, HERE TRIGGER KNOWS DETAILS ABOUT ENGINE!!!!
+                if project_dict["workflow"] == "dna_alignonly":
+                    #in this case I need to update the run level infomration
+                    #I know that:
+                    # I am running Piper at flowcell level, I need to know the folder where results are stored!!!
+                    write_to_charon_alignment_results(job_name, return_code, project_dict["run_dir"])
+                elif project_dict["workflow"] == "NGI":
+                    write_to_charon_NGI_results(job_name, return_code, project_dict["run_dir"])
+                else:
+                    write_status_to_charon(project_id, return_code)
+                LOG.info("Successfully updated Charon database.")
+                try:
+                    # This only hits if we succesfully update Charon
+                    remove_record_from_local_tracking(job_name)
+                except RuntimeError:
+                    LOG.error(e)
+                    continue
+            except RuntimeError as e:
+                LOG.warn(e)
+                continue
+        else:
+            ## FIXME
+            #this code duplication can be avoided
+            if project_dict["workflow"] == "dna_alignonly":
+                #in this case I need to update the run level infomration
+                write_to_charon_alignment_results(job_name, return_code)
+            elif project_dict["workflow"] == "NGI":
+                    write_to_charon_NGI_results(job_name, return_code, project_dict["run_dir"])
+
+            LOG.info('Workflow "{}" for project "{}" (pid {}) '
+                     'still running.'.format(project_dict['workflow'],
+                                             job_name,
+                                             project_dict['p_handle'].pid))
+
 
 def remove_record_from_local_tracking(project, config=None):
     """Remove a record from the local tracking database.
@@ -56,7 +120,7 @@ def remove_record_from_local_tracking(project, config=None):
 
 def check_if_flowcell_analysis_are_running( project, sample, libprep, fcid, config=None):
     """checks if a given project/sample/library/flowcell is currently analysed.
-    
+
     :param Project project: the project object
     :param Sample sample:
     :param LibPrep libprep:
@@ -64,7 +128,7 @@ def check_if_flowcell_analysis_are_running( project, sample, libprep, fcid, conf
     :param dict config: The parsed configuration file (optional)
 
     :raises RuntimeError: If the configuration file cannot be found
-    
+
     :returns true/false
     """
     LOG.info("checking if Project {}, Sample {}, Library prep {}, fcid {} "
@@ -76,7 +140,7 @@ def check_if_flowcell_analysis_are_running( project, sample, libprep, fcid, conf
                      "Kill everything  and call Mario and Francesco".format(project))
         LOG.info(error_msg)
         sys.exit("Quitting: " + error_msg)
-        
+
     if "{}_{}".format(project.name, sample) in db:
         error_msg = ("Project {} and sample {}, is already being analysed at sample level "
                      "This run should not exists!!! somethig terribly wrong is happening, "
@@ -98,17 +162,17 @@ def check_if_flowcell_analysis_are_running( project, sample, libprep, fcid, conf
 def check_if_sample_analysis_are_running( project, sample, config=None):
     """checks if a given project/sample is currently analysed. 
     Also check the no project working on that samples (maybe at flowcell level are running)
-    
+
     :param Project project: the project object
     :param Sample sample:
     :param dict config: The parsed configuration file (optional)
 
     :raises RuntimeError: If the configuration file cannot be found
-    
+
     :returns true/false
     """
-    
-    
+
+
     LOG.info("checking if Project {}, Sample {}   "
              "are currently being analysed ".format(project.name, sample))
     db = get_shelve_database(config)
@@ -117,8 +181,8 @@ def check_if_sample_analysis_are_running( project, sample, config=None):
     #check that project_sample are not involved in any running process
     process_to_be_searched = "{}_{}".format(project, sample)
     information_to_extract = re.compile("([a-zA-Z]\.[a-zA-Z]*_\d*_\d*)_(P\d*_\d*)(.*)")
-    
-    
+
+
     for running_process in running_processes:
         projectName_of_running_process    = information_to_extract.match(running_process).group(1)
         sampleName_of_running_process     = information_to_extract.match(running_process).group(2)
@@ -147,7 +211,7 @@ def write_status_to_charon(project_id, return_code):
 
     :raises RuntimeError: If the Charon database could not be updated
     """
-    
+
     charon_session = get_charon_session()
     status = "Completed" if return_code is 0 else "Failed"
     project_url = construct_charon_url("project", project_id)
@@ -175,7 +239,7 @@ def write_to_charon_NGI_results(job_id, return_code, run_dir=None):
 
     :raises RuntimeError: If the Charon database could not be updated
     """
-    
+
     charon_session = get_charon_session()
     if return_code is  None:
         IGN_status = "working"
@@ -217,7 +281,7 @@ def write_to_charon_alignment_results(job_id, return_code, run_dir=None):
 
     :raises RuntimeError: If the Charon database could not be updated
     """
-    
+
     charon_session = get_charon_session()
 
     if return_code is  None:
@@ -268,13 +332,13 @@ def write_to_charon_alignment_results(job_id, return_code, run_dir=None):
             #otherwise I can update this entry
             seq_run_to_update       = seqrun["seqrunid"]
             seq_run_to_update_dict  = seqrun
-        
+
     if seq_run_to_update == -1: #in this case I did not find a seqrun matching the one I want to update
         error_msg = ('Error while trying to update seqrun {}. No Hits found on Charon '
                             'that match the same runid. this is not possible'.format(run_id))
         LOG.error(error_msg)
         raise RunTimeError(error_msg)
- 
+
     #At this point I can update the correct seqrun
     url = construct_charon_url("seqrun", project_id, sample_id, library_id, seq_run_to_update)
     all_algn_completed = True  # this variable is used to check that all alignments have a result
@@ -288,9 +352,9 @@ def write_to_charon_alignment_results(job_id, return_code, run_dir=None):
                         'this will couse over-writing of all fields'.format(run_id))
             LOG.warn(warn_msg)
             #TODO: need to delete seq_rrun_to_update_dict
-        
+
         seq_run_to_update_dict["lanes"] = 0 #set this to zero so I know that I can over-write the fields
-        
+
         try:
             piper_result_dir = os.path.join(run_dir, "02_preliminary_alignment_qc")
         except:
@@ -313,7 +377,7 @@ def write_to_charon_alignment_results(job_id, return_code, run_dir=None):
                 else:
                     alignment_results = parse_genome_results(genome_result)
                     seq_run_to_update_dict = update_seq_run(seq_run_to_update_dict, alignment_results)
-                    
+
         if not all_algn_completed:
             error_msg = ('Alignment ended with an error: Piper returned 0 as error code but file structure is unexpected'
                       'currently processing runid {} for project {}, sample {}, libprep {}'.format(run_id,
@@ -385,7 +449,7 @@ def update_seq_run(seq_run_to_update_dict, alignment_results):
     #get the current lane
     extractLane = re.compile(".*\.(\d)\.bam")
     current_lane = extractLane.match(alignment_results["bam_file"]).group(1)
-    
+
     fields_to_update = ('mean_autosome_coverage',
                         'mean_coverage',
                         'std_coverage',
@@ -461,7 +525,6 @@ def record_workflow_process_local(p_handle, workflow, project, analysis_module, 
                                  ...
                             }
 
-    
 
     :raises KeyError: If the database portion of the configuration file is missing
     :raises RuntimeError: If the configuration file cannot be found
@@ -512,6 +575,7 @@ def record_process_flowcell(p_handle, workflow, project, sample, libprep, fcid,
     LOG.info("Successfully recorded process id {} for Project {}, Sample {}, Library prep {}, fcid {}, "
              "workflow {}".format(p_handle.pid, project, sample, libprep, fcid,   workflow))
 
+
 def record_process_sample(p_handle, workflow, project, sample, analysis_module, analysis_dir, config=None):
     LOG.info("Recording process id {} for project {}, sample {}, "
              "workflow {}".format(p_handle.pid, project, sample, workflow))
@@ -544,3 +608,5 @@ def get_shelve_database(config=None, config_file_path=None):
                      "from provided configuration: key missing: {}".format(e))
         raise KeyError(error_msg)
     return shelve.open(database_path)
+
+
