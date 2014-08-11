@@ -1,6 +1,29 @@
 import collections
 import functools
 
+from ngi_pipeline.utils.config import load_yaml_config, locate_ngi_config
+
+class with_ngi_config(object):
+    """
+    If no parsed config is passed, loads the config from the config_file_path argument.
+    If config_file_path is not passed, tries to find it using a list of default locations.
+    """
+    def __init__(self, f):
+        self.f = f
+        # The idea is that ths will allow wrapped functions to keep their
+        # original names, but it doesn't seem to be working as I expect
+        functools.update_wrapper(self, f)
+
+    # I'm not super happy with how this works -- it requires the function
+    # it wraps to have both the "config" and "config_file_path" parameters
+    def __call__(self, *args, **kwargs):
+        if "config" not in kwargs and not args: # args[0] is parsed config
+            if "config_file_path" not in kwargs: # ignored if passed positionally (args[1])
+                kwargs["config_file_path"] = locate_ngi_config()
+            kwargs["config"] = load_yaml_config(kwargs["config_file_path"])
+        return self.f(*args, **kwargs)
+
+
 class memoized(object):
     """
     Decorator, caches results of function calls.
@@ -8,6 +31,7 @@ class memoized(object):
     def __init__(self, func):
         self.func   = func
         self.cached = {}
+        functools.update_wrapper(self, func)
     def __call__(self, *args):
         if not isinstance(args, collections.Hashable):
             return self.func(*args)
@@ -23,4 +47,3 @@ class memoized(object):
     # goes through the __call__ function defined above
     def __get__(self, obj, objtype):
         return functools.partial(self.__call__, obj)
-
