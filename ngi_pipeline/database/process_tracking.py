@@ -1,9 +1,10 @@
 """Keeps track of running workflow processes"""
-import json
-import shelve
-import os
+import contextlib
 import glob
+import json
+import os
 import re
+import shelve
 
 from ngi_pipeline.database.session import construct_charon_url, get_charon_session
 from ngi_pipeline.log import minimal_logger
@@ -24,13 +25,10 @@ def get_all_tracked_processes(config=None):
     :returns: The dict of the entire database
     :rtype: dict
     """
-    # This function doesn't do a whole lot
-    db = get_shelve_database(config)
-    db_dict = {}
-    for job_name, job_name_obj in db.iteritems():
-        db_dict[job_name] = job_name_obj
-    db.close()
+    with get_shelve_database(config) as db:
+        db_dict = {job_name: job_obj for job_name, job_obj in db.iteritems()}
     return db_dict
+
 
 # This can be run intermittently to track the status of jobs and update the database accordingly,
 # as well as to remove entries from the local database if the job has completed (but ONLY ONLY ONLY
@@ -107,15 +105,14 @@ def remove_record_from_local_tracking(project, config=None):
     """
     LOG.info('Attempting to remove local process record for '
              'project "{}"'.format(project))
-    db = get_shelve_database(config)
-    try:
-        del db[project] #POP does not remove the entry in the db
-    except KeyError:
-        error_msg = ('Project "{}" not found in local process '
-                     'tracking database.'.format(project))
-        LOG.error(error_msg)
-        raise RuntimeError(error_msg)
-    db.close()
+    with get_shelve_database(config) as db:
+        try:
+            del db[project]
+        except KeyError:
+            error_msg = ('Project "{}" not found in local process '
+                         'tracking database.'.format(project))
+            LOG.error(error_msg)
+            raise RuntimeError(error_msg)
 
 
 def check_if_flowcell_analysis_are_running( project, sample, libprep, fcid, config=None):
@@ -133,30 +130,28 @@ def check_if_flowcell_analysis_are_running( project, sample, libprep, fcid, conf
     """
     LOG.info("checking if Project {}, Sample {}, Library prep {}, fcid {} "
              "are currently being analysed ".format(project, sample, libprep, fcid))
-    db = get_shelve_database(config)
-    if project.name in db:
-        error_msg = ("Project {},is already being analysed at project level "
-                     "This run should not exists!!! somethig terribly wrong is happening, "
-                     "Kill everything  and call Mario and Francesco".format(project))
-        LOG.info(error_msg)
-        sys.exit("Quitting: " + error_msg)
+    with get_shelve_database(config) as db:
+        if project.name in db:
+            error_msg = ("Project '{}' is already being analysed at project level "
+                         "This run should not exists!!! somethig terribly wrong is happening, "
+                         "Kill everything  and call Mario and Francesco".format(project))
+            LOG.info(error_msg)
+            raise RuntimeError(error_msg)
 
-    if "{}_{}".format(project.name, sample) in db:
-        error_msg = ("Project {} and sample {}, is already being analysed at sample level "
-                     "This run should not exists!!! somethig terribly wrong is happening, "
-                     "Kill everything  and call Mario and Francesco".format(project, sample))
-        LOG.info(error_msg)
-        sys.exit("Quitting: " + error_msg)
+        if "{}_{}".format(project.name, sample) in db:
+            error_msg = ("Sample '{}' of project '{}' is already being analysed at sample level "
+                         "This run should not exists!!! somethig terribly wrong is happening, "
+                         "Kill everything  and call Mario and Francesco".format(sample, project))
+            LOG.info(error_msg)
+            raise RuntimeError(error_msg)
 
-    db_key = "{}_{}_{}_{}".format(project, sample, libprep, fcid)
-    if db_key in db:
-        warn_msg = ("Project {}, Sample {}, Library prep {}, fcid {} "
-                     "has an entry in the local db. Analysis are ongoing.".format(project, sample, libprep, fcid))
-        LOG.warn(warn_msg)
-        db.close()
-        return True
-    db.close()
-    return False
+        db_key = "{}_{}_{}_{}".format(project, sample, libprep, fcid)
+        if db_key in db:
+            warn_msg = ("Project {}, Sample {}, Library prep {}, fcid {} "
+                         "has an entry in the local db. Analysis are ongoing.".format(project, sample, libprep, fcid))
+            LOG.warn(warn_msg)
+            return True
+        return False
 
 
 def check_if_sample_analysis_are_running( project, sample, config=None):
@@ -175,31 +170,30 @@ def check_if_sample_analysis_are_running( project, sample, config=None):
 
     LOG.info("checking if Project {}, Sample {}   "
              "are currently being analysed ".format(project.name, sample))
-    db = get_shelve_database(config)
-    #get all keys, i.e., get all running projects
-    running_processes = db.keys()
-    #check that project_sample are not involved in any running process
-    process_to_be_searched = "{}_{}".format(project, sample)
-    information_to_extract = re.compile("([a-zA-Z]\.[a-zA-Z]*_\d*_\d*)_(P\d*_\d*)(.*)")
+    with get_shelve_database(config) as db:
+        #get all keys, i.e., get all running projects
+        running_processes = db.keys()
+        #check that project_sample are not involved in any running process
+        process_to_be_searched = "{}_{}".format(project, sample)
+        information_to_extract = re.compile("([a-zA-Z]\.[a-zA-Z]*_\d*_\d*)_(P\d*_\d*)(.*)")
 
 
-    for running_process in running_processes:
-        projectName_of_running_process    = information_to_extract.match(running_process).group(1)
-        sampleName_of_running_process     = information_to_extract.match(running_process).group(2)
-        libprep_fcid_of_running_process   = information_to_extract.match(running_process).group(3)
-        project_sample_of_running_process = "{}_{}".format(projectName_of_running_process,sampleName_of_running_process)
-        if project_sample_of_running_process == process_to_be_searched:
-            #match found, either this sample level analysis is already ongoing or I am still waiting for a fc level analysis to finish
-            if libprep_fcid_of_running_process == "": #in this case I am running sample level analysis
-                warn_msg = ("Project {}, Sample {} "
-                     "has an entry in the local db. Sample level analysis are ongoing.".format(project, sample))
-            else:
-                warn_msg = ("Project {}, Sample {}  "
-                     "has an entry in the local db. Waiting for a flowcell analysis to finish.".format(project, sample))
-            LOG.warn(warn_msg)
-            db.close()
-            return True
-    return False
+        for running_process in running_processes:
+            projectName_of_running_process    = information_to_extract.match(running_process).group(1)
+            sampleName_of_running_process     = information_to_extract.match(running_process).group(2)
+            libprep_fcid_of_running_process   = information_to_extract.match(running_process).group(3)
+            project_sample_of_running_process = "{}_{}".format(projectName_of_running_process,sampleName_of_running_process)
+            if project_sample_of_running_process == process_to_be_searched:
+                #match found, either this sample level analysis is already ongoing or I am still waiting for a fc level analysis to finish
+                if libprep_fcid_of_running_process == "": #in this case I am running sample level analysis
+                    warn_msg = ("Project {}, Sample {} "
+                         "has an entry in the local db. Sample level analysis are ongoing.".format(project, sample))
+                else:
+                    warn_msg = ("Project {}, Sample {}  "
+                         "has an entry in the local db. Waiting for a flowcell analysis to finish.".format(project, sample))
+                LOG.warn(warn_msg)
+                return True
+        return False
 
 
 
@@ -541,15 +535,14 @@ def record_workflow_process_local(p_handle, workflow, project, analysis_module, 
                      "project_id": project.project_id,
                      "run_dir": analysis_dir
                    }
-    db = get_shelve_database(config)
-    if project.name in db:
-        error_msg = ("Project {} already has an entry in the local process "
-                     "tracking database -- this should not be. Overwriting!".format(project.name))
-        LOG.warn(error_msg)
-    db[project.name] = project_dict
-    db.close()
-    LOG.info("Successfully recorded process id {} for project {} (ID {}), " 
-             "workflow {}".format(p_handle.pid, project, project.project_id, workflow))
+    with get_shelve_database(config) as db:
+        if project.name in db:
+            error_msg = ("Project {} already has an entry in the local process "
+                         "tracking database -- this should not be. Overwriting!".format(project.name))
+            LOG.warn(error_msg)
+        db[project.name] = project_dict
+        LOG.info("Successfully recorded process id {} for project {} (ID {}), " 
+                 "workflow {}".format(p_handle.pid, project, project.project_id, workflow))
 
 
 def record_process_flowcell(p_handle, workflow, project, sample, libprep, fcid,
@@ -562,18 +555,17 @@ def record_process_flowcell(p_handle, workflow, project, sample, libprep, fcid,
                      "project_id": project.project_id,
                      "run_dir": analysis_dir
                    }
-    db = get_shelve_database(config)
-    db_key = "{}_{}_{}_{}".format(project, sample, libprep, fcid)
-    if db_key in db:
-        error_msg = ("Project {}, Sample {}, Library prep {}, fcid {} "
-                     "has an entry in the local db. ".format(project, sample, libprep, fcid))
-        LOG.warn(error_msg)
-        return 
+    with get_shelve_database(config) as db:
+        db_key = "{}_{}_{}_{}".format(project, sample, libprep, fcid)
+        if db_key in db:
+            error_msg = ("Project {}, Sample {}, Library prep {}, fcid {} "
+                         "has an entry in the local db. ".format(project, sample, libprep, fcid))
+            LOG.warn(error_msg)
+            return 
 
-    db[db_key] = project_dict
-    db.close()
-    LOG.info("Successfully recorded process id {} for Project {}, Sample {}, Library prep {}, fcid {}, "
-             "workflow {}".format(p_handle.pid, project, sample, libprep, fcid,   workflow))
+        db[db_key] = project_dict
+        LOG.info("Successfully recorded process id {} for Project {}, Sample {}, Library prep {}, fcid {}, "
+                 "workflow {}".format(p_handle.pid, project, sample, libprep, fcid,   workflow))
 
 
 def record_process_sample(p_handle, workflow, project, sample, analysis_module, analysis_dir, config=None):
@@ -585,28 +577,32 @@ def record_process_sample(p_handle, workflow, project, sample, analysis_module, 
                      "project_id": project.project_id,
                      "run_dir": analysis_dir
                    }
-    db = get_shelve_database(config)
-    db_key = "{}_{}".format(project, sample)
-    if db_key in db:
-        error_msg = ("Project {}, Sample {} "
-                     "has an entry in the local db. ".format(project, sample))
-        LOG.warn(error_msg)
-        return 
+    with get_shelve_database(config) as db:
+        db_key = "{}_{}".format(project, sample)
+        if db_key in db:
+            error_msg = ("Project {}, Sample {} "
+                         "has an entry in the local db. ".format(project, sample))
+            LOG.warn(error_msg)
+            return 
 
-    db[db_key] = project_dict
-    db.close()
-    LOG.info("Successfully recorded process id {} for Project {}, Sample {} "
-             "workflow {}".format(p_handle.pid, project, sample, workflow))
+        db[db_key] = project_dict
+        LOG.info("Successfully recorded process id {} for Project {}, Sample {} "
+                 "workflow {}".format(p_handle.pid, project, sample, workflow))
 
 
+@contextlib.contextmanager
 @with_ngi_config
 def get_shelve_database(config=None, config_file_path=None):
+    """Context manager for opening the local process tracking database.
+    Closes the db automatically on exit.
+    """
     try:
         database_path = config["database"]["record_tracking_db_path"]
+        db = shelve.open(database_path)
+        yield db
     except KeyError as e:
         error_msg = ("Could not get path to process tracking database "
                      "from provided configuration: key missing: {}".format(e))
         raise KeyError(error_msg)
-    return shelve.open(database_path)
-
-
+    finally:
+        db.close()

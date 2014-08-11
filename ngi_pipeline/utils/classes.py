@@ -17,8 +17,8 @@ class with_ngi_config(object):
     # I'm not super happy with how this works -- it requires the function
     # it wraps to have both the "config" and "config_file_path" parameters
     def __call__(self, *args, **kwargs):
-        if "config" not in kwargs:
-            if "config_file_path" not in kwargs:
+        if "config" not in kwargs and not args: # args[0] is parsed config
+            if "config_file_path" not in kwargs: # ignored if passed positionally (args[1])
                 kwargs["config_file_path"] = locate_ngi_config()
             kwargs["config"] = load_yaml_config(kwargs["config_file_path"])
         return self.f(*args, **kwargs)
@@ -47,4 +47,3 @@ class memoized(object):
     # goes through the __call__ function defined above
     def __get__(self, obj, objtype):
         return functools.partial(self.__call__, obj)
-
