@@ -17,13 +17,14 @@ class with_ngi_config(object):
 
     def __call__(self, *args, **kwargs):
         # Assign positional args to relevant parameters
+        # An alternative way to do this is with inspect.getargspec(self.f)
+        # instead of self.f.func_code.co_varnames, but it's an additional import
         kwargs.update(dict(zip(self.f.func_code.co_varnames, args)))
-        args = ()
         if "config" not in kwargs:
             if "config_file_path" not in kwargs:
                 kwargs["config_file_path"] = locate_ngi_config()
             kwargs["config"] = load_yaml_config(kwargs["config_file_path"])
-        return self.f(*args, **kwargs)
+        return self.f(**kwargs)
 
 
 class memoized(object):
