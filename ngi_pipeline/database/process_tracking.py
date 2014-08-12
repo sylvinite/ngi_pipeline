@@ -590,8 +590,9 @@ def record_process_sample(p_handle, workflow, project, sample, analysis_module, 
                  "workflow {}".format(p_handle.pid, project, sample, workflow))
 
 
-@with_ngi_config
+# Don't switch the order of these or you'll break everything
 @contextlib.contextmanager
+@with_ngi_config
 def get_shelve_database(config=None, config_file_path=None):
     """Context manager for opening the local process tracking database.
     Closes the db automatically on exit.
