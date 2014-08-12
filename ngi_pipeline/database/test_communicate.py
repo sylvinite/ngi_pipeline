@@ -1,5 +1,6 @@
 import json
 
+from ngi_pipeline.conductor.classes import NGIProject
 from ngi_pipeline.database.communicate import get_project_id_from_name
 from ngi_pipeline.database.session import construct_charon_url, get_charon_session
 
@@ -20,3 +21,7 @@ def test_get_project_id_from_name():
         response = session.delete(construct_charon_url('project', project_id))
         assert response.status_code == 204, response
         assert len(response.content) == 0, 'no content in response'
+
+def test_rebuild_project_obj_from_Charon():
+    # Create fake project / sample / libprep / seqrun
+    pass
