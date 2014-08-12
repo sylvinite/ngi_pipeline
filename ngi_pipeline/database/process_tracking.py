@@ -590,19 +590,20 @@ def record_process_sample(p_handle, workflow, project, sample, analysis_module, 
                  "workflow {}".format(p_handle.pid, project, sample, workflow))
 
 
-@contextlib.contextmanager
 @with_ngi_config
+@contextlib.contextmanager
 def get_shelve_database(config=None, config_file_path=None):
     """Context manager for opening the local process tracking database.
     Closes the db automatically on exit.
     """
     try:
         database_path = config["database"]["record_tracking_db_path"]
-        db = shelve.open(database_path)
-        yield db
     except KeyError as e:
         error_msg = ("Could not get path to process tracking database "
                      "from provided configuration: key missing: {}".format(e))
         raise KeyError(error_msg)
+    db = shelve.open(database_path)
+    try:
+        yield db
     finally:
         db.close()

@@ -3,9 +3,9 @@
 from __future__ import print_function
 
 
-
+from ngi_pipeline.conductor.launchers import launch_analysis_for_flowcells
 from ngi_pipeline.log import minimal_logger
-from ngi_pipeline.utils.config import load_yaml_config, locate_ngi_config
+from ngi_pipeline.utils.classes import with_ngi_config
 
 LOG = minimal_logger(__name__)
 
@@ -13,20 +13,32 @@ LOG = minimal_logger(__name__)
 ## NOTE
 ## This is called the key function that needs to be called by Celery when  a new flowcell is delivered
 ## from Sthlm or Uppsala
-def process_demultiplexed_flowcell(demux_fcid_dirs, restrict_to_projects=None, restrict_to_samples=None, config_file_path=None):
-    demux_fcid_dirs = list(set(demux_fcid_dirs))
-    if len(demux_fcid_dirs) > 1:
-        error_message = ("Only one flowcell can be specified at this point"
-                         "The following flowcells have been specified: "
-                         "{} ".format(",".join(demux_fcid_dirs)))
-        LOG.info(error_message)
-        sys.exit("Quitting: " + error_message)
+def process_demultiplexed_flowcell(demux_fcid_dir_path, restrict_to_projects=None,
+                                   restrict_to_samples=None, config_file_path=None):
+    """Call process_demultiplexed_flowcells, restricting to a single flowcell.
+    Essentially a restrictive wrapper.
 
-    process_demultiplexed_flowcells(demux_fcid_dirs, restrict_to_projects, restrict_to_samples, config_file_path)
+    :param str demux_fcid_dirs: The CASAVA-produced demux directory/directories.
+    :param list restrict_to_projects: A list of projects; analysis will be
+                                      restricted to these. Optional.
+    :param list restrict_to_samples: A list of samples; analysis will be
+                                     restricted to these. Optional.
+    :param str config_file_path: The path to the NGI configuration file; optional.
+    """
+    ## Why is it that we need to restrict this to a single flowcell?
+    ## Does it break otherwise?
+    if type(demux_fcid_dir_path) is not str:
+        error_message = ("The path to a single demultiplexed flowcell should be "
+                         "passed to this function as a string.")
+        sys.exit("Quitting: " + error_message)
+    process_demultiplexed_flowcells([demux_fcid_dir_path], restrict_to_projects,
+                                    restrict_to_samples, config_file_path)
 
 
 @with_ngi_config
-def process_demultiplexed_flowcells(demux_fcid_dirs, restrict_to_projects=None, restrict_to_samples=None, config_file_path=None):
+def process_demultiplexed_flowcells(demux_fcid_dirs, restrict_to_projects=None,
+                                    restrict_to_samples=None, config=None,
+                                    config_file_path=None):
     """Sort demultiplexed Illumina flowcells into projects and launch their analysis.
 
     :param list demux_fcid_dirs: The CASAVA-produced demux directory/directories.
@@ -66,14 +78,15 @@ def process_demultiplexed_flowcells(demux_fcid_dirs, restrict_to_projects=None, 
     else:
         # Don't need the dict functionality anymore; revert to list
         projects_to_analyze = projects_to_analyze.values()
-    ##project to analyse contained only in the current flowcell(s), I am ready to analyse the projects at flowcell level only
+    ##project to analyse contained only in the current flowcell(s),
+    ##I am ready to analyse the projects at flowcell level only
     launch_analysis_for_flowcells(projects_to_analyze)
 
 
-
-
-def setup_analysis_directory_structure(fc_dir, config, projects_to_analyze,
-                                       restrict_to_projects=None, restrict_to_samples=None):
+@with_ngi_config
+def setup_analysis_directory_structure(fc_dir, projects_to_analyze,
+                                       restrict_to_projects=None, restrict_to_samples=None,
+                                       config=None, config_file_path=None):
     """
     Copy and sort files from their CASAVA-demultiplexed flowcell structure
     into their respective project/sample/libPrep/FCIDs. This collects samples
