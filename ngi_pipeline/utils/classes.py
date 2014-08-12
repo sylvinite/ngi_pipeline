@@ -3,6 +3,9 @@ import functools
 
 from ngi_pipeline.utils.config import load_yaml_config, locate_ngi_config
 
+## ARGH THIS DOESN'T WORK
+## I want to deal with the arguments after the positional args
+## have already been assigned to the kwargs. How can I do this?
 class with_ngi_config(object):
     """
     If no parsed config is passed, loads the config from the config_file_path argument.
@@ -14,11 +17,9 @@ class with_ngi_config(object):
         # original names, but it doesn't seem to be working as I expect
         functools.update_wrapper(self, f)
 
-    # I'm not super happy with how this works -- it requires the function
-    # it wraps to have both the "config" and "config_file_path" parameters
     def __call__(self, *args, **kwargs):
-        if "config" not in kwargs and not args: # args[0] is parsed config
-            if "config_file_path" not in kwargs: # ignored if passed positionally (args[1])
+        if "config" not in kwargs:
+            if "config_file_path" not in kwargs:
                 kwargs["config_file_path"] = locate_ngi_config()
             kwargs["config"] = load_yaml_config(kwargs["config_file_path"])
         return self.f(*args, **kwargs)
