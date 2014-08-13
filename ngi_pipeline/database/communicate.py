@@ -1,4 +1,4 @@
-from ngi_pipeline.database.session import get_charon_session, construct_charon_url
+from ngi_pipeline.database.classes import CharonSession
 
 def get_project_id_from_name(project_name):
     """Given the project name ("Y.Mom_14_01") return the project ID ("P123")
@@ -11,8 +11,8 @@ def get_project_id_from_name(project_name):
     :raises RuntimeError: If there is some problem relating to the GET (HTTP Return code != 200)
     :raises ValueError: If the project id is missing from the project database entry
     """
-    charon_session = get_charon_session()
-    url = construct_charon_url("project", project_name)
+    charon_session = CharonSession()
+    url = charon_session.construct_charon_url("project", project_name)
     project_response = charon_session.get(url)
     if project_response.status_code != 200:
         raise RuntimeError("Error when accessing Charon DB: {}".format(project_response.reason))
@@ -30,8 +30,8 @@ def rebuild_project_obj_from_Charon(analysis_top_dir, project_name, project_id):
                                      base_path=analysis_top_dir)
     #I use the DB to build the object
     #get the samples
-    charon_session = get_charon_session()
-    url = construct_charon_url("samples", project_id)
+    charon_session = CharonSession()
+    url = charon_session.construct_charon_url("samples", project_id)
     samples_response = charon_session.get(url)
     if samples_response.status_code != 200:
         error_msg = ('Error accessing database: could not get samples for projects: {}'.format(project_id,
@@ -45,7 +45,7 @@ def rebuild_project_obj_from_Charon(analysis_top_dir, project_name, project_id):
         sample_dir = os.path.join(project_dir, sample_id)
         sample_obj = project_obj.add_sample(name=sample_id, dirname=sample_id)
         #now get lib preps
-        url = construct_charon_url("libpreps", project_id, sample_id)
+        url = charon_session.construct_charon_url("libpreps", project_id, sample_id)
         libpreps_response = charon_session.get(url)
         if libpreps_response.status_code != 200:
             error_msg = ('Error accessing database: could not get lib preps for sample {}: {}'.format(sample_id,
@@ -57,7 +57,7 @@ def rebuild_project_obj_from_Charon(analysis_top_dir, project_name, project_id):
             libprep_id = libprep["libprepid"]
             libprep_object = sample_obj.add_libprep(name=libprep_id,
                                                         dirname=libprep_id)
-            url = construct_charon_url("seqruns", project_id, sample_id, libprep_id)
+            url = charon_session.construct_charon_url("seqruns", project_id, sample_id, libprep_id)
             seqruns_response = charon_session.get(url)
             if seqruns_response.status_code != 200:
                 error_msg = ('Error accessing database: could not get lib preps for sample {}: {}'.format(sample_id,
@@ -85,8 +85,8 @@ def get_workflow_for_project(project_id):
     :raises ValueError: If the project cannot be found in the database
     :raises IOError: If the database cannot be reached
     """
-    charon_session = get_charon_session()
-    url = construct_charon_url("project", project_id)
+    charon_session = CharonSession()
+    url = charon_session.construct_charon_url("project", project_id)
     project_response = charon_session.get(url)
     if project_response.status_code != 200:
         error_msg = ('Error accessing database: could not get all project {}: {}'.format(project_id, project_response.reason))

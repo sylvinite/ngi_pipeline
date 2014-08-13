@@ -6,8 +6,8 @@ import os
 import re
 import shelve
 
-from ngi_pipeline.database.session import construct_charon_url, get_charon_session
-from ngi_pipeline.log import minimal_logger
+from ngi_pipeline.log.loggers import minimal_logger
+from ngi_pipeline.database.classes import CharonSession
 from ngi_pipeline.database.communicate import get_project_id_from_name
 from ngi_pipeline.utils.classes import with_ngi_config
 from ngi_pipeline.utils.parsers import parse_genome_results
@@ -206,9 +206,9 @@ def write_status_to_charon(project_id, return_code):
     :raises RuntimeError: If the Charon database could not be updated
     """
 
-    charon_session = get_charon_session()
+    charon_session = CharonSession()
     status = "Completed" if return_code is 0 else "Failed"
-    project_url = construct_charon_url("project", project_id)
+    project_url = charon_session.construct_charon_url("project", project_id)
     project_response = charon_session.get(project_url)
     if project_response.status_code != 200:
         error_msg = ('Error accessing database for project "{}"; could not '
@@ -234,7 +234,7 @@ def write_to_charon_NGI_results(job_id, return_code, run_dir=None):
     :raises RuntimeError: If the Charon database could not be updated
     """
 
-    charon_session = get_charon_session()
+    charon_session = CharonSession()
     if return_code is  None:
         IGN_status = "working"
     elif return_code == 0:
@@ -248,7 +248,7 @@ def write_to_charon_NGI_results(job_id, return_code, run_dir=None):
     project_id   = get_project_id_from_name(project_name)
     sample_id    = information_to_extract.match(job_id).group(2)
 
-    url = construct_charon_url("sample", project_id, sample_id)
+    url = charon_session.construct_charon_url("sample", project_id, sample_id)
 
     sample_response = charon_session.get(url)
     if sample_response.status_code != 200:
@@ -276,7 +276,7 @@ def write_to_charon_alignment_results(job_id, return_code, run_dir=None):
     :raises RuntimeError: If the Charon database could not be updated
     """
 
-    charon_session = get_charon_session()
+    charon_session = CharonSession()
 
     if return_code is  None:
         alignment_status = "Working"
@@ -296,7 +296,7 @@ def write_to_charon_alignment_results(job_id, return_code, run_dir=None):
                                 information_to_extract.match(job_id).group(5))
 
     #this returns url to all the seq runs of this library, sample, project
-    url = construct_charon_url("seqruns", project_id, sample_id, library_id)
+    url = charon_session.construct_charon_url("seqruns", project_id, sample_id, library_id)
     #now i need to check with one is my run id, I need to match the runid field with my local run_id
     seqruns_response = charon_session.get(url)
     if seqruns_response.status_code != 200:
@@ -334,7 +334,7 @@ def write_to_charon_alignment_results(job_id, return_code, run_dir=None):
         raise RunTimeError(error_msg)
 
     #At this point I can update the correct seqrun
-    url = construct_charon_url("seqrun", project_id, sample_id, library_id, seq_run_to_update)
+    url = charon_session.construct_charon_url("seqrun", project_id, sample_id, library_id, seq_run_to_update)
     all_algn_completed = True  # this variable is used to check that all alignments have a result
     #no I can start to put things
     if return_code is None:
@@ -404,7 +404,7 @@ def write_to_charon_alignment_results(job_id, return_code, run_dir=None):
         raise RuntimeError(error_msg)
     #TODO now update the sample field the total_autosomal_coverage, this will go away once Denis implements
     # an API for this
-    url = construct_charon_url("seqruns", project_id, sample_id) #get all samples runs for this sample
+    url = charon_session.construct_charon_url("seqruns", project_id, sample_id) #get all samples runs for this sample
     seqruns_response = charon_session.get(url)
     if seqruns_response.status_code != 200:
         error_msg = ('Error accessing database while updaiting alignment statistics'
@@ -418,7 +418,7 @@ def write_to_charon_alignment_results(job_id, return_code, run_dir=None):
         if "mean_autosome_coverage" in seqrun:
             total_autosomal_coverage += float(seqrun["mean_autosome_coverage"])
     #now get the sample
-    url = construct_charon_url("sample", project_id, sample_id) #get all samples runs for this sample
+    url = charon_session.construct_charon_url("sample", project_id, sample_id) #get all samples runs for this sample
     sample_response = charon_session.get(url)
     if sample_response.status_code != 200:
         error_msg = ('Error accessing database while updaiting total autosomal coverage'
