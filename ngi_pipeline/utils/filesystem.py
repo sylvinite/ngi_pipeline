@@ -93,9 +93,9 @@ def do_rsync(src_files, dst_dir):
     cl.append(dst_dir)
     cl = map(str, cl)
     # Use for testing: just touch the files rather than copy them
-    # for f in src_files:
-    #    open(os.path.join(dst_dir,os.path.basename(f)),"w").close()
-    subprocess.check_call(cl)
+    for f in src_files:
+        open(os.path.join(dst_dir,os.path.basename(f)),"w").close()
+    #subprocess.check_call(cl)
     return [ os.path.join(dst_dir,os.path.basename(f)) for f in src_files ]
 
 

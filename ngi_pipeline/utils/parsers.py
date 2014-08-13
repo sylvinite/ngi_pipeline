@@ -420,9 +420,9 @@ class FlowcellRunMetricsParser(RunMetricsParser):
 
         :returns: parsed data structure
         """
-        infile = os.path.join(os.path.abspath(self.path), fn)
+        infile_path = os.path.join(os.path.abspath(self.path), fn)
         self.log.info("Reading run parameters from file {}".format(infile_path))
-        with open(infile) as f:
+        with open(infile_path) as f:
             parser = RunParametersParser()
             data = parser.parse(f)
         return data
