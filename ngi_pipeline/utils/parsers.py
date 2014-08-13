@@ -5,8 +5,8 @@ import re
 import xml.etree.cElementTree as ET
 import xml.parsers.expat
 
-from ngi_pipeline.database.session import get_charon_session, construct_charon_url
-from ngi_pipeline.log import minimal_logger
+from ngi_pipeline.database.classes import CharonSession
+from ngi_pipeline.log.loggers import minimal_logger
 from ngi_pipeline.utils.classes import memoized
 
 LOG = minimal_logger(__name__)
@@ -25,8 +25,8 @@ def determine_library_prep_from_fcid(project_id, sample_name, fcid):
     :raises ValueError: If no match was found.
     :raises RuntimeError: If the database could not be reached (?)
     """
-    charon_session = get_charon_session()
-    url = construct_charon_url("libpreps", project_id, sample_name)
+    charon_session = CharonSession()
+    url = charon_session.construct_charon_url("libpreps", project_id, sample_name)
     # Should return all library preps for this sample in this project
     libpreps_response = charon_session.get(url)
     if libpreps_response.status_code != 200:
@@ -35,16 +35,20 @@ def determine_library_prep_from_fcid(project_id, sample_name, fcid):
                                            libpreps_response.reason))
     for libprep in libpreps_response.json()['libpreps']:
         # Get the sequencing runs and see if they match the FCID we have
-        url = construct_charon_url("seqruns", project_id, sample_name,
-                                   libprep['libprepid'])
+        url = charon_session.construct_charon_url("seqruns",
+                                                  project_id,
+                                                  sample_name,
+                                                  libprep['libprepid'])
         all_seqruns_response = charon_session.get(url)
         if all_seqruns_response.status_code != 200:
             raise RuntimeError("Error when accessing Charon DB: "
                                "{}: {}".format(libpreps_response.status_code,
                                                libpreps_response.reason))
         for seqrun in all_seqruns_response.json()['seqruns']:
-            url = construct_charon_url("seqrun", project_id, sample_name,
-                                       libprep['libprepid'], seqrun['seqrunid'])
+            url = charon_session.construct_charon_url("seqrun", project_id,
+                                                      sample_name,
+                                                      libprep['libprepid'],
+                                                      seqrun['seqrunid'])
             seqrun_response = charon_session.get(url)
             if seqrun_response.status_code != 200:
                 raise RuntimeError("Error when accessing Charon DB: "

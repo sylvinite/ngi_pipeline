@@ -10,7 +10,7 @@ import stat
 import subprocess
 import tempfile
 
-from ngi_pipeline.log import minimal_logger
+from ngi_pipeline.log.loggers import minimal_logger
 
 LOG = minimal_logger(__name__)
 

@@ -4,7 +4,7 @@ from __future__ import print_function
 
 
 from ngi_pipeline.conductor.launchers import launch_analysis_for_flowcells
-from ngi_pipeline.log import minimal_logger
+from ngi_pipeline.log.loggers import minimal_logger
 from ngi_pipeline.utils.classes import with_ngi_config
 
 LOG = minimal_logger(__name__)
