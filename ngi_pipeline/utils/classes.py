@@ -20,8 +20,8 @@ class with_ngi_config(object):
         # An alternative way to do this is with inspect.getargspec(self.f)
         # instead of self.f.func_code.co_varnames, but it's an additional import
         kwargs.update(dict(zip(self.f.func_code.co_varnames, args)))
-        if "config" not in kwargs:
-            if "config_file_path" not in kwargs:
+        if not kwargs.get("config"):
+            if not kwargs.get("config_file_path"):
                 kwargs["config_file_path"] = locate_ngi_config()
             kwargs["config"] = load_yaml_config(kwargs["config_file_path"])
         return self.f(**kwargs)
