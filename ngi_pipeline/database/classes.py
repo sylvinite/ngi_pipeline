@@ -3,12 +3,17 @@ from __future__ import print_function
 import functools
 import json
 import os
+import re
 import requests
 
 
 try:
     CHARON_API_TOKEN = os.environ['CHARON_API_TOKEN']
     CHARON_BASE_URL = os.environ['CHARON_BASE_URL']
+    # Remove trailing slashes
+    m = re.match(r'(?P<url>.*\w+)/*', CHARON_BASE_URL)
+    if m:
+        CHARON_BASE_URL = m.groups()[0]
 except KeyError as e:
     raise ValueError("Could not get required environmental variable "
                      "\"{}\"; cannot connect to database.".format(e))
@@ -23,6 +28,12 @@ class CharonSession(requests.Session):
         self._api_token_dict = {'X-Charon-API-token': self._api_token}
         self._base_url = base_url or CHARON_BASE_URL
 
+    #def get(url_args, *args, **kwargs):
+    #    url = self.construct_charon_url(url_args)
+    #    return validate_response(super(CharonSession, self).get(url,
+    #                                   headers=self._api_token_dict,
+    #                                   *args, **kwargs))
+
         self.get = validate_response(functools.partial(self.get, headers=self._api_token_dict))
         self.post = validate_response(functools.partial(self.post, headers=self._api_token_dict))
         self.put = validate_response(functools.partial(self.put, headers=self._api_token_dict))
@@ -34,23 +45,39 @@ class CharonSession(requests.Session):
         """Build a Charon URL, appending any *args passed."""
         return "{}/api/v1/{}".format(self._base_url,'/'.join([str(a) for a in args]))
 
-    def get_all_projects(self):
-        return self.get(self.construct_charon_url('project'))
-
-    def create_project(self, p_id, p_name=None, p_status=None, p_pipeline=None, p_bpa=None):
-        data = dict(projectid=p_id,
-                    name=p_name,
-                    status=p_status,
-                    pipeline=p_pipeline,
-                    best_practice_analysis=p_bpa)
+    def project_create(self, proj_id, name=None, status=None, pipeline=None, bpa=None):
+        data = dict(projectid=proj_id,
+                    name=name,
+                    status=status,
+                    pipeline=pipeline,
+                    best_practice_analysis=bpa)
         return self.post(self.construct_charon_url('project'),
                          data=json.dumps(data))
 
-    def access_project(self, p_id):
-        return self.get(self.construct_charon_url('project', p_id))
+    def project_get(self, proj_id):
+        return self.get(self.construct_charon_url('project', proj_id))
 
-    def delete_project(self, p_id):
-       return self.delete(self.construct_charon_url('project', p_id))
+    def project_update(self, proj_id, name=None, status=None, pipeline=None, bpa=None):
+        data = dict(
+                    #projectid=proj_id,
+                    name=name,
+                    status=status,
+                    pipeline=pipeline,
+                    best_practice_analysis=bpa)
+        return self.put(self.construct_charon_url('project', proj_id),
+                        data=json.dumps(data))
+
+    def projects_get_all(self):
+        return self.get(self.construct_charon_url('project'))
+
+    def project_delete(self, proj_id):
+        return self.delete(self.construct_charon_url('project', proj_id))
+
+    def sample_create(self, proj_id, samp_id, status=None, received=None,
+                      qc_status=None, genotyping_status=None,
+                      genotyping_concordance=None, lims_initial_qc=None,
+                      total_autosomal_coverage=None):
+        pass
 
 
 class validate_response(object):

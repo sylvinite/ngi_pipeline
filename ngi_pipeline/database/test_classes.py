@@ -8,6 +8,8 @@ class TestCharonFunctions(unittest.TestCase):
 
     def setUp(self):
         self.session = CharonSession()
+        self.p_id = "P100000"
+        self.p_name = "Y.Mom_14_01"
 
     def test_construct_charon_url(self):
         append_list = ["road","to","nowhere"]
@@ -38,3 +40,10 @@ class TestCharonFunctions(unittest.TestCase):
         # 409 Document revision conflict
         ## not sure how to fake this one
 
+    def test_project_create_update_delete(self):
+        self.session.project_create(self.p_id)
+        self.session.project_update(proj_id=self.p_id, name=self.p_name)
+        self.session.project_delete(proj_id=self.p_id)
+
+    def projects_get_all(self):
+        self.projects_get_all()
