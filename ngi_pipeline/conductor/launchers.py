@@ -5,7 +5,8 @@ from __future__ import print_function
 import importlib
 
 from ngi_pipeline.database.communicate import get_workflow_for_project
-from ngi_pipeline.database.process_tracking import check_if_flowcell_analysis_are_running
+from ngi_pipeline.database.process_tracking import check_if_flowcell_analysis_are_running, \
+                                                   record_process_flowcell
 from ngi_pipeline.log.loggers import minimal_logger
 from ngi_pipeline.utils.classes import with_ngi_config
 
