@@ -12,7 +12,7 @@ from ngi_pipeline.conductor.launchers import launch_analysis_for_flowcells
 from ngi_pipeline.database.communicate import get_project_id_from_name
 from ngi_pipeline.log.loggers import minimal_logger
 from ngi_pipeline.utils.classes import with_ngi_config
-from ngi_pipeline.utils.filesystem import do_rsync
+from ngi_pipeline.utils.filesystem import do_rsync, safe_makedir
 from ngi_pipeline.utils.parsers import FlowcellRunMetricsParser, \
                                        determine_library_prep_from_fcid
 

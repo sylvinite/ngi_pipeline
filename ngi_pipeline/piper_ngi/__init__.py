@@ -125,17 +125,15 @@ def convert_sthlm_to_uppsala(project, fcid):
     report.tsv for use as input to Piper.
 
     :param NGIProject project: The project to be converted.
-
-    :returns: A list of projects with Uppsala-style directories as attributes.
-    :rtype: list
+    :param NGISeqRun fcid: The flowcell ID to be converted.
     """
     # Requires sthlm2UUSNP on PATH
-    ## HERE
     cl_template = "sthlm2UUSNP -i {input_dir} -o {output_dir} -f {flowcell}"
     LOG.info("Converting Sthlm project {} to UUSNP format".format(project))
     input_dir = os.path.join(project.base_path, "DATA", project.dirname)
     uppsala_dirname = "{}".format(project.dirname)
     output_dir = os.path.join(project.base_path, "DATA_UUSNP", uppsala_dirname)
+    if os.path.exists(output_dir): return
     com = cl_template.format(input_dir=input_dir, output_dir=output_dir,
                              flowcell=fcid)
     try:
@@ -143,7 +141,6 @@ def convert_sthlm_to_uppsala(project, fcid):
     except subprocess.CalledProcessError as e:
         error_msg = ("Unable to convert Sthlm->UU format for "
                      "project {} / flowcell {}: {}".format(project, fcid, e))
-        LOG.error(error_msg)
         raise RuntimeError(error_msg)
     project.dirname = uppsala_dirname
     project.name = uppsala_dirname
