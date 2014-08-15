@@ -196,7 +196,7 @@ def check_if_sample_analysis_are_running( project, sample, config=None):
         return False
 
 
-
+## ADAPT CHARON ACCESS
 def write_status_to_charon(project_id, return_code):
     """Update the status of a workflow for a project in the Charon database.
 
@@ -224,6 +224,8 @@ def write_status_to_charon(project_id, return_code):
         LOG.error(error_msg)
         raise RuntimeError(error_msg)
 
+
+## ADAPT CHARON ACCESS
 def write_to_charon_NGI_results(job_id, return_code, run_dir=None):
     """Update the status of a sequencing run after alignment.
 
@@ -233,39 +235,42 @@ def write_to_charon_NGI_results(job_id, return_code, run_dir=None):
 
     :raises RuntimeError: If the Charon database could not be updated
     """
-
     charon_session = CharonSession()
+
+    # Consider moving this mapping to the CharonSession object or something
     if return_code is  None:
-        IGN_status = "working"
+        IGN_status = "RUNNING"
     elif return_code == 0:
-        IGN_status = "done"
+        IGN_status = "DONE"
     else:
-        IGN_status = "aborted"
+        IGN_status = "FAILED"
 
     ## A.Wedell_13_03_P567_102
-    information_to_extract = re.compile("([a-zA-Z]\.[a-zA-Z]*_\d*_\d*)_(P\d*_\d*)")
-    project_name = information_to_extract.match(job_id).group(1)
-    project_id   = get_project_id_from_name(project_name)
-    sample_id    = information_to_extract.match(job_id).group(2)
+    # FIXME add error handling
+    m = re.match(r'(?P<project_name>[a-zA-Z]\.[a-zA-Z]*_\d*_\d*)_(?P<sample_id>P\d*_\d*)', job_id)
+    project_id   = get_project_id_from_name(m.groupdict['project_name'])
+    sample_id    = m.groupdict['sample_id']
 
     url = charon_session.construct_charon_url("sample", project_id, sample_id)
 
-    sample_response = charon_session.get(url)
-    if sample_response.status_code != 200:
-        error_msg = ('Error accessing database for project "{}" Sample {}; could not '
-                     'update Charon while performing Best Practice: {}'.format(project_id, sample_id,  project_response.reason))
-        LOG.error(error_msg)
+    try:
+        sample_response = charon_session.get(url)
+    except (RuntimeError, ValueError) as e:
+        error_msg = ('Error accessing database for project "{}", sample {}; '
+                     'could not update Charon while performing best practice: '
+                     '{}'.format(project_id, sample_id,  e))
         raise RuntimeError(error_msg)
     sample_dict = sample_response.json()
     sample_dict["status"] = IGN_status
-    response_obj = charon_session.put(url, json.dumps(sample_dict))
-    if response_obj.status_code != 204:
-        error_msg = ('Failed to update project status for "{}" Sample {}'
-                     'in Charon database: {}'.format(project_id, sample_id, response_obj.reason))
-        LOG.error(error_msg)
+    try:
+        response_obj = charon_session.put(url, json.dumps(sample_dict))
+    except (RuntimeError, ValueError) as e:
+        error_msg = ('Failed to update project status for "{}" sample {}'
+                     'in Charon database: {}'.format(project_id, sample_id, e))
         raise RuntimeError(error_msg)
 
 
+## ADAPT CHARON ACCESS
 def write_to_charon_alignment_results(job_id, return_code, run_dir=None):
     """Update the status of a sequencing run after alignment.
 
@@ -278,12 +283,12 @@ def write_to_charon_alignment_results(job_id, return_code, run_dir=None):
 
     charon_session = CharonSession()
 
-    if return_code is  None:
-        alignment_status = "Working"
+    if return_code is None:
+        alignment_status = "RUNNING"
     elif return_code == 0:
-        alignment_status = "Done"
+        alignment_status = "DONE"
     else:
-        alignment_status = "Aborted"
+        alignment_status = "FAILED"
 
     ## A.Wedell_13_03_P567_102_A_130627_AH0JYUADXX
     information_to_extract = re.compile("([a-zA-Z]\.[a-zA-Z]*_\d*_\d*)_(P\d*_\d*)_([A-Z])_(\d{6})_(.*)")
@@ -298,8 +303,9 @@ def write_to_charon_alignment_results(job_id, return_code, run_dir=None):
     #this returns url to all the seq runs of this library, sample, project
     url = charon_session.construct_charon_url("seqruns", project_id, sample_id, library_id)
     #now i need to check with one is my run id, I need to match the runid field with my local run_id
-    seqruns_response = charon_session.get(url)
-    if seqruns_response.status_code != 200:
+    try:
+        seqruns_response = charon_session.get(url)
+    except (RuntimeError, ValueError):
         error_msg = ('Error accessing database while updaiting alignment statistics'
                      'for project {} sample {} library {} run {}  could not '
                      'update Charon: {}'.format(project_id, sample_id, library_id,
@@ -395,6 +401,7 @@ def write_to_charon_alignment_results(job_id, return_code, run_dir=None):
         seq_run_to_update_dict = delete_seq_run_update(seq_run_to_update)
 
 
+    ## HERE
     response_obj = charon_session.put(url, json.dumps(seq_run_to_update_dict))
     if response_obj.status_code != 204:
         error_msg = ('Failed to update run alignment status for run "{}" in project {} '
