@@ -8,8 +8,13 @@ class TestCharonFunctions(unittest.TestCase):
 
     def setUp(self):
         self.session = CharonSession()
+        # Project
         self.p_id = "P100000"
         self.p_name = "Y.Mom_14_01"
+        # Sample
+        self.s_id = "{}_101".format(self.p_id)
+        # Libprep
+        self.l_id = "A"
 
     def test_construct_charon_url(self):
         append_list = ["road","to","nowhere"]
@@ -40,10 +45,54 @@ class TestCharonFunctions(unittest.TestCase):
         # 409 Document revision conflict
         ## not sure how to fake this one
 
-    def test_project_create_update_delete(self):
-        self.session.project_create(self.p_id)
-        self.session.project_update(proj_id=self.p_id, name=self.p_name)
-        self.session.project_delete(proj_id=self.p_id)
 
-    def projects_get_all(self):
-        self.projects_get_all()
+    # Test these -- can pass data dict directly
+    def test_get(self):
+        pass
+
+    def test_post(self):
+        pass
+
+    def test_put(self):
+        pass
+
+    def test_delete(self):
+        pass
+
+    #
+    # These functions all raise an Exception if there's any issue
+    # They're numbered as they must occur in this order
+
+    def test_01_project_create(self):
+        self.session.project_create(self.p_id)
+
+    def test_02_projects_get_all(self):
+        self.session.projects_get_all()
+
+    def test_03_project_update(self):
+        self.session.project_update(projectid=self.p_id, name=self.p_name)
+
+    def test_04_sample_create(self):
+        self.session.sample_create(projectid=self.p_id, sampleid=self.s_id)
+
+    def test_05_samples_get_all(self):
+        self.session.samples_get_all(projectid=self.p_id)
+
+    def test_06_sample_update(self):
+        self.session.sample_update(projectid=self.p_id, sampleid=self.s_id,
+                                   status="RUNNING")
+
+    def test_07_libprep_create(self):
+        self.session.libprep_create(projectid=self.p_id, sampleid=self.s_id,
+                                    libprepid=self.l_id)
+
+    def test_08_libpreps_get_all(self):
+        self.session.libpreps_get_all(projectid=self.p_id, sampleid=self.s_id)
+
+    def test_09_libprep_update(self):
+        self.session.libprep_update(projectid=self.p_id, sampleid=self.s_id,
+                                   libprepid=self.l_id, status="RUNNING")
+
+    def test_99_project_delete(self):
+        self.session.project_delete(projectid=self.p_id)
+
