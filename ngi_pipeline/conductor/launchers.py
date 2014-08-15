@@ -2,7 +2,12 @@
 
 from __future__ import print_function
 
-from ngi_pipeline.log import minimal_logger
+import importlib
+
+from ngi_pipeline.database.communicate import get_workflow_for_project
+from ngi_pipeline.database.process_tracking import check_if_flowcell_analysis_are_running, \
+                                                   record_process_flowcell
+from ngi_pipeline.log.loggers import minimal_logger
 from ngi_pipeline.utils.classes import with_ngi_config
 
 LOG = minimal_logger(__name__)
@@ -164,8 +169,8 @@ def trigger_sample_level_analysis(config=None, config_file_path=None):
     :param list config_file_path: The path to the NGI configuration file; optional.
     """
     #start by getting all projects, this will likely need a specific API
-    charon_session = get_charon_session()
-    url = construct_charon_url("projects")
+    charon_session = CharonSession()
+    url = charon_session.construct_charon_url("projects")
     projects_response = charon_session.get(url)
     if projects_response.status_code != 200:
         error_msg = ('Error accessing database: could not get all projects: {}'.format(project_response.reason))
@@ -209,7 +214,7 @@ def trigger_sample_level_analysis(config=None, config_file_path=None):
         #knows that are the conditions that need to be made
         LOG.info('Checking for ready to be analysed samples in project {} with workflow {}'.format(project_id, workflow))
         #get all the samples from Charon
-        url = construct_charon_url("samples", project_id)
+        url = charon_session.construct_charon_url("samples", project_id)
         samples_response = charon_session.get(url)
         if samples_response.status_code != 200:
             error_msg = ('Error accessing database: could not get samples for projects: {}'.format(project_id,

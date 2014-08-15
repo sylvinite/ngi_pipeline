@@ -2,10 +2,19 @@
 
 from __future__ import print_function
 
+import glob
+import os
+import re
+import sys
 
+from ngi_pipeline.conductor.classes import NGIProject
 from ngi_pipeline.conductor.launchers import launch_analysis_for_flowcells
-from ngi_pipeline.log import minimal_logger
+from ngi_pipeline.database.communicate import get_project_id_from_name
+from ngi_pipeline.log.loggers import minimal_logger
 from ngi_pipeline.utils.classes import with_ngi_config
+from ngi_pipeline.utils.filesystem import do_rsync, safe_makedir
+from ngi_pipeline.utils.parsers import FlowcellRunMetricsParser, \
+                                       determine_library_prep_from_fcid
 
 LOG = minimal_logger(__name__)
 
@@ -57,10 +66,10 @@ def process_demultiplexed_flowcells(demux_fcid_dirs, restrict_to_projects=None,
     for demux_fcid_dir in demux_fcid_dirs_set:
         # These will be a bunch of Project objects each containing Samples, FCIDs, lists of fastq files
         projects_to_analyze = setup_analysis_directory_structure(demux_fcid_dir,
-                                                                 config,
                                                                  projects_to_analyze,
                                                                  restrict_to_projects,
-                                                                 restrict_to_samples)
+                                                                 restrict_to_samples,
+                                                                 config)
     if not projects_to_analyze:
         if restrict_to_projects:
             error_message = ("No projects found to process; the specified flowcells "
