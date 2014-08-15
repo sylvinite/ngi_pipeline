@@ -42,8 +42,8 @@ def determine_library_prep_from_fcid(project_id, sample_name, fcid):
         all_seqruns_response = charon_session.get(url)
         if all_seqruns_response.status_code != 200:
             raise RuntimeError("Error when accessing Charon DB: "
-                               "{}: {}".format(libpreps_response.status_code,
-                                               libpreps_response.reason))
+                               "{}: {}".format(all_seqruns_response.status_code,
+                                               all_seqruns_response.reason))
         for seqrun in all_seqruns_response.json()['seqruns']:
             url = charon_session.construct_charon_url("seqrun", project_id,
                                                       sample_name,
@@ -52,8 +52,8 @@ def determine_library_prep_from_fcid(project_id, sample_name, fcid):
             seqrun_response = charon_session.get(url)
             if seqrun_response.status_code != 200:
                 raise RuntimeError("Error when accessing Charon DB: "
-                                   "{}: {}".format(libpreps_response.status_code,
-                                                   libpreps_response.reason))
+                                   "{}: {}".format(seqrun_response.status_code,
+                                                   seqrun_response.reason))
             seqrun_runid = seqrun_response.json()["runid"]
             if seqrun_runid.split("_")[3] == fcid:
                 return libprep['libprepid']
@@ -420,9 +420,9 @@ class FlowcellRunMetricsParser(RunMetricsParser):
 
         :returns: parsed data structure
         """
-        infile = os.path.join(os.path.abspath(self.path), fn)
+        infile_path = os.path.join(os.path.abspath(self.path), fn)
         self.log.info("Reading run parameters from file {}".format(infile_path))
-        with open(infile) as f:
+        with open(infile_path) as f:
             parser = RunParametersParser()
             data = parser.parse(f)
         return data
