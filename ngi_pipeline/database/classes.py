@@ -48,10 +48,10 @@ class CharonSession(requests.Session):
                                'runid', 'seq_qc_flag', 'demux_qc_flag',
                                'mean_coverage', 'std_coverage', 'GC_percentage',
                                'aligned_bases', 'mapped_bases', 'mapped_reads',
-                               'reads', 'sequenced_bases', 'windows', 'bam_file',
+                               'total_reads', 'sequenced_bases', 'windows', 'bam_file',
                                'output_file', 'mean_mapping_quality', 'bases_number',
                                'contigs_number', 'mean_autosomal_coverage', 'lanes',
-                               'alignment_coverage')
+                               'alignment_coverage', 'reads_per_lane')
 
     ## Another option is to build this into the get/post/put/delete requests
     ## --> Do we ever need to call this (or those) separately?
@@ -128,8 +128,8 @@ class CharonSession(requests.Session):
         return self.get(self.construct_charon_url('libpreps', projectid, sampleid))
 
     # SeqRun
-    def seqrun_create(self, projectid, sampleid, libprepid, seqrunid, reads,
-                      mean_autosomal_coverage,
+    def seqrun_create(self, projectid, sampleid, libprepid, seqrunid,
+                      total_reads, mean_autosomal_coverage, reads_per_lane=None,
                       sequencing_status=None, alignment_status=None, runid=None,
                       seq_qc_flag=None, demux_qc_flag=None, mean_coverage=None,
                       std_coverage=None, GC_percentage=None, aligned_bases=None,
@@ -148,8 +148,8 @@ class CharonSession(requests.Session):
         url = self.construct_charon_url("seqrun", projectid, sampleid, libprepid, seqrunid)
         self.get(url)
 
-    def seqrun_update(self, projectid, sampleid, libprepid, seqrunid, reads=None,
-                      mean_autosomal_coverage=None,
+    def seqrun_update(self, projectid, sampleid, libprepid, seqrunid,
+                      total_reads=None, mean_autosomal_coverage=None, reads_per_lane=None,
                       sequencing_status=None, alignment_status=None, runid=None,
                       seq_qc_flag=None, demux_qc_flag=None, mean_coverage=None,
                       std_coverage=None, GC_percentage=None, aligned_bases=None,
@@ -184,19 +184,19 @@ class validate_response(object):
         self.FAILURE_CODES = {
                 400: (CharonError, ("Charon access failure: invalid input "
                                    "data (reason '{response.reason}' / "
-                                   "code '{response.status_code}' / "
+                                   "code {response.status_code} / "
                                    "url '{response.url}')")),
                 404: (CharonError, ("Charon access failure: not found "
                                    "in database (reason '{response.reason}' / "
-                                   "code '{response.status_code}'/ "
+                                   "code {response.status_code} / "
                                    "url '{response.url}')")), # when else can we get this? malformed URL?
                 405: (CharonError, ("Charon access failure: method not "
                                      "allowed (reason '{response.reason}' / "
-                                     "code '{response.status_code}' / "
+                                     "code {response.status_code} / "
                                      "url '{response.url}')")),
                 409: (CharonError, ("Charon access failure: document "
                                    "revision conflict (reason '{response.reason}' / "
-                                   "code '{response.status_code}' / "
+                                   "code {response.status_code} / "
                                    "url '{response.url}')")),}
 
     def __call__(self, *args, **kwargs):
@@ -206,8 +206,8 @@ class validate_response(object):
                 err_type, err_msg = self.FAILURE_CODES[response.status_code]
             except KeyError:
                 # Error code undefined, used generic text
-                err_type = RuntimeError
+                err_type = CharonError
                 err_msg = ("Charon access failure: {response.reason} "
-                           "(code {response.status_code})(url {response.url})")
+                           "(code {response.status_code} / url '{response.url}')")
             raise err_type(err_msg.format(**locals()))
         return response
