@@ -42,8 +42,16 @@ class CharonSession(requests.Session):
         self._project_params = ("projectid", "name", "status", "pipeline", "bpa")
         self._sample_params = ("sampleid", "status", "received", "qc_status",
                                "genotyping_status", "genotyping_concordance",
-                               "lims_initial_qc", "total_autosomal_coverage")
+                               "lims_initial_qc", "total_autosome_coverage")
         self._libprep_params = ("libprepid", "limsid", "status")
+        self._seqrun_params = ('seqrunid', 'sequencing_status', 'alignment_status',
+                               'runid', 'seq_qc_flag', 'demux_qc_flag',
+                               'mean_coverage', 'std_coverage', 'GC_percentage',
+                               'aligned_bases', 'mapped_bases', 'mapped_reads',
+                               'reads', 'sequenced_bases', 'windows', 'bam_file',
+                               'output_file', 'mean_mapping_quality', 'bases_number',
+                               'contigs_number', 'mean_autosomal_coverage', 'lanes',
+                               'alignment_coverage')
 
     ## Another option is to build this into the get/post/put/delete requests
     ## --> Do we ever need to call this (or those) separately?
@@ -51,6 +59,7 @@ class CharonSession(requests.Session):
         """Build a Charon URL, appending any *args passed."""
         return "{}/api/v1/{}".format(self._base_url,'/'.join([str(a) for a in args]))
 
+    # Project
     def project_create(self, projectid, name=None, status=None, pipeline=None, bpa=None):
         l_dict = locals()
         data = { k: l_dict.get(k) for k in self._project_params }
@@ -72,6 +81,7 @@ class CharonSession(requests.Session):
     def project_delete(self, projectid):
         return self.delete(self.construct_charon_url('project', projectid))
 
+    # Sample
     def sample_create(self, projectid, sampleid, status=None, received=None,
                       qc_status=None, genotyping_status=None,
                       genotyping_concordance=None, lims_initial_qc=None,
@@ -97,6 +107,7 @@ class CharonSession(requests.Session):
     def samples_get_all(self, projectid):
         return self.get(self.construct_charon_url('samples', projectid))
 
+    # LibPrep
     def libprep_create(self, projectid, sampleid, libprepid, status=None, limsid=None):
         url = self.construct_charon_url("libprep", projectid, sampleid)
         l_dict = locals()
@@ -116,6 +127,45 @@ class CharonSession(requests.Session):
     def libpreps_get_all(self, projectid, sampleid):
         return self.get(self.construct_charon_url('libpreps', projectid, sampleid))
 
+    # SeqRun
+    def seqrun_create(self, projectid, sampleid, libprepid, seqrunid, reads,
+                      mean_autosomal_coverage,
+                      sequencing_status=None, alignment_status=None, runid=None,
+                      seq_qc_flag=None, demux_qc_flag=None, mean_coverage=None,
+                      std_coverage=None, GC_percentage=None, aligned_bases=None,
+                      mapped_bases=None, mapped_reads=None,
+                      sequenced_bases=None, windows=None, bam_file=None,
+                      output_file=None, mean_mapping_quality=None,
+                      bases_number=None, contigs_number=None,
+                      lanes=None,
+                      alignment_coverage=None):
+        url = self.construct_charon_url("seqrun", projectid, sampleid, libprepid)
+        l_dict = locals()
+        data = { k: l_dict.get(k) for k in self._seqrun_params }
+        self.post(url, json.dumps(data))
+
+    def seqrun_get(self, projectid, sampleid, libprepid, seqrunid):
+        url = self.construct_charon_url("seqrun", projectid, sampleid, libprepid, seqrunid)
+        self.get(url)
+
+    def seqrun_update(self, projectid, sampleid, libprepid, seqrunid, reads=None,
+                      mean_autosomal_coverage=None,
+                      sequencing_status=None, alignment_status=None, runid=None,
+                      seq_qc_flag=None, demux_qc_flag=None, mean_coverage=None,
+                      std_coverage=None, GC_percentage=None, aligned_bases=None,
+                      mapped_bases=None, mapped_reads=None,
+                      sequenced_bases=None, windows=None, bam_file=None,
+                      output_file=None, mean_mapping_quality=None,
+                      bases_number=None, contigs_number=None,
+                      lanes=None,
+                      alignment_coverage=None):
+        url = self.construct_charon_url("seqrun", projectid, sampleid, libprepid, seqrunid)
+        l_dict = locals()
+        data = { k: l_dict.get(k) for k in self._seqrun_params }
+        self.put(url, json.dumps(data))
+
+    def seqruns_get_all(self, projectid, sampleid, libprepid):
+        return self.get(self.construct_charon_url('seqruns', projectid, sampleid, libprepid))
 
 
 class validate_response(object):
@@ -129,17 +179,21 @@ class validate_response(object):
         # There are certainly more failure codes I need to add here
         self.FAILURE_CODES = {
                 400: (ValueError, ("Charon access failure: invalid input "
-                                   "data (code {response.status_code})"
-                                   "(url {response.url})")),
+                                   "data (reason '{response.reason}' / "
+                                   "code '{response.status_code}' / "
+                                   "url '{response.url}')")),
                 404: (ValueError, ("Charon access failure: no such "
-                                   "{obj_type} in database (code {response.status_code}) "
-                                   "(url {response.url})")), # when else can we get this? malformed URL?
+                                   "{obj_type} in database (reason '{response.reason}' / "
+                                   "code '{response.status_code}'/ "
+                                   "url '{response.url}')")), # when else can we get this? malformed URL?
                 405: (RuntimeError, ("Charon access failure: method not "
-                                     "allowed (code {response.status_code})"
-                                     "(url {response.url})")),
+                                     "allowed (reason '{response.reason}' / "
+                                     "code '{response.status_code}' / "
+                                     "url '{response.url}')")),
                 409: (ValueError, ("Charon access failure: document "
-                                   "revision conflict (code {response.status_code})"
-                                   "(url {response.url})")),}
+                                   "revision conflict (reason '{response.reason}' / "
+                                   "code '{response.status_code}' / "
+                                   "url '{response.url}')")),}
 
     def __call__(self, *args, **kwargs):
         # Testing - either remove or resolve

@@ -3,18 +3,24 @@ import requests
 import unittest
 
 from ngi_pipeline.database.classes import CharonSession, CHARON_BASE_URL
+from ngi_pipeline.tests.generate_test_data import generate_run_id
 
 class TestCharonFunctions(unittest.TestCase):
 
-    def setUp(self):
-        self.session = CharonSession()
+    @classmethod
+    def setUpClass(cls):
+        cls.session = CharonSession()
         # Project
-        self.p_id = "P100000"
-        self.p_name = "Y.Mom_14_01"
+        cls.p_id = "P100000"
+        cls.p_name = "Y.Mom_14_01"
         # Sample
-        self.s_id = "{}_101".format(self.p_id)
+        cls.s_id = "{}_101".format(cls.p_id)
         # Libprep
-        self.l_id = "A"
+        cls.l_id = "A"
+        # Seqrun
+        cls.sr_id = generate_run_id()
+        cls.sr_reads = 1000000
+        cls.sr_mac = 30
 
     def test_construct_charon_url(self):
         append_list = ["road","to","nowhere"]
@@ -93,6 +99,22 @@ class TestCharonFunctions(unittest.TestCase):
         self.session.libprep_update(projectid=self.p_id, sampleid=self.s_id,
                                    libprepid=self.l_id, status="RUNNING")
 
-    def test_99_project_delete(self):
+    def test_10_seqrun_create(self):
+        self.session.seqrun_create(projectid=self.p_id, sampleid=self.s_id,
+                                    libprepid=self.l_id, seqrunid=self.sr_id,
+                                    reads=self.sr_reads,
+                                    mean_autosomal_coverage=self.sr_mac)
+
+    def test_11_seqruns_get_all(self):
+        self.session.seqruns_get_all(projectid=self.p_id, sampleid=self.s_id,
+                                     libprepid=self.l_id)
+
+    def test_12_seqrun_update(self):
+        self.session.seqrun_update(projectid=self.p_id, sampleid=self.s_id,
+                                   libprepid=self.l_id, seqrunid=self.sr_id,
+                                   sequencing_status="RUNNING")
+
+
+    def test_13_project_delete(self):
         self.session.project_delete(projectid=self.p_id)
 
