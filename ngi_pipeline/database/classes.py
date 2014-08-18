@@ -168,7 +168,6 @@ class CharonSession(requests.Session):
         return self.get(self.construct_charon_url('seqruns', projectid, sampleid, libprepid))
 
 
-# Unsure which exception to subclass
 class CharonError(RuntimeError):
     pass
 
