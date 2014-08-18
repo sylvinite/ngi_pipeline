@@ -42,7 +42,7 @@ class CharonSession(requests.Session):
         self._project_params = ("projectid", "name", "status", "pipeline", "bpa")
         self._sample_params = ("sampleid", "status", "received", "qc_status",
                                "genotyping_status", "genotyping_concordance",
-                               "lims_initial_qc", "total_autosome_coverage")
+                               "lims_initial_qc", "total_autosomal_coverage")
         self._libprep_params = ("libprepid", "limsid", "status")
         self._seqrun_params = ('seqrunid', 'sequencing_status', 'alignment_status',
                                'runid', 'seq_qc_flag', 'demux_qc_flag',
