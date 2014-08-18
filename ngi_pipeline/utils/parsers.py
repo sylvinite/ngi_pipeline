@@ -54,7 +54,7 @@ def determine_library_prep_from_fcid(project_id, sample_name, fcid):
                 raise RuntimeError("Error when accessing Charon DB: "
                                    "{}: {}".format(seqrun_response.status_code,
                                                    seqrun_response.reason))
-            seqrun_runid = seqrun_response.json()["runid"]
+            seqrun_runid = seqrun_response.json()["seqrunid"]
             if seqrun_runid.split("_")[3] == fcid:
                 return libprep['libprepid']
     raise ValueError('No library prep found for project "{}" / sample "{}" '
@@ -465,7 +465,7 @@ def parse_genome_results(filename):
                         mac+=float(ccp.search(line).group(1))
 #postprocess : remove useless stuff
         mac/=22
-        data['mean_autosome_coverage']=mac
+        data['mean_autosomal_coverage']=mac
         data['mean_coverage']=data['Coverage']['mean coverageData']
 
 
@@ -475,7 +475,7 @@ def parse_genome_results(filename):
         data['aligned_bases']=data['Globals']['number of aligned bases']
         data['mapped_bases']=data['Globals']['number of mapped bases']
         data['mapped_reads']=data['Globals']['number of mapped reads']
-        data['reads']=data['Globals']['number of reads']
+        data['reads_per_lane']=data['Globals']['number of reads']
         data['sequenced_bases']=data['Globals']['number of sequenced bases']
         data['bam_file']=data['Input']['bam file']
         data['output_file']=data['Input']['outfile']
