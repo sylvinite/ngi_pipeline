@@ -168,6 +168,11 @@ class CharonSession(requests.Session):
         return self.get(self.construct_charon_url('seqruns', projectid, sampleid, libprepid))
 
 
+# Unsure which exception to subclass
+class CharonError(RuntimeError):
+    pass
+
+
 class validate_response(object):
     """
     Validate or raise an appropriate exception for a Charon API query.
@@ -178,19 +183,19 @@ class validate_response(object):
         self.SUCCESS_CODES = (200, 201, 204)
         # There are certainly more failure codes I need to add here
         self.FAILURE_CODES = {
-                400: (ValueError, ("Charon access failure: invalid input "
+                400: (CharonError, ("Charon access failure: invalid input "
                                    "data (reason '{response.reason}' / "
                                    "code '{response.status_code}' / "
                                    "url '{response.url}')")),
-                404: (ValueError, ("Charon access failure: not found "
+                404: (CharonError, ("Charon access failure: not found "
                                    "in database (reason '{response.reason}' / "
                                    "code '{response.status_code}'/ "
                                    "url '{response.url}')")), # when else can we get this? malformed URL?
-                405: (RuntimeError, ("Charon access failure: method not "
+                405: (CharonError, ("Charon access failure: method not "
                                      "allowed (reason '{response.reason}' / "
                                      "code '{response.status_code}' / "
                                      "url '{response.url}')")),
-                409: (ValueError, ("Charon access failure: document "
+                409: (CharonError, ("Charon access failure: document "
                                    "revision conflict (reason '{response.reason}' / "
                                    "code '{response.status_code}' / "
                                    "url '{response.url}')")),}
