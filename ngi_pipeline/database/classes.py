@@ -196,8 +196,6 @@ class validate_response(object):
                                    "url '{response.url}')")),}
 
     def __call__(self, *args, **kwargs):
-        # Testing - either remove or resolve
-        obj_type = "object"
         response = self.f(*args, **kwargs)
         if response.status_code not in self.SUCCESS_CODES:
             try:
