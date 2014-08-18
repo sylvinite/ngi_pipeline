@@ -344,10 +344,10 @@ def write_to_charon_alignment_results(job_id, return_code, run_dir=None):
     all_algn_completed = True  # this variable is used to check that all alignments have a result
     #no I can start to put things
     if return_code is None:
-        seq_run_to_update_dict["alignment_status"]="Working" #mark on charon that we are aligning this run
+        seq_run_to_update_dict["alignment_status"]="RUNNING" #mark on charon that we are aligning this run
     elif return_code == 0:
         #in this case I need to update the alignment statistics for each lane in this seq run
-        if "alignment_status" in seq_run_to_update_dict and seq_run_to_update_dict["alignment_status"] == "Done":
+        if "alignment_status" in seq_run_to_update_dict and seq_run_to_update_dict["alignment_status"] == "DONE":
             warn_msg = ('Sequencing run {} already declared finished but now re-updaiting it '
                         'this will couse over-writing of all fields'.format(run_id))
             LOG.warn(warn_msg)
@@ -383,9 +383,9 @@ def write_to_charon_alignment_results(job_id, return_code, run_dir=None):
                       'currently processing runid {} for project {}, sample {}, libprep {}'.format(run_id,
                       project_id, sample_id, library_id))
             LOG.error(error_msg)
-            seq_run_to_update_dict["alignment_status"] = "Aborted"
+            seq_run_to_update_dict["alignment_status"] = "COMPUTATION_FAILED"
         else:
-            seq_run_to_update_dict["alignment_status"] = "Done"
+            seq_run_to_update_dict["alignment_status"] = "DONE"
 
     else:
         #Alignment failed, store it as aborted, I will not use this until it is not fixed
@@ -393,10 +393,10 @@ def write_to_charon_alignment_results(job_id, return_code, run_dir=None):
                       'currently processing runid {} for project {}, sample {}, libprep {}'.format(run_id,
                       project_id, sample_id, library_id))
         LOG.error(error_msg)
-        seq_run_to_update_dict["alignment_status"] = "Aborted"
+        seq_run_to_update_dict["alignment_status"] = "COMPUTATION_FAILED"
 
 
-    if seq_run_to_update_dict["alignment_status"] == "Aborted":
+    if seq_run_to_update_dict["alignment_status"] == "DONE":
         #in such a case I do not update the other fields
         seq_run_to_update_dict = delete_seq_run_update(seq_run_to_update)
 
