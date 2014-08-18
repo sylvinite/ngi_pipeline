@@ -42,7 +42,7 @@ class CharonSession(requests.Session):
         self._project_params = ("projectid", "name", "status", "pipeline", "bpa")
         self._sample_params = ("sampleid", "status", "received", "qc_status",
                                "genotyping_status", "genotyping_concordance",
-                               "lims_initial_qc", "total_autosome_coverage")
+                               "lims_initial_qc", "total_autosomal_coverage")
         self._libprep_params = ("libprepid", "limsid", "status")
         self._seqrun_params = ('seqrunid', 'sequencing_status', 'alignment_status',
                                'runid', 'seq_qc_flag', 'demux_qc_flag',
@@ -182,8 +182,8 @@ class validate_response(object):
                                    "data (reason '{response.reason}' / "
                                    "code '{response.status_code}' / "
                                    "url '{response.url}')")),
-                404: (ValueError, ("Charon access failure: no such "
-                                   "{obj_type} in database (reason '{response.reason}' / "
+                404: (ValueError, ("Charon access failure: not found "
+                                   "in database (reason '{response.reason}' / "
                                    "code '{response.status_code}'/ "
                                    "url '{response.url}')")), # when else can we get this? malformed URL?
                 405: (RuntimeError, ("Charon access failure: method not "
