@@ -182,8 +182,8 @@ class validate_response(object):
                                    "data (reason '{response.reason}' / "
                                    "code '{response.status_code}' / "
                                    "url '{response.url}')")),
-                404: (ValueError, ("Charon access failure: no such "
-                                   "{obj_type} in database (reason '{response.reason}' / "
+                404: (ValueError, ("Charon access failure: not found "
+                                   "in database (reason '{response.reason}' / "
                                    "code '{response.status_code}'/ "
                                    "url '{response.url}')")), # when else can we get this? malformed URL?
                 405: (RuntimeError, ("Charon access failure: method not "
