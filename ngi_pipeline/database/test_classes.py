@@ -2,7 +2,7 @@ import json
 import requests
 import unittest
 
-from ngi_pipeline.database.classes import CharonSession, CHARON_BASE_URL
+from ngi_pipeline.database.classes import CharonSession, CHARON_BASE_URL, CharonError
 from ngi_pipeline.tests.generate_test_data import generate_run_id
 
 class TestCharonFunctions(unittest.TestCase):
@@ -34,17 +34,21 @@ class TestCharonFunctions(unittest.TestCase):
 
         # 400 Invalid input data
         data = {"malformed": "data"}
-        with self.assertRaises(ValueError):
+        with self.assertRaises(CharonError):
+            session.post(session.construct_charon_url("project"),
+                         data=json.dumps(data))
+        # Should work with RuntimeError as well
+        with self.assertRaises(RuntimeError):
             session.post(session.construct_charon_url("project"),
                          data=json.dumps(data))
 
         # 404 Object not found
         p_id = "P000"
-        with self.assertRaises(ValueError):
+        with self.assertRaises(CharonError):
             session.get(session.construct_charon_url("project", p_id))
 
         # 405 Method not allowed
-        with self.assertRaises(RuntimeError):
+        with self.assertRaises(CharonError):
             # Should be GET
             session.post(session.construct_charon_url("projects"))
 
