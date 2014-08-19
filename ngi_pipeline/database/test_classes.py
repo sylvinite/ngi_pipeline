@@ -19,7 +19,7 @@ class TestCharonFunctions(unittest.TestCase):
         cls.l_id = "A"
         # Seqrun
         cls.sr_id = generate_run_id()
-        cls.sr_reads = 1000000
+        cls.sr_total_reads = 1000000
         cls.sr_mac = 30
 
     def test_construct_charon_url(self):
@@ -106,7 +106,7 @@ class TestCharonFunctions(unittest.TestCase):
     def test_10_seqrun_create(self):
         self.session.seqrun_create(projectid=self.p_id, sampleid=self.s_id,
                                     libprepid=self.l_id, seqrunid=self.sr_id,
-                                    reads=self.sr_reads,
+                                    total_reads=self.sr_total_reads,
                                     mean_autosomal_coverage=self.sr_mac)
 
     def test_11_seqruns_get_all(self):
