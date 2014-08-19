@@ -1,7 +1,7 @@
 import argparse
 import time
 
-from ngi_pipeline.conductor.flowcell import process_demultiplexed_flowcell
+from ngi_pipeline.conductor.flowcell import process_demultiplexed_flowcell, process_demultiplexed_flowcells
 from ngi_pipeline.conductor.launchers import trigger_sample_level_analysis
 from ngi_pipeline.database.process_tracking import check_update_jobs_status
 
