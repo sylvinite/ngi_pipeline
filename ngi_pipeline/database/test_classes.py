@@ -2,19 +2,25 @@ import json
 import requests
 import unittest
 
-from ngi_pipeline.database.classes import CharonSession, CHARON_BASE_URL
+from ngi_pipeline.database.classes import CharonSession, CHARON_BASE_URL, CharonError
+from ngi_pipeline.tests.generate_test_data import generate_run_id
 
 class TestCharonFunctions(unittest.TestCase):
 
-    def setUp(self):
-        self.session = CharonSession()
+    @classmethod
+    def setUpClass(cls):
+        cls.session = CharonSession()
         # Project
-        self.p_id = "P100000"
-        self.p_name = "Y.Mom_14_01"
+        cls.p_id = "P100000"
+        cls.p_name = "Y.Mom_14_01"
         # Sample
-        self.s_id = "{}_101".format(self.p_id)
+        cls.s_id = "{}_101".format(cls.p_id)
         # Libprep
-        self.l_id = "A"
+        cls.l_id = "A"
+        # Seqrun
+        cls.sr_id = generate_run_id()
+        cls.sr_total_reads = 1000000
+        cls.sr_mac = 30
 
     def test_construct_charon_url(self):
         append_list = ["road","to","nowhere"]
@@ -28,17 +34,21 @@ class TestCharonFunctions(unittest.TestCase):
 
         # 400 Invalid input data
         data = {"malformed": "data"}
-        with self.assertRaises(ValueError):
+        with self.assertRaises(CharonError):
+            session.post(session.construct_charon_url("project"),
+                         data=json.dumps(data))
+        # Should work with RuntimeError as well
+        with self.assertRaises(RuntimeError):
             session.post(session.construct_charon_url("project"),
                          data=json.dumps(data))
 
         # 404 Object not found
         p_id = "P000"
-        with self.assertRaises(ValueError):
+        with self.assertRaises(CharonError):
             session.get(session.construct_charon_url("project", p_id))
 
         # 405 Method not allowed
-        with self.assertRaises(RuntimeError):
+        with self.assertRaises(CharonError):
             # Should be GET
             session.post(session.construct_charon_url("projects"))
 
@@ -93,6 +103,22 @@ class TestCharonFunctions(unittest.TestCase):
         self.session.libprep_update(projectid=self.p_id, sampleid=self.s_id,
                                    libprepid=self.l_id, status="RUNNING")
 
-    def test_99_project_delete(self):
+    def test_10_seqrun_create(self):
+        self.session.seqrun_create(projectid=self.p_id, sampleid=self.s_id,
+                                    libprepid=self.l_id, seqrunid=self.sr_id,
+                                    total_reads=self.sr_total_reads,
+                                    mean_autosomal_coverage=self.sr_mac)
+
+    def test_11_seqruns_get_all(self):
+        self.session.seqruns_get_all(projectid=self.p_id, sampleid=self.s_id,
+                                     libprepid=self.l_id)
+
+    def test_12_seqrun_update(self):
+        self.session.seqrun_update(projectid=self.p_id, sampleid=self.s_id,
+                                   libprepid=self.l_id, seqrunid=self.sr_id,
+                                   sequencing_status="RUNNING")
+
+
+    def test_13_project_delete(self):
         self.session.project_delete(projectid=self.p_id)
 
