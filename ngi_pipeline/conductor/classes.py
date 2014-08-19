@@ -1,5 +1,3 @@
-## TODO make these hashable (__hash__, __eq__) in some meaningful way
-## TODO Add path checking, os.path.abspath / os.path.exists
 class NGIObject(object):
     def __init__(self, name, dirname, subitem_type):
         self.name = name
@@ -29,25 +27,33 @@ class NGIObject(object):
 
 
 class NGIProject(NGIObject):
-    def __init__(self, name, dirname, base_path):
+    def __init__(self, name, dirname, project_id, base_path):
         self.base_path = base_path
         super(NGIProject, self).__init__(name, dirname, subitem_type=NGISample)
         self.samples = self._subitems
         self.add_sample = self._add_subitem
+        self.project_id = project_id
         self.command_lines = []
 
 
 class NGISample(NGIObject):
     def __init__(self, *args, **kwargs):
-        super(NGISample, self).__init__(subitem_type=NGIFCID, *args, **kwargs)
-        self.fcids = self._subitems
-        self.add_fcid = self._add_subitem
+        super(NGISample, self).__init__(subitem_type=NGILibraryPrep, *args, **kwargs)
+        self.libpreps = self._subitems
+        self.add_libprep = self._add_subitem
 
 
-class NGIFCID(NGIObject):
+class NGILibraryPrep(NGIObject):
     def __init__(self, *args, **kwargs):
-        super(NGIFCID, self).__init__(subitem_type=None, *args, **kwargs)
-        self.fastqs = self._subitems = []
+        super(NGILibraryPrep, self).__init__(subitem_type=NGISeqRun, *args, **kwargs)
+        self.seqruns = self._subitems
+        self.add_seqrun = self._add_subitem
+
+
+class NGISeqRun(NGIObject):
+    def __init__(self, *args, **kwargs):
+        super(NGISeqRun, self).__init__(subitem_type=None, *args, **kwargs)
+        self.fastq_files = self._subitems = []
         ## Not working
         #delattr(self, "_add_subitem")
 

@@ -4,18 +4,56 @@ import xmltodict
 import yaml
 
 
-def load_xml_config(config_file):
-    """Load XML config file, expanding environmental variables."""
-    # Could use functools.partial but I guess that's just being fancy
-    return load_generic_config(config_file, config_format="xml")
+def locate_ngi_config():
+    config_file_path = os.environ.get("NGI_CONFIG") or os.path.expandvars("$HOME/.ngipipeline/ngi_config.yaml")
+    if not os.path.isfile(config_file_path):
+        error_msg = ("Configuration file \"{}\" does not exist or is not a "
+                     "file. Cannot proceed.".format(config_file_path))
+        #LOG.error(error_msg)
+        raise RuntimeError(error_msg)
+    return config_file_path
 
 
-def load_yaml_config(config_file):
-    """Load YAML config file, expanding environmental variables."""
-    return load_generic_config(config_file, config_format="yaml")
+def load_json_config(config_file_path):
+    """Load XML config file, expanding environmental variables.
 
-## TODO verify that this works as expected, drinking too much coffee to test code
-def load_generic_config(config_file_path, config_format="yaml"):
+    :param str config_file_path: The path to the configuration file.
+
+    :returns: A dict of the parsed config file.
+    :rtype: dict
+    raises IOError: If the config file cannot be opened.
+    """
+    return load_generic_config(config_file_path, config_format="json")
+
+
+# This doesn't actually return the exact dict that would be used to write the XML file
+# because it wants to make my life more difficult
+def load_xml_config(config_file_path, xml_attribs=None):
+    """Load XML config file, expanding environmental variables.
+
+    :param str config_file_path: The path to the configuration file.
+    :param bool xml_attribs: Include/ignore XML attributes when constructing the dict.
+
+    :returns: A dict of the parsed config file.
+    :rtype: dict
+    :raises IOError: If the config file cannot be opened.
+    """
+    return load_generic_config(config_file_path, config_format="xml", xml_attribs=xml_attribs)
+
+
+def load_yaml_config(config_file_path):
+    """Load YAML config file, expanding environmental variables.
+
+    :param str config_file_path: The path to the configuration file.
+
+    :returns: A dict of the parsed config file.
+    :rtype: dict
+    :raises IOError: If the config file cannot be opened.
+    """
+    return load_generic_config(config_file_path, config_format="yaml")
+
+
+def load_generic_config(config_file_path, config_format="yaml", **kwargs):
     """Parse a configuration file, returning a dict. Supports yaml, xml, and json.
 
     :param str config_file_path: The path to the configuration file.
@@ -23,31 +61,22 @@ def load_generic_config(config_file_path, config_format="yaml"):
 
     :returns: A dict of the configuration file with environment variables expanded.
     :rtype: dict
-    :raises IOError: If config file cannot be opened.
+    :raises IOError: If the config file could not be opened.
+    :raises ValueError: If config file could not be parsed.
     """
     parsers_dict = {"json": json.load,
                     "xml": xmltodict.parse,
                     "yaml": yaml.load,}
     try:
-        file_ext = os.path.splitext(config_file_path)[1].replace(".", "")
-    except (IndexError, AttributeError):
-        file_ext = None
-    ## TODO Does this work? Coffee coffee
-    try:
         parser_fn = parsers_dict[config_format.lower()]
     except KeyError:
-        try:
-            # If the user-supplied format fails, try parsing using the format
-            # specified by the file extension
-            parser_fn = parsers_dict[file_ext.lower()]
-        except:
-            raise IOError("Cannot parse config files in format specified "
-                          "(not supported): \"{}\"".format(config_format))
+        raise ValueError("Cannot parse config files in format specified "
+                         "(\"{}\"): format not supported.".format(config_format))
     try:
         with open(config_file_path) as in_handle:
-            config = parser_fn(in_handle)
-        config = _expand_paths(config)
-        return config
+            config = parser_fn(in_handle, **kwargs)
+            config = _expand_paths(config)
+            return config
     except IOError as e:
         raise IOError("Could not open configuration file \"{}\".".format(config_file_path))
 
