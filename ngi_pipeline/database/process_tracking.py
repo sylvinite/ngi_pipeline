@@ -290,57 +290,31 @@ def write_to_charon_alignment_results(job_id, return_code, run_dir=None):
     else:
         alignment_status = "FAILED"
 
+
+
     ## A.Wedell_13_03_P567_102_A_130627_AH0JYUADXX
-    information_to_extract = re.compile("([a-zA-Z]\.[a-zA-Z]*_\d*_\d*)_(P\d*_\d*)_([A-Z])_(\d{6})_(.*)")
+    information_to_extract = re.compile("([a-zA-Z]\.[a-zA-Z]*_\d*_\d*)_(P\d*_\d*)_([A-Z])_(\d{6}_.{6}_\d{4}_.{10})")
     project_name = information_to_extract.match(job_id).group(1)
     project_id   = get_project_id_from_name(project_name)
     sample_id    = information_to_extract.match(job_id).group(2)
     library_id   = information_to_extract.match(job_id).group(3)
-    run_id_piper = information_to_extract.match(job_id).group(5)
-    run_id       = "{}_{}".format(information_to_extract.match(job_id).group(4),
-                                information_to_extract.match(job_id).group(5))
+    fc_id       = information_to_extract.match(job_id).group(4)
 
-    #this returns url to all the seq runs of this library, sample, project
-    url = charon_session.construct_charon_url("seqruns", project_id, sample_id, library_id)
-    #now i need to check with one is my run id, I need to match the runid field with my local run_id
+    information_to_extract_fc_id = re.compile("(\d{6})_(.{6})_(\d{4})_(.{10})")
+    run_id_piper = information_to_extract_fc_id.match(fc_id).group(4)
+
+    #this returns the correct seq eun for this library, sample, project
+    url = charon_session.construct_charon_url("seqrun", project_id, sample_id, library_id, fc_id)
     try:
-        seqruns_response = charon_session.get(url)
-    except (RuntimeError, ValueError):
-        error_msg = ('Error accessing database while updaiting alignment statistics'
-                     'for project {} sample {} library {} run {}  could not '
-                     'update Charon: {}'.format(project_id, sample_id, library_id,
-                      run_id, project_response.reason))
-        LOG.error(error_msg)
+        seq_run_to_update_dict_response = charon_session.get(url)
+    except (RuntimeError, ValueError) as e:
+        error_msg = ('Error accessing database for project "{}", sample {}; '
+                     'could not update Charon while performing best practice: '
+                     '{}'.format(project_id, sample_id,  e))
         raise RuntimeError(error_msg)
-    #get all seqruns for this lib prep and selcet the one I have to update
-    #Charon needs to allow this in a easyer way?
-    seqruns_dict            = seqruns_response.json()
-    seq_run_to_update       = -1
-    seq_run_to_update_dict  = {}
-    for seqrun in seqruns_dict["seqruns"]:
-        run_id_charon         = seqrun["runid"]
-        run_id_charon_extract = re.compile("(\d{6})_.*_.*_(.*)")
-        #create the run id as it is stored in the jobid field
-        run_id_to_check       = "{}_{}".format(run_id_charon_extract.match(run_id_charon).group(1),
-                                    run_id_charon_extract.match(run_id_charon).group(2))
-        if run_id_to_check == run_id:
-            if seq_run_to_update > 0:
-                error_msg = ('Error while trying to update seqrun {}. Found two hits on Charon'
-                            'that match the same runid. this is not possible'.format(run_id_charon))
-                LOG.error(error_msg)
-                raise RunTimeError(error_msg)
-            #otherwise I can update this entry
-            seq_run_to_update       = seqrun["seqrunid"]
-            seq_run_to_update_dict  = seqrun
+    seq_run_to_update_dict = seq_run_to_update_dict_response.json()
 
-    if seq_run_to_update == -1: #in this case I did not find a seqrun matching the one I want to update
-        error_msg = ('Error while trying to update seqrun {}. No Hits found on Charon '
-                            'that match the same runid. this is not possible'.format(run_id))
-        LOG.error(error_msg)
-        raise RunTimeError(error_msg)
 
-    #At this point I can update the correct seqrun
-    url = charon_session.construct_charon_url("seqrun", project_id, sample_id, library_id, seq_run_to_update)
     all_algn_completed = True  # this variable is used to check that all alignments have a result
     #no I can start to put things
     if return_code is None:
@@ -383,7 +357,7 @@ def write_to_charon_alignment_results(job_id, return_code, run_dir=None):
                       'currently processing runid {} for project {}, sample {}, libprep {}'.format(run_id,
                       project_id, sample_id, library_id))
             LOG.error(error_msg)
-            seq_run_to_update_dict["alignment_status"] = "COMPUTATION_FAILED"
+            seq_run_to_update_dict["alignment_status"] = "FAILED"
         else:
             seq_run_to_update_dict["alignment_status"] = "DONE"
 
@@ -393,53 +367,19 @@ def write_to_charon_alignment_results(job_id, return_code, run_dir=None):
                       'currently processing runid {} for project {}, sample {}, libprep {}'.format(run_id,
                       project_id, sample_id, library_id))
         LOG.error(error_msg)
-        seq_run_to_update_dict["alignment_status"] = "COMPUTATION_FAILED"
+        seq_run_to_update_dict["alignment_status"] = "FAILED"
 
 
-    if seq_run_to_update_dict["alignment_status"] == "DONE":
+    if seq_run_to_update_dict["alignment_status"] == "FAILED":
         #in such a case I do not update the other fields
         seq_run_to_update_dict = delete_seq_run_update(seq_run_to_update)
 
 
-    ## HERE
     response_obj = charon_session.put(url, json.dumps(seq_run_to_update_dict))
     if response_obj.status_code != 204:
         error_msg = ('Failed to update run alignment status for run "{}" in project {} '
                      'sample {}, library prep {} to  Charon database: {}'.format(run_id,
                       project_id, sample_id, library_id, response_obj.reason))
-        LOG.error(error_msg)
-        raise RuntimeError(error_msg)
-    #TODO now update the sample field the total_autosomal_coverage, this will go away once Denis implements
-    # an API for this
-    url = charon_session.construct_charon_url("seqruns", project_id, sample_id) #get all samples runs for this sample
-    seqruns_response = charon_session.get(url)
-    if seqruns_response.status_code != 200:
-        error_msg = ('Error accessing database while updaiting alignment statistics'
-                     'for project {} sample {}  could not '
-                     'update Charon: {}'.format(project_id, sample_id, project_response.reason))
-        LOG.error(error_msg)
-        raise RuntimeError(error_msg)
-    seqruns_dict            = seqruns_response.json()
-    total_autosomal_coverage = 0; #initialise the autosomal coverage to 0
-    for seqrun in seqruns_dict["seqruns"]:
-        if "mean_autosome_coverage" in seqrun:
-            total_autosomal_coverage += float(seqrun["mean_autosome_coverage"])
-    #now get the sample
-    url = charon_session.construct_charon_url("sample", project_id, sample_id) #get all samples runs for this sample
-    sample_response = charon_session.get(url)
-    if sample_response.status_code != 200:
-        error_msg = ('Error accessing database while updaiting total autosomal coverage'
-                     'for project {} sample {}  could not '
-                     'update Charon: {}'.format(project_id, sample_id, project_response.reason))
-        LOG.error(error_msg)
-        raise RuntimeError(error_msg)
-    sample_dict = sample_response.json()
-    sample_dict["total_autosomal_coverage"] = total_autosomal_coverage
-
-    response_obj = charon_session.put(url, json.dumps(sample_dict))
-    if response_obj.status_code != 204:
-        error_msg = ('Failed to update total autosomal coverage for sample "{}" in project {} '
-                     ' to  Charon database: {}'.format(sample_id, project_id, response_obj.reason))
         LOG.error(error_msg)
         raise RuntimeError(error_msg)
 
@@ -451,13 +391,13 @@ def update_seq_run(seq_run_to_update_dict, alignment_results):
     extractLane = re.compile(".*\.(\d)\.bam")
     current_lane = extractLane.match(alignment_results["bam_file"]).group(1)
 
-    fields_to_update = ('mean_autosome_coverage',
+    fields_to_update = ('mean_autosomal_coverage',
                         'mean_coverage',
                         'std_coverage',
                         'aligned_bases',
                         'mapped_bases',
                         'mapped_reads',
-                        'reads',
+                        'reads_per_lane',
                         'sequenced_bases',
                         'bam_file',
                         'output_file',
@@ -468,27 +408,27 @@ def update_seq_run(seq_run_to_update_dict, alignment_results):
                         )
 
     for field in fields_to_update:
-        if field == 'mean_autosome_coverage':
+        if field == 'mean_autosomal_coverage':
             if lanes == 0:
                 seq_run_to_update_dict[field] = alignment_results[field]
             else:
                 seq_run_to_update_dict[field] += alignment_results[field]
         else:
             if lanes == 0:
-                seq_run_to_update_dict[field] = "{}_{}".format(current_lane, alignment_results[field])
+                seq_run_to_update_dict[field] = {current_lane : alignment_results[field]}
             else:
-                seq_run_to_update_dict[field] += " ; {}_{}".format(current_lane, alignment_results[field])
+                seq_run_to_update_dict[field][current_lane] =  alignment_results[field]
 
     return seq_run_to_update_dict
 
 def delete_seq_run_update(seq_run_to_update):
-    fields_to_delete = ('mean_autosome_coverage',
+    fields_to_delete = ('mean_autosomal_coverage',
                         'mean_coverage',
                         'std_coverage',
                         'aligned_bases',
                         'mapped_bases',
                         'mapped_reads',
-                        'reads',
+                        'reads_per_lane',
                         'sequenced_bases',
                         'bam_file',
                         'output_file',
@@ -505,51 +445,6 @@ def delete_seq_run_update(seq_run_to_update):
 
 
 
-def record_workflow_process_local(p_handle, workflow, project, analysis_module, analysis_dir, config=None):
-    """Track the PID for running workflow analysis processes.
-
-    :param subprocess.Popen p_handle: The subprocess.Popen object which executed the command
-    :param str workflow: The name of the workflow that is running
-    :param Project project: The Project object for which the workflow is running
-    :param analysis_module: The analysis module used to execute the workflow
-    :param dict config: The parsed configuration file (optional)
-
-
-     Stored dict resembles {"J.Doe_14_01":
-                                {"workflow": "NGI",
-                                 "p_handle": p_handle,
-                                 "analysis_module": analysis_module.__name__,
-                                 "project_id": project_id
-                                 "run_dir" : running dir
-                                }
-                             "J.Johansson_14_02_P201_101_A_RUNID":
-                                 ...
-                            }
-
-
-    :raises KeyError: If the database portion of the configuration file is missing
-    :raises RuntimeError: If the configuration file cannot be found
-    :raises ValueError: If the project already has an entry in the database.
-    """
-    ## Probably better to use an actual SQL database for this so we can
-    ## filter by whatever -- project name, analysis module name, pid, etc.
-    ## For the prototyping we can use shelve but later move to sqlite3 or sqlalchemy+Postgres/MySQL/whatever
-    LOG.info("Recording process id {} for project {}, " 
-             "workflow {}".format(p_handle.pid, project, workflow))
-    project_dict = { "workflow": workflow,
-                     "p_handle": p_handle,
-                     "analysis_module": analysis_module.__name__,
-                     "project_id": project.project_id,
-                     "run_dir": analysis_dir
-                   }
-    with get_shelve_database(config) as db:
-        if project.name in db:
-            error_msg = ("Project {} already has an entry in the local process "
-                         "tracking database -- this should not be. Overwriting!".format(project.name))
-            LOG.warn(error_msg)
-        db[project.name] = project_dict
-        LOG.info("Successfully recorded process id {} for project {} (ID {}), " 
-                 "workflow {}".format(p_handle.pid, project, project.project_id, workflow))
 
 
 def record_process_flowcell(p_handle, workflow, project, sample, libprep, fcid,

@@ -135,7 +135,7 @@ def setup_analysis_directory_structure(fc_dir, projects_to_analyze,
     # From RunInfo.xml (name) & runParameters.xml (position)
     fcid = fc_dir_structure['fc_name']
     fc_short_run_id = "{}_{}".format(fc_date, fcid)
-
+    fc_full_id      = fc_dir_structure['fc_full_id']
     if not fc_dir_structure.get('projects'):
         LOG.warn("No projects found in specified flowcell directory \"{}\"".format(fc_dir))
     # Iterate over the projects in the flowcell directory
@@ -193,9 +193,9 @@ def setup_analysis_directory_structure(fc_dir, projects_to_analyze,
                                                         dirname=libprep_name)
                 libprep_dir = os.path.join(sample_dir, libprep_name)
                 if not os.path.exists(libprep_dir): safe_makedir(libprep_dir, 0770)
-                seqrun_object = libprep_object.add_seqrun(name=fc_short_run_id,
-                                                          dirname=fc_short_run_id)
-                seqrun_dir = os.path.join(libprep_dir, fc_short_run_id)
+                seqrun_object = libprep_object.add_seqrun(name=fc_full_id,
+                                                          dirname=fc_full_id)
+                seqrun_dir = os.path.join(libprep_dir, fc_full_id)
                 if not os.path.exists(seqrun_dir): safe_makedir(seqrun_dir, 0770)
                 seqrun_object.add_fastq_files(fq_file)
             # rsync the source files to the sample directory
@@ -262,9 +262,10 @@ def parse_casava_directory(fc_dir):
     run_info = parser.parseRunInfo()
     runparams = parser.parseRunParameters()
     try:
-        fc_name = run_info['Flowcell']
-        fc_date = run_info['Date']
-        fc_pos = runparams['FCPosition']
+        fc_name    = run_info['Flowcell']
+        fc_date    = run_info['Date']
+        fc_pos     = runparams['FCPosition']
+        fc_full_id = run_info['Id']
     except KeyError as e:
         raise RuntimeError("Could not parse flowcell information {} "
                            "from Flowcell RunMetrics in flowcell {}".format(e, fc_dir))
@@ -302,8 +303,9 @@ def parse_casava_directory(fc_dir):
                          'project_dir': os.path.basename(project_dir),
                          'project_name': project_name,
                          'samples': project_samples})
-    return {'fc_dir': fc_dir,
-            'fc_name': '{}{}'.format(fc_pos, fc_name),
-            'fc_date': fc_date,
+    return {'fc_dir'    : fc_dir,
+            'fc_name'   : '{}{}'.format(fc_pos, fc_name),
+            'fc_date'   : fc_date,
+            'fc_full_id': fc_full_id,
             'basecall_stats_dir': basecall_stats_dir,
             'projects': projects}
