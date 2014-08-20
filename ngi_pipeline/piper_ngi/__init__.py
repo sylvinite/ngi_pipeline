@@ -135,7 +135,8 @@ def convert_sthlm_to_uppsala(project, fcid):
     input_dir = os.path.join(project.base_path, "DATA", project.dirname)
     uppsala_dirname = "{}".format(project.dirname)
     output_dir = os.path.join(project.base_path, "DATA_UUSNP", uppsala_dirname)
-    if not os.path.exists(output_dir):
+    #check if for this flowcell I have already generate the data
+    if not os.path.exists(os.path.join(output_dir,fcid.name)):
         com = cl_template.format(input_dir=input_dir, output_dir=output_dir,
                                  flowcell=fcid)
         try:
