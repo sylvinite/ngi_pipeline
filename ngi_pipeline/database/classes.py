@@ -63,23 +63,23 @@ class CharonSession(requests.Session):
     def project_create(self, projectid, name=None, status=None, pipeline=None, bpa=None):
         l_dict = locals()
         data = { k: l_dict.get(k) for k in self._project_params }
-        return self.post(self.construct_charon_url('project'),
-                         data=json.dumps(data))
+        return json.loads(self.post(self.construct_charon_url('project'),
+                         data=json.dumps(data)).text)
 
     def project_get(self, projectid):
-        return self.get(self.construct_charon_url('project', projectid))
+        return json.loads(self.get(self.construct_charon_url('project', projectid)).text)
 
     def project_update(self, projectid, name=None, status=None, pipeline=None, bpa=None):
         l_dict = locals()
         data = { k: l_dict.get(k) for k in self._project_params }
-        return self.put(self.construct_charon_url('project', projectid),
-                        data=json.dumps(data))
+        return json.loads(self.put(self.construct_charon_url('project', projectid),
+                        data=json.dumps(data)).text)
 
     def projects_get_all(self):
-        return self.get(self.construct_charon_url('projects'))
+        return json.loads(self.get(self.construct_charon_url('projects')).text)
 
     def project_delete(self, projectid):
-        return self.delete(self.construct_charon_url('project', projectid))
+        return json.loads(self.delete(self.construct_charon_url('project', projectid)).text)
 
     # Sample
     def sample_create(self, projectid, sampleid, status=None, received=None,
@@ -89,11 +89,11 @@ class CharonSession(requests.Session):
         url = self.construct_charon_url("sample", projectid)
         l_dict = locals()
         data = { k: l_dict.get(k) for k in self._sample_params }
-        return self.post(url, json.dumps(data))
+        return json.loads(self.post(url, json.dumps(data)).text)
 
     def sample_get(self, projectid, sampleid):
         url = self.construct_charon_url("sample", projectid, sampleid)
-        return self.get(url)
+        return json.loads(self.get(url).text)
 
     def sample_update(self, projectid, sampleid, status=None, received=None,
                       qc_status=None, genotyping_status=None,
@@ -102,30 +102,30 @@ class CharonSession(requests.Session):
         url = self.construct_charon_url("sample", projectid, sampleid)
         l_dict = locals()
         data = { k: l_dict.get(k) for k in self._sample_params }
-        return self.put(url, json.dumps(data))
+        return json.loads(self.put(url, json.dumps(data)).text)
 
     def samples_get_all(self, projectid):
-        return self.get(self.construct_charon_url('samples', projectid))
+        return json.loads(self.get(self.construct_charon_url('samples', projectid)).text)
 
     # LibPrep
     def libprep_create(self, projectid, sampleid, libprepid, status=None, limsid=None):
         url = self.construct_charon_url("libprep", projectid, sampleid)
         l_dict = locals()
         data = { k: l_dict.get(k) for k in self._libprep_params }
-        return self.post(url, json.dumps(data))
+        return json.loads(self.post(url, json.dumps(data)).text)
 
     def libprep_get(self, projectid, sampleid, libprepid):
         url = self.construct_charon_url("libprep", projectid, sampleid, libprepid)
-        return self.get(url)
+        return json.loads(self.get(url).text)
 
     def libprep_update(self, projectid, sampleid, libprepid, status=None, limsid=None):
         url = self.construct_charon_url("libprep", projectid, sampleid, libprepid)
         l_dict = locals()
         data = { k: l_dict.get(k) for k in self._sample_params }
-        return self.put(url, json.dumps(data))
+        return json.loads(self.put(url, json.dumps(data)).text)
 
     def libpreps_get_all(self, projectid, sampleid):
-        return self.get(self.construct_charon_url('libpreps', projectid, sampleid))
+        return json.loads(self.get(self.construct_charon_url('libpreps', projectid, sampleid)).text)
 
     # SeqRun
     def seqrun_create(self, projectid, sampleid, libprepid, seqrunid,
@@ -142,11 +142,11 @@ class CharonSession(requests.Session):
         url = self.construct_charon_url("seqrun", projectid, sampleid, libprepid)
         l_dict = locals()
         data = { k: l_dict.get(k) for k in self._seqrun_params }
-        return self.post(url, json.dumps(data))
+        return json.loads(self.post(url, json.dumps(data)).text)
 
     def seqrun_get(self, projectid, sampleid, libprepid, seqrunid):
         url = self.construct_charon_url("seqrun", projectid, sampleid, libprepid, seqrunid)
-        return self.get(url)
+        return json.loads(self.get(url).text)
 
     def seqrun_update(self, projectid, sampleid, libprepid, seqrunid,
                       total_reads=None, mean_autosomal_coverage=None, reads_per_lane=None,
@@ -162,10 +162,10 @@ class CharonSession(requests.Session):
         url = self.construct_charon_url("seqrun", projectid, sampleid, libprepid, seqrunid)
         l_dict = locals()
         data = { k: l_dict.get(k) for k in self._seqrun_params }
-        return self.put(url, json.dumps(data))
+        return json.loads(self.put(url, json.dumps(data)).text)
 
     def seqruns_get_all(self, projectid, sampleid, libprepid):
-        return self.get(self.construct_charon_url('seqruns', projectid, sampleid, libprepid))
+        return json.loads(self.get(self.construct_charon_url('seqruns', projectid, sampleid, libprepid)).text)
 
 
 class CharonError(RuntimeError):
