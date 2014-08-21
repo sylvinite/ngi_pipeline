@@ -44,6 +44,7 @@ def check_update_jobs_status(projects_to_check=None, config=None, config_file_pa
     :param dict config: The parsed NGI configuration file; optional.
     :param list config_file_path: The path to the NGI configuration file; optional.
     """
+    
     db_dict = get_all_tracked_processes()
     for job_name, project_dict in db_dict.iteritems():
         LOG.info("Checking workflow {} for project {}...".format(project_dict["workflow"],
@@ -166,8 +167,6 @@ def check_if_sample_analysis_are_running( project, sample, config=None):
 
     :returns true/false
     """
-
-
     LOG.info("checking if Project {}, Sample {}   "
              "are currently being analysed ".format(project.name, sample))
     with get_shelve_database(config) as db:
@@ -323,7 +322,7 @@ def write_to_charon_alignment_results(job_id, return_code, run_dir=None):
         #in this case I need to update the alignment statistics for each lane in this seq run
         if "alignment_status" in seq_run_to_update_dict and seq_run_to_update_dict["alignment_status"] == "DONE":
             warn_msg = ('Sequencing run {} already declared finished but now re-updaiting it '
-                        'this will couse over-writing of all fields'.format(run_id))
+                        'this will couse over-writing of all fields'.format(fc_id))
             LOG.warn(warn_msg)
             #TODO: need to delete seq_rrun_to_update_dict
 
@@ -333,7 +332,7 @@ def write_to_charon_alignment_results(job_id, return_code, run_dir=None):
             piper_result_dir = os.path.join(run_dir, "02_preliminary_alignment_qc")
         except:
             error_msg = ('Error while trying to update seqrun {}. No run_dir has been specified '
-                          'for project {}, sample {}, libprep {}'.format(run_id, project_id, sample_id,
+                          'for project {}, sample {}, libprep {}'.format(fc_id, project_id, sample_id,
                           library_id))
             LOG.error(error_msg)
             raise RunTimeError(error_msg)
@@ -343,6 +342,9 @@ def write_to_charon_alignment_results(job_id, return_code, run_dir=None):
         else:
             piper_qc_dir_base = "{}.{}.{}".format(sample_id, run_id_piper, sample_id)
             piper_qc_path     = "{}*/".format(os.path.join(piper_result_dir, piper_qc_dir_base))
+            if len(glob.glob(piper_qc_path)) == 0: #something went wrong in the alignment
+                all_algn_completed =False
+
             for qc_dir in glob.glob(piper_qc_path): #for each lane
                 genome_result = os.path.join(qc_dir, "genome_results.txt")
                 if not os.path.isfile(genome_result):
@@ -354,7 +356,7 @@ def write_to_charon_alignment_results(job_id, return_code, run_dir=None):
 
         if not all_algn_completed:
             error_msg = ('Alignment ended with an error: Piper returned 0 as error code but file structure is unexpected'
-                      'currently processing runid {} for project {}, sample {}, libprep {}'.format(run_id,
+                      'currently processing runid {} for project {}, sample {}, libprep {}'.format(fc_id,
                       project_id, sample_id, library_id))
             LOG.error(error_msg)
             seq_run_to_update_dict["alignment_status"] = "FAILED"
@@ -364,7 +366,7 @@ def write_to_charon_alignment_results(job_id, return_code, run_dir=None):
     else:
         #Alignment failed, store it as aborted, I will not use this until it is not fixed
         error_msg = ('Alignment ended with an error: Piper returned non 0 return code'
-                      'currently processing runid {} for project {}, sample {}, libprep {}'.format(run_id,
+                      'currently processing runid {} for project {}, sample {}, libprep {}'.format(fc_id,
                       project_id, sample_id, library_id))
         LOG.error(error_msg)
         seq_run_to_update_dict["alignment_status"] = "FAILED"
@@ -372,13 +374,13 @@ def write_to_charon_alignment_results(job_id, return_code, run_dir=None):
 
     if seq_run_to_update_dict["alignment_status"] == "FAILED":
         #in such a case I do not update the other fields
-        seq_run_to_update_dict = delete_seq_run_update(seq_run_to_update)
+        seq_run_to_update_dict = delete_seq_run_update(seq_run_to_update_dict)
 
 
     response_obj = charon_session.put(url, json.dumps(seq_run_to_update_dict))
     if response_obj.status_code != 204:
         error_msg = ('Failed to update run alignment status for run "{}" in project {} '
-                     'sample {}, library prep {} to  Charon database: {}'.format(run_id,
+                     'sample {}, library prep {} to  Charon database: {}'.format(fc_id,
                       project_id, sample_id, library_id, response_obj.reason))
         LOG.error(error_msg)
         raise RuntimeError(error_msg)
