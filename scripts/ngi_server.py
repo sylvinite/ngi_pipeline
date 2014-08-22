@@ -20,9 +20,6 @@ def run_server(config_file, queues=None, task_module=None):
     """
     config = load_yaml_config(config_file)
 
-    # Prepare working directory to save logs and config files
-    task_module = "ngi_pipeline.distributed.tasks" if task_module is None
-
     cl = ["celery"]
     tasks = task_module if task_module else "ngi_pipeline.distributed.tasks"
     cl += ["-A", tasks, "worker", "-n", "ngi_server"]
