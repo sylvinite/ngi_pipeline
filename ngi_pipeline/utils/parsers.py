@@ -381,7 +381,7 @@ class RunParametersParser():
         self.data = {}
 
     def parse(self, fh):
-        tlaterlaterree = ET.parse(fh)
+        tree = ET.parse(fh)
         root = tree.getroot()
         self.data = XmlToDict(root)
         # If not a MiSeq run, return the contents of the Setup tag
