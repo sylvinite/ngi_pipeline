@@ -1,7 +1,7 @@
 import argparse
 import time
 
-from ngi_pipeline.conductor.flowcell import process_demultiplexed_flowcell
+from ngi_pipeline.conductor.flowcell import process_demultiplexed_flowcell, process_demultiplexed_flowcells
 from ngi_pipeline.conductor.launchers import trigger_sample_level_analysis
 from ngi_pipeline.database.process_tracking import check_update_jobs_status
 
@@ -12,27 +12,30 @@ def main(demux_fcid_dir, test_step_1, restrict_to_projects=None, restrict_to_sam
     elif test_step_1:
         #this checks the status of the running process, it should ideally erase fields in the local db... not sure about it
         check_update_jobs_status() #better to always rm the local db
+        
         demux_fcid_dir = "/proj/a2010002/INBOX/140528_D00415_0049_BC423WACXX" # G.Grigelioniene_14_01
-        process_demultiplexed_flowcell(demux_fcid_dir, None, None) # this should look like a typical command trigger by the Celery server
+        process_demultiplexed_flowcell(demux_fcid_dir, None, None)
         time.sleep(60) #wait for 1 minutes
+        
         demux_fcid_dir = "/proj/a2010002/INBOX/140702_D00415_0052_AC41A2ANXX" # M.Kaller_14_06
-        process_demultiplexed_flowcell(demux_fcid_dir, None, None) # this should look like a typical command trigger by the Celery server
+        process_demultiplexed_flowcell(demux_fcid_dir, None, None)
         time.sleep(60) #wait for 1 minutes
+        
         demux_fcid_dir = "/proj/a2010002/INBOX/130611_SN7001298_0148_AH0CCVADXX/" #A.Wedell_13_03 sample P567_101
         process_demultiplexed_flowcell(demux_fcid_dir, None, None)
         time.sleep(60) #wait for 1 minutes
-##        demux_fcid_dir ="/proj/a2010002/INBOX/130611_SN7001298_0148_AH0CCVADXX/" # A.Wedell_13_03 sample P567_101 DUPLICLATED!!!!
-##        process_demultiplexed_flowcell(demux_fcid_dir, None, None)
-##        time.sleep(60) #wait for 1 minutes
+        
         demux_fcid_dir = "/proj/a2010002/INBOX/130612_D00134_0019_AH056WADXX/" # A.Wedell_13_03 sample P567_101
         process_demultiplexed_flowcell(demux_fcid_dir, None, None) # this must start
         time.sleep(60) #wait for 1 minutes
+        
         demux_fcid_dir = "/proj/a2010002/INBOX/130627_D00134_0023_AH0JYUADXX/" # A.Wedell_13_03 sample P567_102
         process_demultiplexed_flowcell(demux_fcid_dir, None, None) # this must start
         time.sleep(60) #wait for 1 minutes
         demux_fcid_dir = "/proj/a2010002/INBOX/130701_SN7001298_0152_AH0J92ADXX/" # A.Wedell_13_03 sample P567_102
         process_demultiplexed_flowcell(demux_fcid_dir, None, None) # this must start
         time.sleep(60) #wait for 1 minutes
+        
         demux_fcid_dir = "/proj/a2010002/INBOX/130701_SN7001298_0153_BH0JMGADXX/" # A.Wedell_13_03 sample P567_102
         process_demultiplexed_flowcell(demux_fcid_dir, None, None) # this must start
         time.sleep(60) #wait for 1 minutes
@@ -73,3 +76,7 @@ G.Grigelioniene_14_01
 M.Kaller_14_06
 /proj/a2010002/INBOX/140702_D00415_0052_AC41A2ANXX        --> P1171_102  P1171_104  P1171_106  P1171_108
 """
+
+
+
+

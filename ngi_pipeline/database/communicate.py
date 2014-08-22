@@ -1,5 +1,9 @@
 from ngi_pipeline.database.classes import CharonSession
 
+from ngi_pipeline.log.loggers import minimal_logger
+
+LOG = minimal_logger(__name__)
+
 def get_project_id_from_name(project_name):
     """Given the project name ("Y.Mom_14_01") return the project ID ("P123")
 
@@ -99,3 +103,6 @@ def get_workflow_for_project(project_id):
         raise RuntimeError(error_msg)
     #ok now I return the workflow to execute
     return project_dict["pipeline"]
+
+
+    
