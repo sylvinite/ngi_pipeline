@@ -354,7 +354,7 @@ def write_to_charon_alignment_results(job_id, return_code):
                              'sample {}, library prep {} to  Charon database: {}'.format(fc_id,
                               project_id, sample_id, library_id, e))
                 raise RuntimeError(error_msg)
-        
+
         # This is hit if there is any problem parsing all the metrics in the try above
         except ValueError as e:
             error_msg = ("Could not parse alignment results when processing {}/{}/{}/{}: "
