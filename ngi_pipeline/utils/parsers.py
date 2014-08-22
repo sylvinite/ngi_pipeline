@@ -420,16 +420,16 @@ class FlowcellRunMetricsParser(RunMetricsParser):
         return data
 
 
-def parse_genome_results(filename):
-    """Parse the genome_results.txt file created by piper (qualimap)
-       and stores all information into a dictionaty.
+def parse_genome_results(qualimap_results_path):
+    """Parse the genome_results.txt file created by Piper (qualimap).
+
+    :param str qualimap_results_path: The path to the Qualimap results file to be parsed.
+    
+    :returns: A dictionary of metrics of interest
+    :rtype: dict
+    :raises IOError: If the qualimap_results_path file cannot be opened for reading.
     """
-    try:
-        fh=open(filename, 'r')
-    except IOError:
-        print "No such file"
-        raise IOError
-    else:
+    with open(filename, 'r') as fh:
         current_flag=None
         data={}
         cfp=re.compile('>>>>>>> ([^\n]+)')
@@ -492,5 +492,3 @@ def parse_genome_results(filename):
 #mean autosome coverage"
 #number of duplicates
         return data
-
-

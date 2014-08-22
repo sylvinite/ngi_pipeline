@@ -8,7 +8,7 @@ from ngi_pipeline.database.process_tracking import check_update_jobs_status
 
 def main(demux_fcid_dir, test_step_1, restrict_to_projects=None, restrict_to_samples=None):
     if not test_step_1:
-        process_demultiplexed_flowcells(demux_fcid_dir, restrict_to_projects, restrict_to_samples)
+        process_demultiplexed_flowcell(demux_fcid_dir, restrict_to_projects, restrict_to_samples)
     elif test_step_1:
         #this checks the status of the running process, it should ideally erase fields in the local db... not sure about it
         check_update_jobs_status() #better to always rm the local db

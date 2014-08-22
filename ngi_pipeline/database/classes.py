@@ -6,6 +6,8 @@ import os
 import re
 import requests
 
+from ngi_pipeline.utils.classes import memoized
+
 
 try:
     CHARON_API_TOKEN = os.environ['CHARON_API_TOKEN']
@@ -55,6 +57,7 @@ class CharonSession(requests.Session):
 
     ## Another option is to build this into the get/post/put/delete requests
     ## --> Do we ever need to call this (or those) separately?
+    @memoized
     def construct_charon_url(self, *args):
         """Build a Charon URL, appending any *args passed."""
         return "{}/api/v1/{}".format(self._base_url,'/'.join([str(a) for a in args]))
@@ -143,6 +146,12 @@ class CharonSession(requests.Session):
         l_dict = locals()
         data = { k: l_dict.get(k) for k in self._seqrun_params }
         return self.post(url, json.dumps(data)).json()
+
+    ## TODO
+    #def seqrun_clear(self, projectid, sampleid, libprepid, seqrunid):
+    #    data = { k: None for k in self._seqrun_params }
+    #    url = self.construct_charon_url("seqrun", projectid, sampleid, libprepid, seqrunid)
+    #    return self.get(url).json()
 
     def seqrun_get(self, projectid, sampleid, libprepid, seqrunid):
         url = self.construct_charon_url("seqrun", projectid, sampleid, libprepid, seqrunid)

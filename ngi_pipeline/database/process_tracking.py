@@ -60,7 +60,7 @@ def check_update_jobs_status(projects_to_check=None, config=None, config_file_pa
             # from the local db; otherwise, leave it and try again next cycle.
             try:
                 project_id = project_dict['project_id']
-                ## FIXME
+                ## MARIO FIXME
                 ### THIS IS NOT REALLY CORRECT, HERE TRIGGER KNOWS DETAILS ABOUT ENGINE!!!!
                 if project_dict["workflow"] == "dna_alignonly":
                     #in this case I need to update the run level infomration
@@ -116,46 +116,37 @@ def remove_record_from_local_tracking(project, config=None):
             raise RuntimeError(error_msg)
 
 
-def check_if_flowcell_analysis_are_running( project, sample, libprep, fcid, config=None):
-    """checks if a given project/sample/library/flowcell is currently analysed.
+def is_flowcell_analysis_running(project, sample, libprep, seqrun, config=None):
+    """Determine if a flowcell is currently being analyzed."""
+    LOG.info("Checking if sequencing run {}/{}/{}/{} is currently "
+             "being analyzed.".format(project.project_id, sample, libprep, seqrun))
+    return is_analysis_running(project, sample, libprep, seqrun, level="flowcell")
 
-    :param Project project: the project object
-    :param Sample sample:
-    :param LibPrep libprep:
-    :param string fcid:
-    :param dict config: The parsed configuration file (optional)
+## MARIO FIXME
+# This function should be used along with a Charon database check for sample status
+# to ensure that there aren't flowcell analyses running
+def is_sample_analysis_running(project, sample, config=None):
+    """Determine if a sample is currently being analyzed."""
+    raise NotImplementedError("Use the check_if_sample_analysis_is_running function for the moment.")
+    LOG.info("Checking if sample {}/{} is currently "
+             "being analyzed.".format(project.project_id, sample))
+    return is_analysis_running(project, sample, level="sample")
 
-    :raises RuntimeError: If the configuration file cannot be found
 
-    :returns true/false
-    """
-    LOG.info("checking if Project {}, Sample {}, Library prep {}, fcid {} "
-             "are currently being analysed ".format(project, sample, libprep, fcid))
+## TODO this will be reworked once we change the way we access the database
+def is_analysis_running(project, sample, libprep=None, seqrun=None, config=None, level=None):
+    ## Something like this
+    #database.check_local_jobs(project, sample, libprep, seqrun, table=level)
+    ## For now:
+    db_key = "{}_{}".format(project.project_id, sample)
+    if libprep and seqrun:
+        db_key = "{}_{}_{}".format(db_key, libprep, seqrun)
     with get_shelve_database(config) as db:
-        if project.name in db:
-            error_msg = ("Project '{}' is already being analysed at project level "
-                         "This run should not exists!!! somethig terribly wrong is happening, "
-                         "Kill everything  and call Mario and Francesco".format(project))
-            LOG.info(error_msg)
-            raise RuntimeError(error_msg)
-
-        if "{}_{}".format(project.name, sample) in db:
-            error_msg = ("Sample '{}' of project '{}' is already being analysed at sample level "
-                         "This run should not exists!!! somethig terribly wrong is happening, "
-                         "Kill everything  and call Mario and Francesco".format(sample, project))
-            LOG.info(error_msg)
-            raise RuntimeError(error_msg)
-
-        db_key = "{}_{}_{}_{}".format(project, sample, libprep, fcid)
-        if db_key in db:
-            warn_msg = ("Project {}, Sample {}, Library prep {}, fcid {} "
-                         "has an entry in the local db. Analysis are ongoing.".format(project, sample, libprep, fcid))
-            LOG.warn(warn_msg)
-            return True
-        return False
+        return db_key in db
 
 
-def check_if_sample_analysis_are_running( project, sample, config=None):
+## MARIO FIXME
+def check_if_sample_analysis_is_running( project, sample, config=None):
     """checks if a given project/sample is currently analysed. 
     Also check the no project working on that samples (maybe at flowcell level are running)
 
@@ -176,7 +167,6 @@ def check_if_sample_analysis_are_running( project, sample, config=None):
         process_to_be_searched = "{}_{}".format(project, sample)
         information_to_extract = re.compile("([a-zA-Z]\.[a-zA-Z]*_\d*_\d*)_(P\d*_\d*)(.*)")
 
-
         for running_process in running_processes:
             projectName_of_running_process    = information_to_extract.match(running_process).group(1)
             sampleName_of_running_process     = information_to_extract.match(running_process).group(2)
@@ -195,7 +185,45 @@ def check_if_sample_analysis_are_running( project, sample, config=None):
         return False
 
 
-## ADAPT CHARON ACCESS
+#def check_if_flowcell_analysis_is_running( project, sample, libprep, fcid, config=None):
+#    """checks if a given project/sample/library/flowcell is currently analysed.
+#
+#    :param Project project: the project object
+#    :param Sample sample:
+#    :param LibPrep libprep:
+#    :param string fcid:
+#    :param dict config: The parsed configuration file (optional)
+#
+#    :raises RuntimeError: If the configuration file cannot be found
+#
+#    :returns true/false
+#    """
+#    LOG.info("checking if Project {}, Sample {}, Library prep {}, fcid {} "
+#             "are currently being analysed ".format(project, sample, libprep, fcid))
+#    with get_shelve_database(config) as db:
+#        if project.name in db:
+#            error_msg = ("Project '{}' is already being analysed at project level "
+#                         "This run should not exists!!! somethig terribly wrong is happening, "
+#                         "Kill everything  and call Mario and Francesco".format(project))
+#            LOG.info(error_msg)
+#            raise RuntimeError(error_msg)
+#
+#        if "{}_{}".format(project.name, sample) in db:
+#            error_msg = ("Sample '{}' of project '{}' is already being analysed at sample level "
+#                         "This run should not exists!!! somethig terribly wrong is happening, "
+#                         "Kill everything  and call Mario and Francesco".format(sample, project))
+#            LOG.info(error_msg)
+#            raise RuntimeError(error_msg)
+#
+#        db_key = "{}_{}_{}_{}".format(project, sample, libprep, fcid)
+#        if db_key in db:
+#            warn_msg = ("Project {}, Sample {}, Library prep {}, fcid {} "
+#                         "has an entry in the local db. Analysis are ongoing.".format(project, sample, libprep, fcid))
+#            LOG.warn(warn_msg)
+#            return True
+#        return False
+
+
 def write_status_to_charon(project_id, return_code):
     """Update the status of a workflow for a project in the Charon database.
 
@@ -204,27 +232,20 @@ def write_status_to_charon(project_id, return_code):
 
     :raises RuntimeError: If the Charon database could not be updated
     """
-
+    ## Consider keeping on CharonSession open. What's the time savings?
     charon_session = CharonSession()
-    status = "Completed" if return_code is 0 else "Failed"
-    project_url = charon_session.construct_charon_url("project", project_id)
-    project_response = charon_session.get(project_url)
-    if project_response.status_code != 200:
-        error_msg = ('Error accessing database for project "{}"; could not '
-                     'update Charon: {}'.format(project_id, project_response.reason))
-        LOG.error(error_msg)
-        raise RuntimeError(error_msg)
-    project_dict = project_response.json()
-    #project_dict["status"] = status
-    response_obj = charon_session.put(project_url, json.dumps(project_dict))
-    if response_obj.status_code != 204:
+    ## Is "CLOSED" correct here?
+    status = "CLOSED" if return_code is 0 else "FAILED"
+    try:
+        charon_session.project_update(project_id, status=status)
+    except CharonError as e:
         error_msg = ('Failed to update project status for "{}" '
-                     'in Charon database: {}'.format(project_id, response_obj.reason))
-        LOG.error(error_msg)
+                     'in Charon database: {}'.format(project_id, e))
         raise RuntimeError(error_msg)
 
 
-## ADAPT CHARON ACCESS
+## FIXME This needs to be moved to the engine_ngi or else some generic format needs to be created
+##       and a dict passed back to this function. Something like that.
 def write_to_charon_NGI_results(job_id, return_code, run_dir=None):
     """Update the status of a sequencing run after alignment.
 
@@ -235,42 +256,32 @@ def write_to_charon_NGI_results(job_id, return_code, run_dir=None):
     :raises RuntimeError: If the Charon database could not be updated
     """
     charon_session = CharonSession()
-
     # Consider moving this mapping to the CharonSession object or something
-    if return_code is  None:
+    if return_code is None:
         IGN_status = "RUNNING"
     elif return_code == 0:
         IGN_status = "DONE"
     else:
         IGN_status = "FAILED"
-
-    ## A.Wedell_13_03_P567_102
-    # FIXME add error handling
-    m = re.match(r'(?P<project_name>[a-zA-Z]\.[a-zA-Z]*_\d*_\d*)_(?P<sample_id>P\d*_\d*)', job_id)
-    project_id   = get_project_id_from_name(m.groupdict['project_name'])
-    sample_id    = m.groupdict['sample_id']
-
-    url = charon_session.construct_charon_url("sample", project_id, sample_id)
-
     try:
-        sample_response = charon_session.get(url)
-    except (RuntimeError, ValueError) as e:
-        error_msg = ('Error accessing database for project "{}", sample {}; '
-                     'could not update Charon while performing best practice: '
-                     '{}'.format(project_id, sample_id,  e))
+        ## Could move to ngi_pipeline.utils.parsers if it gets used a lot
+        # e.g. A.Wedell_13_03_P567_102
+        m = re.match(r'(?P<project_name>[a-zA-Z]\.[a-zA-Z]*_\d*_\d*)_(?P<sample_id>P\d*_\d*)', job_id)
+        project_id   = get_project_id_from_name(m.groupdict['project_name'])
+        sample_id    = m.groupdict['sample_id']
+    except (TypeError, AttributeError):
+        error_msg = "Could not parse project/sample ids from job id \"{}\"; cannot update Charon with results!".format(job_id)
         raise RuntimeError(error_msg)
-    sample_dict = sample_response.json()
-    sample_dict["status"] = IGN_status
     try:
-        response_obj = charon_session.put(url, json.dumps(sample_dict))
-    except (RuntimeError, ValueError) as e:
+        charon_session.sample_update(project_id, sample_id, status=status)
+    except CharonError as e:
         error_msg = ('Failed to update project status for "{}" sample {}'
                      'in Charon database: {}'.format(project_id, sample_id, e))
         raise RuntimeError(error_msg)
 
 
-## ADAPT CHARON ACCESS
-def write_to_charon_alignment_results(job_id, return_code, run_dir=None):
+## MARIO FIXME Move to piper_ngi, see note above
+def write_to_charon_alignment_results(job_id, return_code):
     """Update the status of a sequencing run after alignment.
 
     :param NGIProject project_id: The name of the project, sample, lib prep, flowcell id
@@ -279,90 +290,79 @@ def write_to_charon_alignment_results(job_id, return_code, run_dir=None):
 
     :raises RuntimeError: If the Charon database could not be updated
     """
+    try:
+        # e.g. A.Wedell_13_03_P567_102_A_130627_AH0JYUADXX
+        m = re.match(r('(?P<project_name>\w\.\w+_\d+_\d+)_(?P<sample_id>P\d+_\d+)_'
+                      '(?P<libprep_id>\w)_(?P<seqrun_id>\d{6}_.+_\d{4}_.{10})'), job_id).groupdict()
+    except AttributeError:
+        raise ValueError("Could not parse job_id \"{}\"; does not match template.".format(job_id))
+    project_name = m.groupdict["project_name"]
+    project_id = get_project_id_from_name(project_name)
+    sample_id = m.groupdict["sample_name"]
+    libprep_id = m.groupdict["libprep"]
+    seqrun_id = m.groupdict["seqrun"]
+    piper_run_id = fcid.split("_")[3]
 
     charon_session = CharonSession()
-
-    if return_code is None:
-        alignment_status = "RUNNING"
-    elif return_code == 0:
-        alignment_status = "DONE"
-    else:
-        alignment_status = "FAILED"
-
-
-
-    ## A.Wedell_13_03_P567_102_A_130627_AH0JYUADXX
-    information_to_extract = re.compile("([a-zA-Z]\.[a-zA-Z]*_\d*_\d*)_(P\d*_\d*)_([A-Z])_(\d{6}_.{6}_\d{4}_.{10})")
-    project_name = information_to_extract.match(job_id).group(1)
-    project_id   = get_project_id_from_name(project_name)
-    sample_id    = information_to_extract.match(job_id).group(2)
-    library_id   = information_to_extract.match(job_id).group(3)
-    fc_id       = information_to_extract.match(job_id).group(4)
-
-    information_to_extract_fc_id = re.compile("(\d{6})_(.{6})_(\d{4})_(.{10})")
-    run_id_piper = information_to_extract_fc_id.match(fc_id).group(4)
-
-    #this returns the correct seq eun for this library, sample, project
-    url = charon_session.construct_charon_url("seqrun", project_id, sample_id, library_id, fc_id)
     try:
-        seq_run_to_update_dict_response = charon_session.get(url)
+        seqrun_dict = charon_session.seqrun_get(project_id, sample_id, library_id, fcid)
     except (RuntimeError, ValueError) as e:
         error_msg = ('Error accessing database for project "{}", sample {}; '
                      'could not update Charon while performing best practice: '
                      '{}'.format(project_id, sample_id,  e))
         raise RuntimeError(error_msg)
-    seq_run_to_update_dict = seq_run_to_update_dict_response.json()
 
+    #if return_code is None:
+    #    alignment_status = "RUNNING"
+    #elif return_code == 0:
+    #alignment_status = "DONE"
+    #else:
+    #    alignment_status = "FAILED"
 
-    all_algn_completed = True  # this variable is used to check that all alignments have a result
+    all_align_completed = True  # this variable is used to check that all alignments have a result
     #no I can start to put things
     if return_code is None:
-        seq_run_to_update_dict["alignment_status"]="RUNNING" #mark on charon that we are aligning this run
+        # This process is still running
+        seqrun_dict["alignment_status"] = "RUNNING"
     elif return_code == 0:
         #in this case I need to update the alignment statistics for each lane in this seq run
-        if "alignment_status" in seq_run_to_update_dict and seq_run_to_update_dict["alignment_status"] == "DONE":
-            warn_msg = ('Sequencing run {} already declared finished but now re-updaiting it '
-                        'this will couse over-writing of all fields'.format(fc_id))
-            LOG.warn(warn_msg)
-            #TODO: need to delete seq_rrun_to_update_dict
+        if seqrun_dict.get("alignment_status") == "DONE":
+            ## TODO Should we in fact overwrite the previous results?
+            LOG.warn("Sequencing run \"{}\" marked as DONE but writing new alignment results; "
+                     "this will overwrite the previous results.".format(fcid))
+            #TODO: need to delete seq_rrun_to_update_dict ????
 
         seq_run_to_update_dict["lanes"] = 0 #set this to zero so I know that I can over-write the fields
 
+        ## NOTE Piper specific
+        # Populate each lane
         try:
             piper_result_dir = os.path.join(run_dir, "02_preliminary_alignment_qc")
-        except:
-            error_msg = ('Error while trying to update seqrun {}. No run_dir has been specified '
-                          'for project {}, sample {}, libprep {}'.format(fc_id, project_id, sample_id,
-                          library_id))
-            LOG.error(error_msg)
-            raise RunTimeError(error_msg)
-        if not os.path.isdir(piper_result_dir):
-            #this should not happen,if return code is 0 this folder should exist but I want to check it anyway
-            all_algn_completed =False
-        else:
-            piper_qc_dir_base = "{}.{}.{}".format(sample_id, run_id_piper, sample_id)
-            piper_qc_path     = "{}*/".format(os.path.join(piper_result_dir, piper_qc_dir_base))
-            if len(glob.glob(piper_qc_path)) == 0: #something went wrong in the alignment
-                all_algn_completed =False
-
-            for qc_dir in glob.glob(piper_qc_path): #for each lane
-                genome_result = os.path.join(qc_dir, "genome_results.txt")
+            if not os.path.isdir(piper_result_dir):
+                raise ValueError("Piper result directory \"{}\" is missing.".format(piper_result_dir))
+            piper_qc_dir_base = "{}.{}.{}".format(sample_id, piper_run_id, sample_id)
+            piper_qc_path = "{}*/".format(os.path.join(piper_result_dir, piper_qc_dir_base))
+            piper_qc_dirs = glob.glob(piper_qc_path)
+            if not piper_qc_dirs: # Something went wrong in the alignment
+                raise ValueError("Piper qc directories under \"{}\" are missing.".format(piper_qc_path))
+            for qc_lane in piper_qc_dirs: # Each lane
+                genome_result = os.path.join(qc_lane, "genome_results.txt")
                 if not os.path.isfile(genome_result):
-                    #this should not happen,if return code is 0 this file should exist but I want to check it anyway
-                    all_algn_completed =False
+                    raise ValueError("File \"genome_results.txt\" is missing from Piper result directory \"{}\"".format(piper_result_dir))
                 else:
+                    ## HERE the heavy lifting occurs
+                    ## MARIO FIXME
                     alignment_results = parse_genome_results(genome_result)
+                    ## MARIO FIXME
                     seq_run_to_update_dict = update_seq_run(seq_run_to_update_dict, alignment_results)
-
-        if not all_algn_completed:
+                    ## possibly redundant
+                    seq_run_to_update_dict["alignment_status"] = "DONE"
+        except ValueError as e: # I guess this is a good error
             error_msg = ('Alignment ended with an error: Piper returned 0 as error code but file structure is unexpected'
                       'currently processing runid {} for project {}, sample {}, libprep {}'.format(fc_id,
                       project_id, sample_id, library_id))
             LOG.error(error_msg)
             seq_run_to_update_dict["alignment_status"] = "FAILED"
-        else:
-            seq_run_to_update_dict["alignment_status"] = "DONE"
-
     else:
         #Alignment failed, store it as aborted, I will not use this until it is not fixed
         error_msg = ('Alignment ended with an error: Piper returned non 0 return code'
@@ -423,6 +423,8 @@ def update_seq_run(seq_run_to_update_dict, alignment_results):
 
     return seq_run_to_update_dict
 
+
+# Used if the alignment has failed
 def delete_seq_run_update(seq_run_to_update):
     fields_to_delete = ('mean_autosomal_coverage',
                         'mean_coverage',

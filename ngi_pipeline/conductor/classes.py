@@ -26,6 +26,7 @@ class NGIObject(object):
         return "{}: \"{}\"".format(type(self), self.name)
 
 
+## TODO consider changing the default __repr__ and __str__ to project_id
 class NGIProject(NGIObject):
     def __init__(self, name, dirname, project_id, base_path):
         self.base_path = base_path
