@@ -381,7 +381,7 @@ class RunParametersParser():
         self.data = {}
 
     def parse(self, fh):
-        tree = ET.parse(fh)
+        tlaterlaterree = ET.parse(fh)
         root = tree.getroot()
         self.data = XmlToDict(root)
         # If not a MiSeq run, return the contents of the Setup tag
@@ -419,8 +419,8 @@ class FlowcellRunMetricsParser(RunMetricsParser):
             data = parser.parse(f)
         return data
 
-
-def parse_genome_results(qualimap_results_path):
+## TODO Pythonify this up a bit
+def parse_qualimap_results(qualimap_results_path):
     """Parse the genome_results.txt file created by Piper (qualimap).
 
     :param str qualimap_results_path: The path to the Qualimap results file to be parsed.

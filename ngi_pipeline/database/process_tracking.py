@@ -10,7 +10,7 @@ from ngi_pipeline.log.loggers import minimal_logger
 from ngi_pipeline.database.classes import CharonSession
 from ngi_pipeline.database.communicate import get_project_id_from_name
 from ngi_pipeline.utils.classes import with_ngi_config
-from ngi_pipeline.utils.parsers import parse_genome_results
+from ngi_pipeline.utils.parsers import parse_qualimap_results
 
 LOG = minimal_logger(__name__)
 
@@ -290,53 +290,39 @@ def write_to_charon_alignment_results(job_id, return_code):
 
     :raises RuntimeError: If the Charon database could not be updated
     """
-    try:
-        # e.g. A.Wedell_13_03_P567_102_A_130627_AH0JYUADXX
-        m = re.match(r('(?P<project_name>\w\.\w+_\d+_\d+)_(?P<sample_id>P\d+_\d+)_'
-                      '(?P<libprep_id>\w)_(?P<seqrun_id>\d{6}_.+_\d{4}_.{10})'), job_id).groupdict()
-    except AttributeError:
-        raise ValueError("Could not parse job_id \"{}\"; does not match template.".format(job_id))
-    project_name = m.groupdict["project_name"]
-    project_id = get_project_id_from_name(project_name)
-    sample_id = m.groupdict["sample_name"]
-    libprep_id = m.groupdict["libprep"]
-    seqrun_id = m.groupdict["seqrun"]
-    piper_run_id = fcid.split("_")[3]
-
-    charon_session = CharonSession()
-    try:
-        seqrun_dict = charon_session.seqrun_get(project_id, sample_id, library_id, fcid)
-    except (RuntimeError, ValueError) as e:
-        error_msg = ('Error accessing database for project "{}", sample {}; '
-                     'could not update Charon while performing best practice: '
-                     '{}'.format(project_id, sample_id,  e))
-        raise RuntimeError(error_msg)
-
-    #if return_code is None:
-    #    alignment_status = "RUNNING"
-    #elif return_code == 0:
-    #alignment_status = "DONE"
-    #else:
-    #    alignment_status = "FAILED"
-
-    all_align_completed = True  # this variable is used to check that all alignments have a result
-    #no I can start to put things
-    if return_code is None:
-        # This process is still running
+    ## FIXME If the process isn't finished we can just skip this function altogether.
+    ##       Change this upstream.
+    if return_code is None:     # Alignment is still running
         seqrun_dict["alignment_status"] = "RUNNING"
-    elif return_code == 0:
-        #in this case I need to update the alignment statistics for each lane in this seq run
+    elif return_code == 0:      # Alignment finished successfully
+        try:
+            # e.g. A.Wedell_13_03_P567_102_A_130627_AH0JYUADXX
+            m = re.match(r('(?P<project_name>\w\.\w+_\d+_\d+)_(?P<sample_id>P\d+_\d+)_'
+                          '(?P<libprep_id>\w)_(?P<seqrun_id>\d{6}_.+_\d{4}_.{10})'), job_id).groupdict()
+        except AttributeError:
+            raise ValueError("Could not parse job_id \"{}\"; does not match template.".format(job_id))
+        project_name = m.groupdict["project_name"]
+        project_id = get_project_id_from_name(project_name)
+        sample_id = m.groupdict["sample_name"]
+        libprep_id = m.groupdict["libprep"]
+        seqrun_id = m.groupdict["seqrun"]
+        piper_run_id = fcid.split("_")[3]
+
+        charon_session = CharonSession()
+        try:
+            seqrun_dict = charon_session.seqrun_get(project_id, sample_id, library_id, fcid)
+        except CharonError as e:
+            raise RuntimeError('Error accessing database for project "{}", sample {}; '
+                               'could not update Charon while performing best practice: '
+                               '{}'.format(project_id, sample_id,  e))
+        # In this case I need to update the alignment statistics for each lane in this seq run
         if seqrun_dict.get("alignment_status") == "DONE":
             ## TODO Should we in fact overwrite the previous results?
             LOG.warn("Sequencing run \"{}\" marked as DONE but writing new alignment results; "
                      "this will overwrite the previous results.".format(fcid))
-            #TODO: need to delete seq_rrun_to_update_dict ????
 
-        seq_run_to_update_dict["lanes"] = 0 #set this to zero so I know that I can over-write the fields
-
-        ## NOTE Piper specific
-        # Populate each lane
         try:
+            # Find all the appropriate files
             piper_result_dir = os.path.join(run_dir, "02_preliminary_alignment_qc")
             if not os.path.isdir(piper_result_dir):
                 raise ValueError("Piper result directory \"{}\" is missing.".format(piper_result_dir))
@@ -345,56 +331,58 @@ def write_to_charon_alignment_results(job_id, return_code):
             piper_qc_dirs = glob.glob(piper_qc_path)
             if not piper_qc_dirs: # Something went wrong in the alignment
                 raise ValueError("Piper qc directories under \"{}\" are missing.".format(piper_qc_path))
-            for qc_lane in piper_qc_dirs: # Each lane
+
+            # Examine each lane and update the dict with its alignment metrics
+            for qc_lane in piper_qc_dirs:
                 genome_result = os.path.join(qc_lane, "genome_results.txt")
+                # This means that if any of the lanes are missing results, the sequencing run is marked as a failure.
+                # We should flag this somehow and send an email at some point.
                 if not os.path.isfile(genome_result):
                     raise ValueError("File \"genome_results.txt\" is missing from Piper result directory \"{}\"".format(piper_result_dir))
-                else:
-                    ## HERE the heavy lifting occurs
-                    ## MARIO FIXME
-                    alignment_results = parse_genome_results(genome_result)
-                    ## MARIO FIXME
-                    seq_run_to_update_dict = update_seq_run(seq_run_to_update_dict, alignment_results)
-                    ## possibly redundant
-                    seq_run_to_update_dict["alignment_status"] = "DONE"
-        except ValueError as e: # I guess this is a good error
-            error_msg = ('Alignment ended with an error: Piper returned 0 as error code but file structure is unexpected'
-                      'currently processing runid {} for project {}, sample {}, libprep {}'.format(fc_id,
-                      project_id, sample_id, library_id))
+                # Get the alignment results for this lane
+                lane_alignment_metrics = parse_qualimap_results(genome_result)
+                # Update the dict for this lane
+                update_seq_run_for_lane(seqrun_dict, lane_alignment_metrics)
+            seqrun_dict["alignment_status"] = "DONE"
+
+            # Update Charon with the metrics for all the lanes we just parsed
+            try:
+                # Update the seqrun in the Charon database
+                charon_session.seqrun_update(project_id, sample_id, libprep_id, seqrun_id, **seqrun_dict)
+            except CharonError as e:
+                error_msg = ('Failed to update run alignment status for run "{}" in project {} '
+                             'sample {}, library prep {} to  Charon database: {}'.format(fc_id,
+                              project_id, sample_id, library_id, e))
+                raise RuntimeError(error_msg)
+        
+        # This is hit if there is any problem parsing all the metrics in the try above
+        except ValueError as e:
+            error_msg = ("Could not parse alignment results when processing {}/{}/{}/{}: "
+                         "{}".format(project_id, sample_id, library_id, seqrun_id, e))
             LOG.error(error_msg)
-            seq_run_to_update_dict["alignment_status"] = "FAILED"
+            ## Processing failed, unsure if alignment actually failed? Should we be resetting the seqrun in Charon?
+            ## Consider just falling back to the final else bit below
+            charon_session.seqrun_update(project_id, sample_id, libprep_id, seqrun_id, status="FAILED")
+
     else:
-        #Alignment failed, store it as aborted, I will not use this until it is not fixed
+        # Alignment failed (return code > 0), store it as aborted
         error_msg = ('Alignment ended with an error: Piper returned non 0 return code'
                       'currently processing runid {} for project {}, sample {}, libprep {}'.format(fc_id,
                       project_id, sample_id, library_id))
         LOG.error(error_msg)
-        seq_run_to_update_dict["alignment_status"] = "FAILED"
+        charon_session.seqrun_reset(project_id, sample_id, libprep_id, seqrun_id)
+        charon_session.seqrun_update(project_id, sample_id, libprep_id, seqrun_id, status="FAILED")
 
 
-    if seq_run_to_update_dict["alignment_status"] == "FAILED":
-        #in such a case I do not update the other fields
-        seq_run_to_update_dict = delete_seq_run_update(seq_run_to_update_dict)
+# TODO rethink this possibly, works at the moment
+def update_seq_run_for_lane(seqrun_dict, lane_alignment_metrics):
+    num_lanes = seqrun_dict.get("lanes")    # This gives None the first time
+    seqrun_dict["lanes"] += 1   # Increment
+    ## FIXME Change this so the lane_alignment_metrics has a "lane" value
+    current_lane = re.match(".+\.(\d)\.bam", lane_alignment_metrics["bam_file"]).group(1)
 
-
-    response_obj = charon_session.put(url, json.dumps(seq_run_to_update_dict))
-    if response_obj.status_code != 204:
-        error_msg = ('Failed to update run alignment status for run "{}" in project {} '
-                     'sample {}, library prep {} to  Charon database: {}'.format(fc_id,
-                      project_id, sample_id, library_id, response_obj.reason))
-        LOG.error(error_msg)
-        raise RuntimeError(error_msg)
-
-
-def update_seq_run(seq_run_to_update_dict, alignment_results):
-    lanes = seq_run_to_update_dict["lanes"]
-    seq_run_to_update_dict["lanes"] += 1;
-    #get the current lane
-    extractLane = re.compile(".*\.(\d)\.bam")
-    current_lane = extractLane.match(alignment_results["bam_file"]).group(1)
-
-    fields_to_update = ('mean_autosomal_coverage',
-                        'mean_coverage',
+    fields_to_update = ('mean_coverage',
+                        #'mean_autosomal_coverage',
                         'std_coverage',
                         'aligned_bases',
                         'mapped_bases',
@@ -408,47 +396,14 @@ def update_seq_run(seq_run_to_update_dict, alignment_results):
                         'bases_number',
                         'contigs_number'
                         )
-
+    ## FIXME Change how Charon stores these things? A dict for each attribute seems a little funky
     for field in fields_to_update:
-        if field == 'mean_autosomal_coverage':
-            if lanes == 0:
-                seq_run_to_update_dict[field] = alignment_results[field]
-            else:
-                seq_run_to_update_dict[field] += alignment_results[field]
+        if not lanes:
+            seqrun_dict[field] = {current_lane : lane_alignment_metrics[field]}
         else:
-            if lanes == 0:
-                seq_run_to_update_dict[field] = {current_lane : alignment_results[field]}
-            else:
-                seq_run_to_update_dict[field][current_lane] =  alignment_results[field]
-
-    return seq_run_to_update_dict
-
-
-# Used if the alignment has failed
-def delete_seq_run_update(seq_run_to_update):
-    fields_to_delete = ('mean_autosomal_coverage',
-                        'mean_coverage',
-                        'std_coverage',
-                        'aligned_bases',
-                        'mapped_bases',
-                        'mapped_reads',
-                        'reads_per_lane',
-                        'sequenced_bases',
-                        'bam_file',
-                        'output_file',
-                        'GC_percentage',
-                        'mean_mapping_quality',
-                        'bases_number',
-                        'contigs_number'
-                        )
-    for field in fields_to_delete:
-        if field in seq_run_to_update:
-            del(seq_run_to_update[field])
-    return seq_run_to_update
-
-
-
-
+            seqrun_dict[field][current_lane] =  lane_alignment_metrics[field]
+    ## FIXME Are we just adding these all together? That doesn't really seem right for an average
+    seqrun_dict[field] = seqrun_dict.get("mean_autosomal_coverage", 0) + lane_alignment_metrics["mean_autosomal_coverage"]
 
 
 def record_process_flowcell(p_handle, workflow, project, sample, libprep, fcid,
