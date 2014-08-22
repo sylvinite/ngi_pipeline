@@ -72,14 +72,14 @@ class CharonSession(requests.Session):
     def project_update(self, projectid, name=None, status=None, pipeline=None, bpa=None):
         l_dict = locals()
         data = { k: l_dict.get(k) for k in self._project_params }
-        return json.loads(self.put(self.construct_charon_url('project', projectid),
-                        data=json.dumps(data)).text)
+        return self.put(self.construct_charon_url('project', projectid),
+                        data=json.dumps(data)).text
 
     def projects_get_all(self):
         return json.loads(self.get(self.construct_charon_url('projects')).text)
 
     def project_delete(self, projectid):
-        return json.loads(self.delete(self.construct_charon_url('project', projectid)).text)
+        return self.delete(self.construct_charon_url('project', projectid)).text
 
     # Sample
     def sample_create(self, projectid, sampleid, status=None, received=None,
@@ -102,7 +102,7 @@ class CharonSession(requests.Session):
         url = self.construct_charon_url("sample", projectid, sampleid)
         l_dict = locals()
         data = { k: l_dict.get(k) for k in self._sample_params }
-        return json.loads(self.put(url, json.dumps(data)).text)
+        return self.put(url, json.dumps(data)).text
 
     def samples_get_all(self, projectid):
         return json.loads(self.get(self.construct_charon_url('samples', projectid)).text)
@@ -122,7 +122,7 @@ class CharonSession(requests.Session):
         url = self.construct_charon_url("libprep", projectid, sampleid, libprepid)
         l_dict = locals()
         data = { k: l_dict.get(k) for k in self._sample_params }
-        return json.loads(self.put(url, json.dumps(data)).text)
+        return self.put(url, json.dumps(data)).text
 
     def libpreps_get_all(self, projectid, sampleid):
         return json.loads(self.get(self.construct_charon_url('libpreps', projectid, sampleid)).text)
@@ -162,7 +162,7 @@ class CharonSession(requests.Session):
         url = self.construct_charon_url("seqrun", projectid, sampleid, libprepid, seqrunid)
         l_dict = locals()
         data = { k: l_dict.get(k) for k in self._seqrun_params }
-        return json.loads(self.put(url, json.dumps(data)).text)
+        return self.put(url, json.dumps(data)).text
 
     def seqruns_get_all(self, projectid, sampleid, libprepid):
         return json.loads(self.get(self.construct_charon_url('seqruns', projectid, sampleid, libprepid)).text)
