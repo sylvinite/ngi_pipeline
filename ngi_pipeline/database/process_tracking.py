@@ -290,16 +290,16 @@ def write_to_charon_alignment_results(job_id, return_code, run_dir=None):
         alignment_status = "FAILED"
 
 
-
+    ## A.Wedell_13_03 _ P567_101 _ A _ 130611_SN7001298_0148_AH0CCVADXX
     ## A.Wedell_13_03_P567_102_A_130627_AH0JYUADXX
-    information_to_extract = re.compile("([a-zA-Z]\.[a-zA-Z]*_\d*_\d*)_(P\d*_\d*)_([A-Z])_(\d{6}_.{6}_\d{4}_.{10})")
+    information_to_extract = re.compile("([a-zA-Z]\.[a-zA-Z]*_\d*_\d*)_(P\d*_\d*)_([A-Z])_(\d{6}_.+_\d{4}_.+)")
     project_name = information_to_extract.match(job_id).group(1)
     project_id   = get_project_id_from_name(project_name)
     sample_id    = information_to_extract.match(job_id).group(2)
     library_id   = information_to_extract.match(job_id).group(3)
     fc_id       = information_to_extract.match(job_id).group(4)
 
-    information_to_extract_fc_id = re.compile("(\d{6})_(.{6})_(\d{4})_(.{10})")
+    information_to_extract_fc_id = re.compile("(\d{6})_(.+)_(\d{4})_(.+)")
     run_id_piper = information_to_extract_fc_id.match(fc_id).group(4)
 
     #this returns the correct seq eun for this library, sample, project
