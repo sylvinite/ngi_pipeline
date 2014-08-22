@@ -12,7 +12,6 @@ def main(config_file):
 
 if __name__=="__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--config", required=True,
-            help="The path to the configuration file.")
+    parser.add_argument("config", help="The path to the configuration file.")
     args = parser.parse_args()
     main(args.config)
