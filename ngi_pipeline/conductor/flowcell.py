@@ -188,7 +188,7 @@ def setup_analysis_directory_structure(fc_dir, projects_to_analyze,
             seqrun_dir = None
 
             for fq_file in fastq_files:
-                libprep_name = determine_library_prep_from_fcid(project_id, sample_name, fcid)
+                libprep_name = determine_library_prep_from_fcid(project_id, sample_name, fc_full_id)
                 libprep_object = sample_obj.add_libprep(name=libprep_name,
                                                         dirname=libprep_name)
                 libprep_dir = os.path.join(sample_dir, libprep_name)

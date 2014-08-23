@@ -25,6 +25,7 @@ def determine_library_prep_from_fcid(project_id, sample_name, fcid):
     :raises ValueError: If no match was found.
     :raises RuntimeError: If the database could not be reached (?)
     """
+    
     charon_session = CharonSession()
     url = charon_session.construct_charon_url("libpreps", project_id, sample_name)
     # Should return all library preps for this sample in this project
@@ -45,17 +46,8 @@ def determine_library_prep_from_fcid(project_id, sample_name, fcid):
                                "{}: {}".format(all_seqruns_response.status_code,
                                                all_seqruns_response.reason))
         for seqrun in all_seqruns_response.json()['seqruns']:
-            url = charon_session.construct_charon_url("seqrun", project_id,
-                                                      sample_name,
-                                                      libprep['libprepid'],
-                                                      seqrun['seqrunid'])
-            seqrun_response = charon_session.get(url)
-            if seqrun_response.status_code != 200:
-                raise RuntimeError("Error when accessing Charon DB: "
-                                   "{}: {}".format(seqrun_response.status_code,
-                                                   seqrun_response.reason))
-            seqrun_runid = seqrun_response.json()["seqrunid"]
-            if seqrun_runid.split("_")[3] == fcid:
+            seqrun_runid = seqrun["seqrunid"]
+            if seqrun_runid == fcid:
                 return libprep['libprepid']
     raise ValueError('No library prep found for project "{}" / sample "{}" '
                      '/ fcid "{}"'.format(project_id, sample_name, fcid))
