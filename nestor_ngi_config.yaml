@@ -38,6 +38,6 @@ analysis:
             analysis_engine: ngi_pipeline.de_novo_pipeline
         RNA:
             analysis_engine: ngi_pipeline.bcbio_ngi
-    top_dir: /proj/a2010002/nobackup/mario/analysis_ready
+    top_dir: /proj/a2010002/nobackup/NGI/analysis_ready
     #log: /proj/a2010002/data/log
     #store_dir: /proj/a2010002/archive

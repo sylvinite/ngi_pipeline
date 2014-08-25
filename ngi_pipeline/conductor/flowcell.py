@@ -34,12 +34,13 @@ def process_demultiplexed_flowcell(demux_fcid_dir_path, restrict_to_projects=Non
                                      restricted to these. Optional.
     :param str config_file_path: The path to the NGI configuration file; optional.
     """
+    ## FIXME
     ## Why is it that we need to restrict this to a single flowcell?
     ## Does it break otherwise?
     if type(demux_fcid_dir_path) is not str:
         error_message = ("The path to a single demultiplexed flowcell should be "
                          "passed to this function as a string.")
-        sys.exit("Quitting: " + error_message)
+        raise ValueError(error_message)
     process_demultiplexed_flowcells([demux_fcid_dir_path], restrict_to_projects,
                                     restrict_to_samples, config_file_path)
 
@@ -87,8 +88,10 @@ def process_demultiplexed_flowcells(demux_fcid_dirs, restrict_to_projects=None,
     else:
         # Don't need the dict functionality anymore; revert to list
         projects_to_analyze = projects_to_analyze.values()
-    ##project to analyse contained only in the current flowcell(s),
-    ##I am ready to analyse the projects at flowcell level only
+    # The automatic analysis that occurs after flowcells are delivered is
+    # only at the flowcell level. Another intermittent check determines if
+    # conditions are met for sample-level analysis to proceed and launches
+    # that if so.
     launch_analysis_for_flowcells(projects_to_analyze)
 
 
@@ -130,11 +133,6 @@ def setup_analysis_directory_structure(fc_dir, projects_to_analyze,
     except RuntimeError as e:
         LOG.error("Error when processing flowcell dir \"{}\": {}".format(fc_dir, e))
         return []
-    # From RunInfo.xml
-    fc_date = fc_dir_structure['fc_date']
-    # From RunInfo.xml (name) & runParameters.xml (position)
-    fcid = fc_dir_structure['fc_name']
-    fc_short_run_id = "{}_{}".format(fc_date, fcid)
     fc_full_id      = fc_dir_structure['fc_full_id']
     if not fc_dir_structure.get('projects'):
         LOG.warn("No projects found in specified flowcell directory \"{}\"".format(fc_dir))
@@ -145,11 +143,8 @@ def setup_analysis_directory_structure(fc_dir, projects_to_analyze,
         if restrict_to_projects and project_name not in restrict_to_projects:
             LOG.debug("Skipping project {}".format(project_name))
             continue
-        #now check if this project can be parsed via Charon
         try:
-            ## NOTE NOTE NOTE that this means we have to be able to access Charon
-            ##                to process things. I dislike this but I have no
-            ##                other way to get the Project ID
+            # This requires Charon access -- maps e.g. "Y.Mom_14_01" to "P123"
             project_id = get_project_id_from_name(project_name)
         except (RuntimeError, ValueError) as e:
             error_msg = ('Cannot proceed with project "{}" due to '
@@ -206,6 +201,7 @@ def setup_analysis_directory_structure(fc_dir, projects_to_analyze,
                                           project['project_dir'],
                                           sample['sample_dir'])
             for libprep in sample_obj:
+            ## NOTE to Mario what does this mean and can we avoid it
             #this function works at run_level, so I have to process a single run
             #it might happen that in a run we have multiple lib preps for the same sample
                 #for seqrun in libprep:
@@ -260,11 +256,11 @@ def parse_casava_directory(fc_dir):
     LOG.info("Parsing flowcell directory \"{}\"...".format(fc_dir))
     parser = FlowcellRunMetricsParser(fc_dir)
     run_info = parser.parseRunInfo()
-    runparams = parser.parseRunParameters()
+    #runparams = parser.parseRunParameters()
     try:
-        fc_name    = run_info['Flowcell']
-        fc_date    = run_info['Date']
-        fc_pos     = runparams['FCPosition']
+        #fc_name    = run_info['Flowcell']
+        #fc_date    = run_info['Date']
+        #fc_pos     = runparams['FCPosition']
         fc_full_id = run_info['Id']
     except KeyError as e:
         raise RuntimeError("Could not parse flowcell information {} "
@@ -272,8 +268,6 @@ def parse_casava_directory(fc_dir):
     # "Unaligned*" because SciLifeLab dirs are called "Unaligned_Xbp"
     # (where "X" is the index length) and there is also an "Unaligned" folder
     unaligned_dir_pattern = os.path.join(fc_dir,"Unaligned*")
-    basecall_stats_dir_pattern = os.path.join(unaligned_dir_pattern,"Basecall_Stats_*")
-    basecall_stats_dir = [os.path.relpath(d,fc_dir) for d in glob.glob(basecall_stats_dir_pattern)]
     # e.g. 131030_SN7001362_0103_BC2PUYACXX/Unaligned_16bp/Project_J__Bjorkegren_13_02/
     project_dir_pattern = os.path.join(unaligned_dir_pattern,"Project_*")
     for project_dir in glob.glob(project_dir_pattern):
@@ -286,17 +280,10 @@ def parse_casava_directory(fc_dir):
             fastq_file_pattern = os.path.join(sample_dir,"*.fastq.gz")
             samplesheet_pattern = os.path.join(sample_dir,"*.csv")
             fastq_files = [os.path.basename(file) for file in glob.glob(fastq_file_pattern)]
-            ## NOTE that we don't wind up using this SampleSheet for anything so far as I know
-            ## TODO consider removing; however, some analysis engines that
-            ##      we want to include in the future may need them.
-            #samplesheet = glob.glob(samplesheet_pattern)
-            #assert len(samplesheet) == 1, \
-            #        "Error: could not unambiguously locate samplesheet in {}".format(sample_dir)
             sample_name = os.path.basename(sample_dir).replace("Sample_","").replace('__','.')
             project_samples.append({'sample_dir': os.path.basename(sample_dir),
                                     'sample_name': sample_name,
                                     'files': fastq_files,
-            #                        'samplesheet': os.path.basename(samplesheet[0])})
                                    })
         project_name = os.path.basename(project_dir).replace("Project_","").replace('__','.')
         projects.append({'data_dir': os.path.relpath(os.path.dirname(project_dir),fc_dir),
@@ -304,8 +291,5 @@ def parse_casava_directory(fc_dir):
                          'project_name': project_name,
                          'samples': project_samples})
     return {'fc_dir'    : fc_dir,
-            'fc_name'   : '{}{}'.format(fc_pos, fc_name),
-            'fc_date'   : fc_date,
             'fc_full_id': fc_full_id,
-            'basecall_stats_dir': basecall_stats_dir,
             'projects': projects}
