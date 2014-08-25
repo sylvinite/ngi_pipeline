@@ -239,8 +239,8 @@ def write_status_to_charon(project_id, return_code):
     try:
         charon_session.project_update(project_id, status=status)
     except CharonError as e:
-        error_msg = ('Failed to update project status for "{}" '
-                     'in Charon database: {}'.format(project_id, e))
+        error_msg = ('Failed to update project status to "{}" for "{}" '
+                     'in Charon database: {}'.format(status, project_id, e))
         raise RuntimeError(error_msg)
 
 
@@ -258,11 +258,11 @@ def write_to_charon_NGI_results(job_id, return_code, run_dir=None):
     charon_session = CharonSession()
     # Consider moving this mapping to the CharonSession object or something
     if return_code is None:
-        IGN_status = "RUNNING"
+        status = "RUNNING"
     elif return_code == 0:
-        IGN_status = "DONE"
+        status = "DONE"
     else:
-        IGN_status = "FAILED"
+        status = "FAILED"
     try:
         ## Could move to ngi_pipeline.utils.parsers if it gets used a lot
         # e.g. A.Wedell_13_03_P567_102
@@ -276,8 +276,8 @@ def write_to_charon_NGI_results(job_id, return_code, run_dir=None):
     try:
         charon_session.sample_update(project_id, sample_id, status=status)
     except CharonError as e:
-        error_msg = ('Failed to update project status for "{}" sample {}'
-                     'in Charon database: {}'.format(project_id, sample_id, e))
+        error_msg = ('Failed to update project status to "{}" for "{}" sample {}'
+                     'in Charon database: {}'.format(status, project_id, sample_id, e))
         raise RuntimeError(error_msg)
 
 
