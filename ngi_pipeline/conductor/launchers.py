@@ -11,7 +11,8 @@ from ngi_pipeline.database.communicate import get_workflow_for_project
 from ngi_pipeline.database.process_tracking import check_if_sample_analysis_is_running, \
                                                    is_flowcell_analysis_running, \
                                                    is_sample_analysis_running, \
-                                                   record_process_flowcell
+                                                   record_process_flowcell, \
+                                                   record_process_sample
 from ngi_pipeline.log.loggers import minimal_logger
 from ngi_pipeline.utils.classes import with_ngi_config
 
