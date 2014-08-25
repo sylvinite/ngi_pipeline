@@ -267,7 +267,7 @@ def write_to_charon_NGI_results(job_id, return_code, run_dir=None):
         ## Could move to ngi_pipeline.utils.parsers if it gets used a lot
         # e.g. A.Wedell_13_03_P567_102
         ## FIXME won't work for Uppsala project/sample names
-        m = re.match(r'(?P<project_name>[a-zA-Z]\.[a-zA-Z]*_\d*_\d*)_(?P<sample_id>P\d*_\d*)', job_id)
+        m = re.match(r'(?P<project_name>\w\.\w+_\d+_\d+)_(?P<sample_id>P\d+_\d+)', job_id)
         project_id   = get_project_id_from_name(m.groupdict['project_name'])
         sample_id    = m.groupdict['sample_id']
     except (TypeError, AttributeError):
