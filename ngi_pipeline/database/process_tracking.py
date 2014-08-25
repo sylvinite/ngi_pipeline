@@ -239,8 +239,8 @@ def write_status_to_charon(project_id, return_code):
     try:
         charon_session.project_update(project_id, status=status)
     except CharonError as e:
-        error_msg = ('Failed to update project status for "{}" '
-                     'in Charon database: {}'.format(project_id, e))
+        error_msg = ('Failed to update project status to "{}" for "{}" '
+                     'in Charon database: {}'.format(status, project_id, e))
         raise RuntimeError(error_msg)
 
 
@@ -258,11 +258,11 @@ def write_to_charon_NGI_results(job_id, return_code, run_dir=None):
     charon_session = CharonSession()
     # Consider moving this mapping to the CharonSession object or something
     if return_code is None:
-        IGN_status = "RUNNING"
+        status = "RUNNING"
     elif return_code == 0:
-        IGN_status = "DONE"
+        status = "DONE"
     else:
-        IGN_status = "FAILED"
+        status = "FAILED"
     try:
         ## Could move to ngi_pipeline.utils.parsers if it gets used a lot
         # e.g. A.Wedell_13_03_P567_102
@@ -276,8 +276,8 @@ def write_to_charon_NGI_results(job_id, return_code, run_dir=None):
     try:
         charon_session.sample_update(project_id, sample_id, status=status)
     except CharonError as e:
-        error_msg = ('Failed to update project status for "{}" sample {}'
-                     'in Charon database: {}'.format(project_id, sample_id, e))
+        error_msg = ('Failed to update project status to "{}" for "{}" sample {}'
+                     'in Charon database: {}'.format(status, project_id, sample_id, e))
         raise RuntimeError(error_msg)
 
 
@@ -291,31 +291,31 @@ def write_to_charon_alignment_results(job_id, return_code):
 
     :raises RuntimeError: If the Charon database could not be updated
     """
-    ## FIXME If the process isn't finished we can just skip this function altogether.
-    ##       Change this upstream.
+    try:
+        # e.g. A.Wedell_13_03_P567_102_A_140528_D00415_0049_BC423WACXX
+        m = re.match(r('(?P<project_name>\w\.\w+_\d+_\d+)_(?P<sample_id>P\d+_\d+)_'
+                      '(?P<libprep_id>\w)_(?P<seqrun_id>\d{6}_.+_\d{4}_.{10})'), job_id).groupdict()
+    except AttributeError:
+        raise ValueError("Could not parse job_id \"{}\"; does not match template.".format(job_id))
+    project_name = m.groupdict["project_name"]
+    project_id = get_project_id_from_name(project_name)
+    sample_id = m.groupdict["sample_name"]
+    libprep_id = m.groupdict["libprep"]
+    seqrun_id = m.groupdict["seqrun"]
+    piper_run_id = fcid.split("_")[3]
+
+    charon_session = CharonSession()
+    try:
+        seqrun_dict = charon_session.seqrun_get(project_id, sample_id, library_id, fcid)
+    except CharonError as e:
+        raise RuntimeError('Error accessing database for project "{}", sample {}; '
+                           'could not update Charon while performing best practice: '
+                           '{}'.format(project_id, sample_id,  e))
+
+
     if return_code is None:     # Alignment is still running
         seqrun_dict["alignment_status"] = "RUNNING"
     elif return_code == 0:      # Alignment finished successfully
-        try:
-            # e.g. A.Wedell_13_03_P567_102_A_140528_D00415_0049_BC423WACXX
-            m = re.match(r('(?P<project_name>\w\.\w+_\d+_\d+)_(?P<sample_id>P\d+_\d+)_'
-                          '(?P<libprep_id>\w)_(?P<seqrun_id>\d{6}_.+_\d{4}_.{10})'), job_id).groupdict()
-        except AttributeError:
-            raise ValueError("Could not parse job_id \"{}\"; does not match template.".format(job_id))
-        project_name = m.groupdict["project_name"]
-        project_id = get_project_id_from_name(project_name)
-        sample_id = m.groupdict["sample_name"]
-        libprep_id = m.groupdict["libprep"]
-        seqrun_id = m.groupdict["seqrun"]
-        piper_run_id = fcid.split("_")[3]
-
-        charon_session = CharonSession()
-        try:
-            seqrun_dict = charon_session.seqrun_get(project_id, sample_id, library_id, fcid)
-        except CharonError as e:
-            raise RuntimeError('Error accessing database for project "{}", sample {}; '
-                               'could not update Charon while performing best practice: '
-                               '{}'.format(project_id, sample_id,  e))
         # In this case I need to update the alignment statistics for each lane in this seq run
         if seqrun_dict.get("alignment_status") == "DONE":
             ## TODO Should we in fact overwrite the previous results?
@@ -346,16 +346,6 @@ def write_to_charon_alignment_results(job_id, return_code):
                 update_seq_run_for_lane(seqrun_dict, lane_alignment_metrics)
             seqrun_dict["alignment_status"] = "DONE"
 
-            # Update Charon with the metrics for all the lanes we just parsed
-            try:
-                # Update the seqrun in the Charon database
-                charon_session.seqrun_update(project_id, sample_id, libprep_id, seqrun_id, **seqrun_dict)
-            except CharonError as e:
-                error_msg = ('Failed to update run alignment status for run "{}" in project {} '
-                             'sample {}, library prep {} to  Charon database: {}'.format(fc_id,
-                              project_id, sample_id, library_id, e))
-                raise RuntimeError(error_msg)
-
         # This is hit if there is any problem parsing all the metrics in the try above
         except ValueError as e:
             error_msg = ("Could not parse alignment results when processing {}/{}/{}/{}: "
@@ -363,7 +353,8 @@ def write_to_charon_alignment_results(job_id, return_code):
             LOG.error(error_msg)
             ## Processing failed, unsure if alignment actually failed? Should we be resetting the seqrun in Charon?
             ## Consider just falling back to the final else bit below
-            charon_session.seqrun_update(project_id, sample_id, libprep_id, seqrun_id, status="FAILED")
+            #charon_session.seqrun_update(project_id, sample_id, libprep_id, seqrun_id, status="FAILED")
+            seqrun_dict["alignment_status"] = "FAILED"
 
     else:
         # Alignment failed (return code > 0), store it as aborted
@@ -372,7 +363,17 @@ def write_to_charon_alignment_results(job_id, return_code):
                       project_id, sample_id, library_id))
         LOG.error(error_msg)
         charon_session.seqrun_reset(project_id, sample_id, libprep_id, seqrun_id)
-        charon_session.seqrun_update(project_id, sample_id, libprep_id, seqrun_id, status="FAILED")
+        #charon_session.seqrun_update(project_id, sample_id, libprep_id, seqrun_id, status="FAILED")
+        seqrun_dict["alignment_status"] = "FAILED"
+
+    try:
+        # Update the seqrun in the Charon database
+        charon_session.seqrun_update(project_id, sample_id, libprep_id, seqrun_id, **seqrun_dict)
+    except CharonError as e:
+        error_msg = ('Failed to update run alignment status for run "{}" in project {} '
+                     'sample {}, library prep {} to  Charon database: {}'.format(fc_id,
+                      project_id, sample_id, library_id, e))
+        raise RuntimeError(error_msg)
 
 
 # TODO rethink this possibly, works at the moment
