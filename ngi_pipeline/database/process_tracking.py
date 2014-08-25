@@ -266,6 +266,7 @@ def write_to_charon_NGI_results(job_id, return_code, run_dir=None):
     try:
         ## Could move to ngi_pipeline.utils.parsers if it gets used a lot
         # e.g. A.Wedell_13_03_P567_102
+        ## FIXME won't work for Uppsala project/sample names
         m = re.match(r'(?P<project_name>[a-zA-Z]\.[a-zA-Z]*_\d*_\d*)_(?P<sample_id>P\d*_\d*)', job_id)
         project_id   = get_project_id_from_name(m.groupdict['project_name'])
         sample_id    = m.groupdict['sample_id']
@@ -296,7 +297,7 @@ def write_to_charon_alignment_results(job_id, return_code):
         seqrun_dict["alignment_status"] = "RUNNING"
     elif return_code == 0:      # Alignment finished successfully
         try:
-            # e.g. A.Wedell_13_03_P567_102_A_130627_AH0JYUADXX
+            # e.g. A.Wedell_13_03_P567_102_A_140528_D00415_0049_BC423WACXX
             m = re.match(r('(?P<project_name>\w\.\w+_\d+_\d+)_(?P<sample_id>P\d+_\d+)_'
                           '(?P<libprep_id>\w)_(?P<seqrun_id>\d{6}_.+_\d{4}_.{10})'), job_id).groupdict()
         except AttributeError:
