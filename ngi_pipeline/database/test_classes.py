@@ -73,6 +73,8 @@ class TestCharonFunctions(unittest.TestCase):
     # These functions all raise an Exception if there's any issue
     # They're numbered as they must occur in this order
 
+    ## TODO update to test new functions (samples_get_all -> project_get_samples)
+
     def test_01_project_create(self):
         self.session.project_create(self.p_id)
 
