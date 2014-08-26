@@ -73,6 +73,8 @@ class TestCharonFunctions(unittest.TestCase):
     # These functions all raise an Exception if there's any issue
     # They're numbered as they must occur in this order
 
+    ## TODO update to test new functions (samples_get_all -> project_get_samples)
+
     def test_01_project_create(self):
         self.session.project_create(self.p_id)
 
@@ -121,7 +123,6 @@ class TestCharonFunctions(unittest.TestCase):
     def test_13_seqrun_reset(self):
         self.session.seqrun_reset(projectid=self.p_id, sampleid=self.s_id,
                                    libprepid=self.l_id, seqrunid=self.sr_id)
-        ## FIXME Sequencing status should be unchanged but it's getting reset automatically by Charon?
         seqrun_dict = self.session.seqrun_get(projectid=self.p_id, sampleid=self.s_id,
                                               libprepid=self.l_id, seqrunid=self.sr_id)
         assert(seqrun_dict['sequencing_status'] == "RUNNING")

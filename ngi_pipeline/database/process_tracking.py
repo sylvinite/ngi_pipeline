@@ -7,7 +7,7 @@ import re
 import shelve
 
 from ngi_pipeline.log.loggers import minimal_logger
-from ngi_pipeline.database.classes import CharonSession
+from ngi_pipeline.database.classes import CharonSession, CharonError
 from ngi_pipeline.database.communicate import get_project_id_from_name
 from ngi_pipeline.utils.classes import with_ngi_config
 from ngi_pipeline.utils.parsers import parse_qualimap_results
@@ -44,7 +44,6 @@ def check_update_jobs_status(projects_to_check=None, config=None, config_file_pa
     :param dict config: The parsed NGI configuration file; optional.
     :param list config_file_path: The path to the NGI configuration file; optional.
     """
-    
     db_dict = get_all_tracked_processes()
     for job_name, project_dict in db_dict.iteritems():
         LOG.info("Checking workflow {} for project {}...".format(project_dict["workflow"],
@@ -185,45 +184,6 @@ def check_if_sample_analysis_is_running( project, sample, config=None):
         return False
 
 
-#def check_if_flowcell_analysis_is_running( project, sample, libprep, fcid, config=None):
-#    """checks if a given project/sample/library/flowcell is currently analysed.
-#
-#    :param Project project: the project object
-#    :param Sample sample:
-#    :param LibPrep libprep:
-#    :param string fcid:
-#    :param dict config: The parsed configuration file (optional)
-#
-#    :raises RuntimeError: If the configuration file cannot be found
-#
-#    :returns true/false
-#    """
-#    LOG.info("checking if Project {}, Sample {}, Library prep {}, fcid {} "
-#             "are currently being analysed ".format(project, sample, libprep, fcid))
-#    with get_shelve_database(config) as db:
-#        if project.name in db:
-#            error_msg = ("Project '{}' is already being analysed at project level "
-#                         "This run should not exists!!! somethig terribly wrong is happening, "
-#                         "Kill everything  and call Mario and Francesco".format(project))
-#            LOG.info(error_msg)
-#            raise RuntimeError(error_msg)
-#
-#        if "{}_{}".format(project.name, sample) in db:
-#            error_msg = ("Sample '{}' of project '{}' is already being analysed at sample level "
-#                         "This run should not exists!!! somethig terribly wrong is happening, "
-#                         "Kill everything  and call Mario and Francesco".format(sample, project))
-#            LOG.info(error_msg)
-#            raise RuntimeError(error_msg)
-#
-#        db_key = "{}_{}_{}_{}".format(project, sample, libprep, fcid)
-#        if db_key in db:
-#            warn_msg = ("Project {}, Sample {}, Library prep {}, fcid {} "
-#                         "has an entry in the local db. Analysis are ongoing.".format(project, sample, libprep, fcid))
-#            LOG.warn(warn_msg)
-#            return True
-#        return False
-
-
 def write_status_to_charon(project_id, return_code):
     """Update the status of a workflow for a project in the Charon database.
 
@@ -246,7 +206,7 @@ def write_status_to_charon(project_id, return_code):
 
 ## FIXME This needs to be moved to the engine_ngi or else some generic format needs to be created
 ##       and a dict passed back to this function. Something like that.
-def write_to_charon_NGI_results(job_id, return_code, run_dir=None):
+def write_to_charon_NGI_results(job_id, return_code, run_dir):
     """Update the status of a sequencing run after alignment.
 
     :param NGIProject project_id: The name of the project, sample, lib prep, flowcell id
@@ -267,9 +227,9 @@ def write_to_charon_NGI_results(job_id, return_code, run_dir=None):
         ## Could move to ngi_pipeline.utils.parsers if it gets used a lot
         # e.g. A.Wedell_13_03_P567_102
         ## FIXME won't work for Uppsala project/sample names
-        m = re.match(r'(?P<project_name>\w\.\w+_\d+_\d+)_(?P<sample_id>P\d+_\d+)', job_id)
-        project_id   = get_project_id_from_name(m.groupdict['project_name'])
-        sample_id    = m.groupdict['sample_id']
+        m_dict = re.match(r'(?P<project_name>\w\.\w+_\d+_\d+)_(?P<sample_id>P\d+_\d+)', job_id).groupdict()
+        project_id = get_project_id_from_name(m_dict['project_name'])
+        sample_id = m_dict['sample_id']
     except (TypeError, AttributeError):
         error_msg = "Could not parse project/sample ids from job id \"{}\"; cannot update Charon with results!".format(job_id)
         raise RuntimeError(error_msg)
@@ -282,7 +242,8 @@ def write_to_charon_NGI_results(job_id, return_code, run_dir=None):
 
 
 ## MARIO FIXME Move to piper_ngi, see note above
-def write_to_charon_alignment_results(job_id, return_code):
+## NOTE Should run_dir's default be None? That doesn't seem like it would work but it was set this way previously
+def write_to_charon_alignment_results(job_id, return_code, run_dir):
     """Update the status of a sequencing run after alignment.
 
     :param NGIProject project_id: The name of the project, sample, lib prep, flowcell id
@@ -293,26 +254,26 @@ def write_to_charon_alignment_results(job_id, return_code):
     """
     try:
         # e.g. A.Wedell_13_03_P567_102_A_140528_D00415_0049_BC423WACXX
-        m = re.match(r('(?P<project_name>\w\.\w+_\d+_\d+)_(?P<sample_id>P\d+_\d+)_'
+        m_dict = re.match(('(?P<project_name>\w\.\w+_\d+_\d+)_(?P<sample_id>P\d+_\d+)_'
                       '(?P<libprep_id>\w)_(?P<seqrun_id>\d{6}_.+_\d{4}_.{10})'), job_id).groupdict()
     except AttributeError:
         raise ValueError("Could not parse job_id \"{}\"; does not match template.".format(job_id))
-    project_name = m.groupdict["project_name"]
+    project_name = m_dict["project_name"]
     project_id = get_project_id_from_name(project_name)
-    sample_id = m.groupdict["sample_name"]
-    libprep_id = m.groupdict["libprep"]
-    seqrun_id = m.groupdict["seqrun"]
-    piper_run_id = fcid.split("_")[3]
+    sample_id = m_dict["sample_id"]
+    libprep_id = m_dict["libprep_id"]
+    seqrun_id = m_dict["seqrun_id"]
+    piper_run_id = seqrun_id.split("_")[3]
 
     charon_session = CharonSession()
     try:
-        seqrun_dict = charon_session.seqrun_get(project_id, sample_id, library_id, fcid)
+        seqrun_dict = charon_session.seqrun_get(project_id, sample_id, libprep_id, seqrun_id)
     except CharonError as e:
         raise RuntimeError('Error accessing database for project "{}", sample {}; '
                            'could not update Charon while performing best practice: '
                            '{}'.format(project_id, sample_id,  e))
-
-
+    ## Why does this start out with a value??
+    seqrun_dict["lanes"] = 0
     if return_code is None:     # Alignment is still running
         seqrun_dict["alignment_status"] = "RUNNING"
     elif return_code == 0:      # Alignment finished successfully
@@ -320,13 +281,15 @@ def write_to_charon_alignment_results(job_id, return_code):
         if seqrun_dict.get("alignment_status") == "DONE":
             ## TODO Should we in fact overwrite the previous results?
             LOG.warn("Sequencing run \"{}\" marked as DONE but writing new alignment results; "
-                     "this will overwrite the previous results.".format(fcid))
+                     "this will overwrite the previous results.".format(seqrun_id))
 
         try:
             # Find all the appropriate files
             piper_result_dir = os.path.join(run_dir, "02_preliminary_alignment_qc")
-            if not os.path.isdir(piper_result_dir):
-                raise ValueError("Piper result directory \"{}\" is missing.".format(piper_result_dir))
+            try:
+                os.path.isdir(piper_result_dir) and os.listdir(piper_result_dir)
+            except OSError as e:
+                raise ValueError("Piper result directory \"{}\" inaccessible: {}.".format(piper_result_dir, e))
             piper_qc_dir_base = "{}.{}.{}".format(sample_id, piper_run_id, sample_id)
             piper_qc_path = "{}*/".format(os.path.join(piper_result_dir, piper_qc_dir_base))
             piper_qc_dirs = glob.glob(piper_qc_path)
@@ -349,7 +312,7 @@ def write_to_charon_alignment_results(job_id, return_code):
         # This is hit if there is any problem parsing all the metrics in the try above
         except ValueError as e:
             error_msg = ("Could not parse alignment results when processing {}/{}/{}/{}: "
-                         "{}".format(project_id, sample_id, library_id, seqrun_id, e))
+                         "{}".format(project_id, sample_id, libprep_id, seqrun_id, e))
             LOG.error(error_msg)
             ## Processing failed, unsure if alignment actually failed? Should we be resetting the seqrun in Charon?
             ## Consider just falling back to the final else bit below
@@ -359,8 +322,8 @@ def write_to_charon_alignment_results(job_id, return_code):
     else:
         # Alignment failed (return code > 0), store it as aborted
         error_msg = ('Alignment ended with an error: Piper returned non 0 return code'
-                      'currently processing runid {} for project {}, sample {}, libprep {}'.format(fc_id,
-                      project_id, sample_id, library_id))
+                      'currently processing runid {} for project {}, sample {}, libprep {}'.format(seqrun_id,
+                      project_id, sample_id, libprep_id))
         LOG.error(error_msg)
         charon_session.seqrun_reset(project_id, sample_id, libprep_id, seqrun_id)
         #charon_session.seqrun_update(project_id, sample_id, libprep_id, seqrun_id, status="FAILED")
@@ -368,23 +331,22 @@ def write_to_charon_alignment_results(job_id, return_code):
 
     try:
         # Update the seqrun in the Charon database
-        charon_session.seqrun_update(project_id, sample_id, libprep_id, seqrun_id, **seqrun_dict)
+        charon_session.seqrun_update(**seqrun_dict)
     except CharonError as e:
         error_msg = ('Failed to update run alignment status for run "{}" in project {} '
-                     'sample {}, library prep {} to  Charon database: {}'.format(fc_id,
-                      project_id, sample_id, library_id, e))
+                     'sample {}, library prep {} to  Charon database: {}'.format(seqrun_id,
+                      project_id, sample_id, libprep_id, e))
         raise RuntimeError(error_msg)
 
 
 # TODO rethink this possibly, works at the moment
 def update_seq_run_for_lane(seqrun_dict, lane_alignment_metrics):
-    num_lanes = seqrun_dict.get("lanes")    # This gives None the first time
-    seqrun_dict["lanes"] += 1   # Increment
+    num_lanes = seqrun_dict.get("lanes")    # This gives 0 the first time
+    seqrun_dict["lanes"] = seqrun_dict["lanes"] + 1   # Increment
     ## FIXME Change this so the lane_alignment_metrics has a "lane" value
     current_lane = re.match(".+\.(\d)\.bam", lane_alignment_metrics["bam_file"]).group(1)
 
     fields_to_update = ('mean_coverage',
-                        #'mean_autosomal_coverage',
                         'std_coverage',
                         'aligned_bases',
                         'mapped_bases',
@@ -400,14 +362,15 @@ def update_seq_run_for_lane(seqrun_dict, lane_alignment_metrics):
                         )
     ## FIXME Change how Charon stores these things? A dict for each attribute seems a little funky
     for field in fields_to_update:
-        if not lanes:
+        if not num_lanes:
             seqrun_dict[field] = {current_lane : lane_alignment_metrics[field]}
+            seqrun_dict["mean_autosomal_coverage"] = 0
         else:
             seqrun_dict[field][current_lane] =  lane_alignment_metrics[field]
-    ## FIXME Are we just adding these all together? That doesn't really seem right for an average
-    seqrun_dict[field] = seqrun_dict.get("mean_autosomal_coverage", 0) + lane_alignment_metrics["mean_autosomal_coverage"]
+    seqrun_dict["mean_autosomal_coverage"] = seqrun_dict.get("mean_autosomal_coverage", 0) + lane_alignment_metrics["mean_autosomal_coverage"]
 
 
+# Change 'fcid' to 'seqrun_id'
 def record_process_flowcell(p_handle, workflow, project, sample, libprep, fcid,
                             analysis_module, analysis_dir, config=None):
     LOG.info("Recording process id {} for project {}, sample {}, fcid {} "
@@ -427,7 +390,7 @@ def record_process_flowcell(p_handle, workflow, project, sample, libprep, fcid,
             return 
 
         db[db_key] = project_dict
-        LOG.info("Successfully recorded process id {} for Project {}, Sample {}, Library prep {}, fcid {}, "
+        LOG.info("Successfully recorded process id {} for project {}, sample {}, libprep {}, seqrun {}, "
                  "workflow {}".format(p_handle.pid, project, sample, libprep, fcid,   workflow))
 
 

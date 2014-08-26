@@ -6,7 +6,11 @@ import os
 import re
 import requests
 
+from ngi_pipeline.log.loggers import minimal_logger
 from ngi_pipeline.utils.classes import memoized
+
+# Need a better way to log
+LOG = minimal_logger(__name__)
 
 
 try:
@@ -67,6 +71,9 @@ class CharonSession(requests.Session):
         """Build a Charon URL, appending any *args passed."""
         return "{}/api/v1/{}".format(self._base_url,'/'.join([str(a) for a in args]))
 
+
+    ## FIXME There's a lot of repeat code here that might could be condensed
+
     # Project
     def project_create(self, projectid, name=None, status=None, pipeline=None, bpa=None):
         l_dict = locals()
@@ -77,6 +84,10 @@ class CharonSession(requests.Session):
     def project_get(self, projectid):
         return self.get(self.construct_charon_url('project', projectid)).json()
 
+
+    def project_get_samples(self, projectid):
+        return self.get(self.construct_charon_url('samples', projectid)).json()
+    
     def project_update(self, projectid, name=None, status=None, pipeline=None, bpa=None):
         l_dict = locals()
         data = { k: l_dict.get(k) for k in self._project_params if l_dict.get(k)}
@@ -103,6 +114,9 @@ class CharonSession(requests.Session):
         url = self.construct_charon_url("sample", projectid, sampleid)
         return self.get(url).json()
 
+    def sample_get_libpreps(self, projectid, sampleid):
+        return self.get(self.construct_charon_url('libpreps', projectid, sampleid)).json()
+
     def sample_update(self, projectid, sampleid, status=None, received=None,
                       qc_status=None, genotyping_status=None,
                       genotyping_concordance=None, lims_initial_qc=None,
@@ -112,8 +126,10 @@ class CharonSession(requests.Session):
         data = { k: l_dict.get(k) for k in self._sample_params if l_dict.get(k)}
         return self.put(url, json.dumps(data)).text
 
+    ## Eliminate?
     def samples_get_all(self, projectid):
-        return self.get(self.construct_charon_url('samples', projectid)).json()
+        return self.project_get_samples(projectid)
+        #return self.get(self.construct_charon_url('samples', projectid)).json()
 
     # LibPrep
     def libprep_create(self, projectid, sampleid, libprepid, status=None, limsid=None):
@@ -126,14 +142,20 @@ class CharonSession(requests.Session):
         url = self.construct_charon_url("libprep", projectid, sampleid, libprepid)
         return self.get(url).json()
 
+    def libprep_get_seqruns(self, projectid, sampleid, libprepid):
+        return self.get(self.construct_charon_url('seqruns', projectid, sampleid, libprepid)).json()
+
+
     def libprep_update(self, projectid, sampleid, libprepid, status=None, limsid=None):
         url = self.construct_charon_url("libprep", projectid, sampleid, libprepid)
         l_dict = locals()
         data = { k: l_dict.get(k) for k in self._libprep_params if l_dict.get(k)}
         return self.put(url, json.dumps(data)).text
 
+    ## Eliminate?
     def libpreps_get_all(self, projectid, sampleid):
-        return self.get(self.construct_charon_url('libpreps', projectid, sampleid)).json()
+        return self.sample_get_libpreps(projectid, sampleid)
+        #return self.get(self.construct_charon_url('libpreps', projectid, sampleid)).json()
 
     # SeqRun
     def seqrun_create(self, projectid, sampleid, libprepid, seqrunid,
@@ -165,8 +187,11 @@ class CharonSession(requests.Session):
                       sequenced_bases=None, windows=None, bam_file=None,
                       output_file=None, mean_mapping_quality=None,
                       bases_number=None, contigs_number=None,
-                      lanes=None,
-                      alignment_coverage=None):
+                      lanes=None, alignment_coverage=None,
+                      *args, **kwargs):
+        ## TODO Consider implementing for allathese functions
+        if args: LOG.info("Ignoring extra args: {}".format(", ".join(*args)))
+        if kwargs: LOG.info("Ignoring extra kwargs: {}".format(", ".join(["{}: {}".format(k,v) for k,v in kwargs.iteritems()])))
         url = self.construct_charon_url("seqrun", projectid, sampleid, libprepid, seqrunid)
         l_dict = locals()
         data = { k: l_dict.get(k) for k in self._seqrun_params if l_dict.get(k)}
@@ -179,7 +204,8 @@ class CharonSession(requests.Session):
 
 
     def seqruns_get_all(self, projectid, sampleid, libprepid):
-        return self.get(self.construct_charon_url('seqruns', projectid, sampleid, libprepid)).json()
+        return self.libprep_get_seqruns(projectid, sampleid, libprepid)
+        #return self.get(self.construct_charon_url('seqruns', projectid, sampleid, libprepid)).json()
 
 
 class CharonError(RuntimeError):

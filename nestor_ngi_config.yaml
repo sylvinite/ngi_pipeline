@@ -4,7 +4,8 @@
 sbatch:
 
 database:
-    record_tracking_db_path: /$HOME/.ngipipeline/record_tracking_database
+    #record_tracking_db_path: /$HOME/.ngipipeline/record_tracking_database
+    record_tracking_db_path: /proj/a2010002/nobackup/NGI/database/record_tracking_database
 
 environment:
     project_id: a2010002
