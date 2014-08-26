@@ -184,45 +184,6 @@ def check_if_sample_analysis_is_running( project, sample, config=None):
         return False
 
 
-#def check_if_flowcell_analysis_is_running( project, sample, libprep, fcid, config=None):
-#    """checks if a given project/sample/library/flowcell is currently analysed.
-#
-#    :param Project project: the project object
-#    :param Sample sample:
-#    :param LibPrep libprep:
-#    :param string fcid:
-#    :param dict config: The parsed configuration file (optional)
-#
-#    :raises RuntimeError: If the configuration file cannot be found
-#
-#    :returns true/false
-#    """
-#    LOG.info("checking if Project {}, Sample {}, Library prep {}, fcid {} "
-#             "are currently being analysed ".format(project, sample, libprep, fcid))
-#    with get_shelve_database(config) as db:
-#        if project.name in db:
-#            error_msg = ("Project '{}' is already being analysed at project level "
-#                         "This run should not exists!!! somethig terribly wrong is happening, "
-#                         "Kill everything  and call Mario and Francesco".format(project))
-#            LOG.info(error_msg)
-#            raise RuntimeError(error_msg)
-#
-#        if "{}_{}".format(project.name, sample) in db:
-#            error_msg = ("Sample '{}' of project '{}' is already being analysed at sample level "
-#                         "This run should not exists!!! somethig terribly wrong is happening, "
-#                         "Kill everything  and call Mario and Francesco".format(sample, project))
-#            LOG.info(error_msg)
-#            raise RuntimeError(error_msg)
-#
-#        db_key = "{}_{}_{}_{}".format(project, sample, libprep, fcid)
-#        if db_key in db:
-#            warn_msg = ("Project {}, Sample {}, Library prep {}, fcid {} "
-#                         "has an entry in the local db. Analysis are ongoing.".format(project, sample, libprep, fcid))
-#            LOG.warn(warn_msg)
-#            return True
-#        return False
-
-
 def write_status_to_charon(project_id, return_code):
     """Update the status of a workflow for a project in the Charon database.
 
@@ -266,9 +227,9 @@ def write_to_charon_NGI_results(job_id, return_code, run_dir):
         ## Could move to ngi_pipeline.utils.parsers if it gets used a lot
         # e.g. A.Wedell_13_03_P567_102
         ## FIXME won't work for Uppsala project/sample names
-        m = re.match(r'(?P<project_name>\w\.\w+_\d+_\d+)_(?P<sample_id>P\d+_\d+)', job_id)
-        project_id   = get_project_id_from_name(m.group(1)) ## MARIO FIX THIS BEETER IF YOU WANT get_project_id_from_name(m.groupdict['project_name'])
-        sample_id    = m.group(2) #m.groupdict['sample_id']
+        m_dict = re.match(r'(?P<project_name>\w\.\w+_\d+_\d+)_(?P<sample_id>P\d+_\d+)', job_id).groupdict()
+        project_id = get_project_id_from_name(m_dict['project_name'])
+        sample_id = m_dict['sample_id']
     except (TypeError, AttributeError):
         error_msg = "Could not parse project/sample ids from job id \"{}\"; cannot update Charon with results!".format(job_id)
         raise RuntimeError(error_msg)
@@ -361,7 +322,7 @@ def write_to_charon_alignment_results(job_id, return_code, run_dir):
     else:
         # Alignment failed (return code > 0), store it as aborted
         error_msg = ('Alignment ended with an error: Piper returned non 0 return code'
-                      'currently processing runid {} for project {}, sample {}, libprep {}'.format(fc_id,
+                      'currently processing runid {} for project {}, sample {}, libprep {}'.format(seqrun_id,
                       project_id, sample_id, libprep_id))
         LOG.error(error_msg)
         charon_session.seqrun_reset(project_id, sample_id, libprep_id, seqrun_id)
@@ -373,7 +334,7 @@ def write_to_charon_alignment_results(job_id, return_code, run_dir):
         charon_session.seqrun_update(**seqrun_dict)
     except CharonError as e:
         error_msg = ('Failed to update run alignment status for run "{}" in project {} '
-                     'sample {}, library prep {} to  Charon database: {}'.format(fc_id,
+                     'sample {}, library prep {} to  Charon database: {}'.format(seqrun_id,
                       project_id, sample_id, libprep_id, e))
         raise RuntimeError(error_msg)
 
@@ -386,7 +347,6 @@ def update_seq_run_for_lane(seqrun_dict, lane_alignment_metrics):
     current_lane = re.match(".+\.(\d)\.bam", lane_alignment_metrics["bam_file"]).group(1)
 
     fields_to_update = ('mean_coverage',
-                        #'mean_autosomal_coverage',
                         'std_coverage',
                         'aligned_bases',
                         'mapped_bases',
@@ -404,9 +364,9 @@ def update_seq_run_for_lane(seqrun_dict, lane_alignment_metrics):
     for field in fields_to_update:
         if not num_lanes:
             seqrun_dict[field] = {current_lane : lane_alignment_metrics[field]}
+            seqrun_dict["mean_autosomal_coverage"] = 0
         else:
             seqrun_dict[field][current_lane] =  lane_alignment_metrics[field]
-    ## FIXME Are we just adding these all together? That doesn't really seem right for an average
     seqrun_dict["mean_autosomal_coverage"] = seqrun_dict.get("mean_autosomal_coverage", 0) + lane_alignment_metrics["mean_autosomal_coverage"]
 
 
