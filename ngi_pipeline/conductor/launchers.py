@@ -64,8 +64,9 @@ def launch_analysis_for_flowcells(projects_to_analyze, config=None, config_file_
                 for fcid in libprep:
                     # Check Charon to ensure this hasn't already been processed
                     status = CharonSession().seqrun_get(project.project_id, sample, libprep, fcid).get('alignment_status')
-                    
-                    if status and status not in ("NEW", "FAILED", "DONE"):
+                    # DEBUG
+                    #if status and status not in ("NEW", "FAILED", "DONE"):
+                    if status and status not in ("NEW", "FAILED"):
                         # If status is not NEW or FAILED (which means it is RUNNING or DONE), skip processing
                         if is_flowcell_analysis_running(project, sample, libprep, fcid, config):
                             continue

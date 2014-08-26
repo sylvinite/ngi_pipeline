@@ -6,7 +6,11 @@ import os
 import re
 import requests
 
+from ngi_pipeline.log.loggers import minimal_logger
 from ngi_pipeline.utils.classes import memoized
+
+# Need a better way to log
+LOG = minimal_logger(__name__)
 
 
 try:
@@ -66,6 +70,9 @@ class CharonSession(requests.Session):
     def construct_charon_url(self, *args):
         """Build a Charon URL, appending any *args passed."""
         return "{}/api/v1/{}".format(self._base_url,'/'.join([str(a) for a in args]))
+
+
+    ## FIXME There's a lot of repeat code here that might could be condensed
 
     # Project
     def project_create(self, projectid, name=None, status=None, pipeline=None, bpa=None):
@@ -165,8 +172,11 @@ class CharonSession(requests.Session):
                       sequenced_bases=None, windows=None, bam_file=None,
                       output_file=None, mean_mapping_quality=None,
                       bases_number=None, contigs_number=None,
-                      lanes=None,
-                      alignment_coverage=None):
+                      lanes=None, alignment_coverage=None,
+                      *args, **kwargs):
+        ## TODO Consider implementing for allathese functions
+        if args: LOG.info("Ignoring extra args: {}".format(", ".join(*args)))
+        if kwargs: LOG.info("Ignoring extra kwargs: {}".format(", ".join(["{}: {}".format(k,v) for k,v in kwargs.iteritems()])))
         url = self.construct_charon_url("seqrun", projectid, sampleid, libprepid, seqrunid)
         l_dict = locals()
         data = { k: l_dict.get(k) for k in self._seqrun_params if l_dict.get(k)}
