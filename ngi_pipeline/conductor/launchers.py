@@ -183,10 +183,15 @@ def trigger_sample_level_analysis(config=None, config_file_path=None):
         except CharonError as e:
             raise RuntimeError("Could not access samples for project {}: {}".format(project_id, e))
 
-        for sample in samples_dict: #sample_dict is a charon object
-            sample_id = sample["sampleid"]
+
+        import ipdb; ipdb.set_trace()
+
+        ### I HAVE NOW BROKEN THIS
+        for sample_obj in project_obj: #sample_dict is a charon object
+            #sample_id = sample["sampleid"]
             #check that it is not already running
-            analysis_running = check_if_sample_analysis_is_running(project_obj, project_obj.samples[sample_id], config)
+            #analysis_running = check_if_sample_analysis_is_running(project_obj, project_obj.samples[sample_id], config)
+            analysis_running = check_if_sample_analysis_is_running(project_obj, sample_obj, config)
             #check that this analysis is not already done
             if "status" in sample and sample["status"] == "DONE":
                 analysis_done = True
