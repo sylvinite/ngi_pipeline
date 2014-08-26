@@ -43,8 +43,6 @@ def main(demux_fcid_dir, test_step_1, restrict_to_projects=None, restrict_to_sam
         #time.sleep(30) #wait for 1 minutes
         #and now a loop to update the DB
         while True:
-            import pdb
-            pdb.set_trace()
             check_update_jobs_status()
             trigger_sample_level_analysis()
             #check status every half an hour
