@@ -47,9 +47,9 @@ def analyze_flowcell_run(project, sample, libprep, fcid, workflow_name, config_f
         popen_object = launch_piper_job(command_line, project)
         return popen_object
     except Exception as e:
-        error_msg = "Processing project {} sample {} fcid {} failed: {}".format(project,
-        sample, fcid, e.__repr__())
-        LOG.error(error_msg)
+        error_msg = ('Processing project "{}" / sample "{}" / fcid "{}" '
+                     'failed: {}'.format(project, sample, fcid, e.__repr__()))
+        #LOG.error(error_msg)
         raise
 
 
@@ -81,8 +81,8 @@ def analyse_sample_run(sample, project, config_file_path):
             popen_object = launch_piper_job(command_line, project)
             return popen_object
         except  Exception as e:
-            error_msg = "Processing project {} sample {} failed: {}".format(project, sample, e.__repr__())
-            LOG.error(error_msg)
+            error_msg = 'Processing project "{}" / sample "{}" failed: {}'.format(project, sample, e.__repr__())
+            #LOG.error(error_msg)
             raise
     else:
         LOG.info("Coverage not reached for sample {}: wait more data".format(sample_id))
