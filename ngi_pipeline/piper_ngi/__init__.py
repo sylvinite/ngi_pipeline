@@ -10,117 +10,102 @@ import subprocess
 import time
 
 from ngi_pipeline.piper_ngi import workflows
+from ngi_pipeline.database.classes import CharonSession, CharonError
 from ngi_pipeline.log.loggers import minimal_logger
 from ngi_pipeline.utils.filesystem import load_modules, execute_command_line, safe_makedir
-from ngi_pipeline.utils.config import load_xml_config, load_yaml_config
+from ngi_pipeline.utils.classes import with_ngi_config
 from ngi_pipeline.utils.parsers import parse_lane_from_filename, find_fastq_read_pairs_from_dir, \
                                        get_flowcell_id_from_dirtree
 
 LOG = minimal_logger(__name__)
 
 
-def analyze_flowcell_run(project, sample, libprep, fcid, workflow_name, config_file_path):
-    """The main method for analyse flowcells (Run Level).
+@with_ngi_config
+def analyze_flowcell_run(project, sample, libprep, seqrun, workflow_name, config=None, config_file_path=None):
+    """The main method for analyze flowcells (Run Level).
 
-    :param NGIProject project_to_analyze : The project -- to analyze!!
-    :param Sample sample_to_analyze: the sample that need to be analyzed
-    :param libprep libprep: which library prep needs to be analysed
-    :fcid fcid: gueass.... which fcid need to be analysed
-    :param str workflow_name: The workflow (e.g. alignment)
-    :param str config_file_path: The path to the configuration file.
+    :param NGIProject project: the project to analyze
+    :param NGISample sample: the sample to analyzed
+    :param NGILibraryPrep libprep: The library prep to analyzed
+    :seqrun NGISeqrun seqrun: The sequencing run to analyzed
+    :param str workflow_name: The workflow (e.g. alignment) to execute
+    :param dict config: The parsed configuration file (optional)
+    :param str config_file_path: The path to the configuration file (optional)
 
     :returns: The subprocess.Popen object for the process
     :rtype: subprocess.Popen
     """
     #Here I am in the Piper World: this means that I can be Engine specific!!!
-    config = load_yaml_config(config_file_path)
     modules_to_load = ["java/sun_jdk1.7.0_25", "R/2.15.0"]
     load_modules(modules_to_load)
     #things to to do
-    # 1- convert the current project/sample/libprep/fcid structure into the piper structure
+    # 1- convert the current project/sample/libprep/seqrun structure into the piper structure
     # 2- build setup_xml specific for this fc run
     # 3- run piper at fc run
     try:
-        convert_sthlm_to_uppsala(project, fcid) #this converts the entire project, it is not specific to the sample. Not a big deal, it will simply complain about the fact that it has alredy converted it
-        build_setup_xml(project, config, sample , libprep.name, fcid.name)
+        convert_sthlm_to_uppsala(project, seqrun) #this converts the entire project, it is not specific to the sample. Not a big deal, it will simply complain about the fact that it has alredy converted it
+        ## FIXME I think I broke this
+        build_setup_xml(project, config, sample , libprep.name, seqrun.name)
         command_line = build_piper_cl(project, "dna_alignonly", config)
-        popen_object = launch_piper_job(command_line, project)
-        return popen_object
+        return launch_piper_job(command_line, project)
+    ## FIXME define exceptions more narrowly
     except Exception as e:
-        error_msg = ('Processing project "{}" / sample "{}" / fcid "{}" '
-                     'failed: {}'.format(project, sample, fcid, e.__repr__()))
-        #LOG.error(error_msg)
+        error_msg = ('Processing project "{}" / sample "{}" / libprep "{}" / '
+                     'seqrun "{}" failed: {}'.format(project, sample, libprep, seqrun,
+                                                   e.__repr__()))
+        LOG.error(error_msg)
         raise
 
 
-def analyse_sample_run(sample, project, config_file_path):
-    """The main method for analyse samples (sample Level).
+@with_ngi_config
+def analyze_sample_run(project, sample, config=None, config_file_path=None):
+    """The main method for sample-level analysis.
 
-    :param CharonSampleEntry sample : Sample to be analysed as Charon entry
-    :param NGIProject project : project object reconstructed from Charon (might be incomplete)
-    :param str config_file_path: The path to the configuration file
+    :param NGIProject project: the project to analyze
+    :param NGISample sample: the sample to analyzed
+    :param dict config: The parsed configuration file (optional)
+    :param str config_file_path: The path to the configuration file (optional)
 
-    :returns: The subprocess.Popen object for the process or 1 if no process is started
-    :rtype: subprocess.Popen
+    :returns: The subprocess.Popen object for the process or None if job is finished
+    :rtype: subprocess.Popen or None
+    :raises RuntimeError: If the process cannot be started
     """
-
-    sample_id = sample["sampleid"]
-    config = load_yaml_config(config_file_path)
     modules_to_load = ["java/sun_jdk1.7.0_25", "R/2.15.0"]
-    #check if I can run sample level analysis
-    if "total_autosomal_coverage" not in sample or sample["total_autosomal_coverage"] == 0.0 :
-        LOG.info("Sample {} not yet sequenced or not yet analysed".format(sample_id))
-    elif float(sample["total_autosomal_coverage"]) > 20.0:
-        #change the sample dir name to the piper sample dir name format
-        sampleObj         = project.samples[sample["sampleid"]]
-        sampleObj.dirname = "Sample_{}".format(project.samples[sample["sampleid"]].dirname)
+    load_modules(modules_to_load)
+    charon_session = CharonSession()
+    try:
+        sample_dict = charon_session.sample_get(project.project_id, sample.name)
+    except CharonError as e:
+        raise RuntimeError('Could not fetch information for project "{}" / '
+                           'sample "{}" from Charon database; cannot '
+                           'proceed.'.format(project, sample))
+    # Check if I can run sample level analysis
+    if not sample_dict.get('total_autosomal_coverage'):     # Doesn't exist or is 0
+        LOG.info("Sample {} not yet sequenced or not yet analyzed".format(sample))
+    # If coverage is above 20X we can proceed.
+    ## Use Charon validation for this possibly
+    elif float(sample_dict.get("total_autosomal_coverage")) > 20.0:
+        ## NOTE this may be unnecessary soon/already
+        if not sample.dirname.startswith("Sample_"):
+            # Switch to Piper naming convention for Sthlm samples
+            sample.dirname = "Sample_{}".format(sample.dirname)
         try:
-            build_setup_xml(project, config, sampleObj , None, None)
+            ## FIXME I think I broke this
+            build_setup_xml(project, config, sample)
             command_line = build_piper_cl(project, "merge_process_variantCall", config)
-            LOG.info("now I only need to run the command: {}".format(command_line))
-            popen_object = launch_piper_job(command_line, project)
-            return popen_object
+            LOG.info("Executing command line \"{}\"...".format(command_line))
+            return launch_piper_job(command_line, project)
+        ## FIXME define exceptions more narrowly
         except  Exception as e:
             error_msg = 'Processing project "{}" / sample "{}" failed: {}'.format(project, sample, e.__repr__())
             #LOG.error(error_msg)
             raise
     else:
-        LOG.info("Coverage not reached for sample {}: wait more data".format(sample_id))
-    # ?
-    return 1
+        LOG.info('Insufficient coverage for sample "{}" to start sample-level analysis: '
+                 'waiting more data.'.format(sample))
 
 
-#### I AM NOT USING THIS.....
-#def analyze_project(project, workflow_name, config_file_path):
-#    """The main method for project (samples?).
-#
-#    :param NGIProject project_to_analyze : The project -- to analyze!!
-#    :param str workflow_name: The workflow (e.g. alignment, variant calling)
-#    :param str config_file_path: The path to the configuration file.
-#
-#    :returns: The subprocess.Popen object for the process
-#    :rtype: subprocess.Popen
-#    """
-#    config = load_yaml_config(config_file_path)
-#    modules_to_load = ["java/sun_jdk1.7.0_25", "R/2.15.0"]
-#    # Valid only for this session
-#    load_modules(modules_to_load)
-#
-#    try:
-#        ## Temporary until the directory format switch
-#        # report.xml is created by sthlm2UUSNP (in convert_sthlm_to_uppsala)
-#        convert_sthlm_to_uppsala(project)
-#        build_setup_xml(project, config)
-#        command_line = build_piper_cl(project, "dna_alignonly", config)
-#
-#        popen_object = launch_piper_job(command_line, project)
-#        return popen_object
-#    except Exception as e:
-#        error_msg = "Processing project {} failed: {}".format(project, e.__repr__())
-#        LOG.error(error_msg)
-#        raise
-
-
+## Your time will come
 def convert_sthlm_to_uppsala(project, fcid):
     """Convert projects from Stockholm style (three-level) to Uppsala style
     (two-level) using the sthlm2UUSNP Java utility and produces a
@@ -152,6 +137,7 @@ def convert_sthlm_to_uppsala(project, fcid):
         if not sample.dirname.startswith("Sample_"):
             sample.dirname =  "Sample_{}".format(sample.dirname)
             #sample.name    =  "Sample_{}".format(sample.name)
+
 
 def launch_piper_job(command_line, project):
     """Launch the Piper command line.
@@ -224,26 +210,26 @@ def build_piper_cl(project, workflow_name, config):
     return cl
 
 
-def build_setup_xml(project, config, sample = None, libprep_id = None, fcid_id = None):
+def build_setup_xml(project, config, sample=None, libprep_id=None, seqrun_id=None):
     """Build the setup.xml file for each project using the CLI-interface of
     Piper's SetupFileCreator.
 
     :param NGIProject project: The project to be converted.
     :param dict config: The (parsed) configuration file for this machine/environment.
     :param NGISample sample: the sample object
-    :param library_id: id of the library
-    :fcid_id: flowcell identifier
+    :param str library_id: id of the library
+    :param str seqrun_id: flowcell identifier
 
     :returns: A list of Project objects with setup.xml paths as attributes.
     :rtype: list
     """
 
-    if fcid_id == None:
+    if seqrun_id == None:
         LOG.info("Building Piper setup.xml file for project {} "
                  "sample {}".format(project, sample.name))
     else:
         LOG.info("Building Piper setup.xml file for project {} "
-                 "sample {}, fcid {}".format(project, sample.name, fcid_id))
+                 "sample {}, seqrun {}".format(project, sample.name, seqrun_id))
 
     project_top_level_dir = os.path.join(project.base_path, "DATA_UUSNP", project.dirname)
     analysis_dir = os.path.join(project.base_path, "ANALYSIS", project.dirname)
@@ -284,12 +270,12 @@ def build_setup_xml(project, config, sample = None, libprep_id = None, fcid_id =
         cl_args["sfc_binary"] = "setupFileCreator"
 
 
-    if fcid_id == None:
+    if seqrun_id == None:
         output_xml_filepath = os.path.join(analysis_dir,
                                         "{}-{}-setup.xml".format(project, sample.name))
     else:
         output_xml_filepath = os.path.join(analysis_dir,
-                                        "{}-{}-{}_setup.xml".format(project, sample.name, fcid_id))
+                                        "{}-{}-{}_setup.xml".format(project, sample.name, seqrun_id))
 
     cl_args["output_xml_filepath"]  = output_xml_filepath
     cl_args["sequencing_tech"]      = "Illumina"
@@ -303,14 +289,14 @@ def build_setup_xml(project, config, sample = None, libprep_id = None, fcid_id =
                            "--reference {reference_path} ".format(**cl_args))
     #NOTE: here I am assuming the different dir structure, it would be wiser to change the object type and have an uppsala project
 
-    if fcid_id is None:
-        #if fcid_id is none it means I want to create a sample level setup xml
+    if seqrun_id is None:
+        #if seqrun_id is none it means I want to create a sample level setup xml
         for libprep in sample:
-            for fcid in libprep:
-                sample_directory = os.path.join(project_top_level_dir, fcid.name, sample.dirname)
+            for seqrun in libprep:
+                sample_directory = os.path.join(project_top_level_dir, seqrun.name, sample.dirname)
                 setupfilecreator_cl += " --input_sample {}".format(sample_directory)
     else:
-        sample_directory = os.path.join(project_top_level_dir, fcid_id, sample.dirname)
+        sample_directory = os.path.join(project_top_level_dir, seqrun_id, sample.dirname)
         setupfilecreator_cl += " --input_sample {}".format(sample_directory)
 
     try:
@@ -325,58 +311,54 @@ def build_setup_xml(project, config, sample = None, libprep_id = None, fcid_id =
         raise RuntimeError(error_msg)
 
 
-def create_report_tsv(project):
-    """Generate a tsv-formatted file as input for Piper and write to top level of project,
-    unless a report.xml file exists already (as it will for Uppsala projects).
-    Produces one report.tsv for each project, if the report.xml does not exist.
-
-    This file has the format:
-
-        #SampleName     Lane    ReadLibrary     FlowcellID
-        P567_102        1       A               AH0JYUADXX
-        P567_102        2       B               AH0JYUADXY
-
-    :param NGIProject project: The project to be converted.
-    """
-    report_header = ("#SampleName", "Lane", "ReadLibrary", "FlowcellID")
-
-    report_paths = []
-    report_tsv_path = os.path.join(project.base_path, project.name, "report.tsv")
-    report_xml_path = os.path.join(project.base_path, project.name, "report.xml")
-    ## TODO I think we might need to replace this file if the project changes
-    ##      -- might be cheapest to just generate a new one every time
-    if os.path.exists(report_xml_path):
-        report_paths.append(report_xml_path)
-        LOG.info("Found preexisting report.xml file for project {project}: " \
-                 "{report_xml}".format(project, report_xml_path))
-
-    #if os.path.exists(report_tsv_path):
-    #    path, orig_filename = os.path.split(report_tsv_path)
-    #    orig_basename, orig_ext = os.path.splitext(orig_filename)
-    #    mv_filename = orig_basename + time.strftime("_%Y-%m-%d_%H:%M:%S") + orig_ext
-    #    mv_path = os.path.join(path, mv_filename)
-    #    LOG.info("Moving preexisting report.tsv file to {}".format(mv_path))
-    #    shutil.move(report_tsv_path, mv_path)
-    with open(report_tsv_path, 'w') as rtsv_fh:
-        report_paths.append(report_tsv_path)
-        LOG.info("Writing {}".format(report_tsv_path))
-        print("\t".join(report_header), file=rtsv_fh)
-        for sample in project:
-            for fcid in sample:
-                fcid_path = os.path.join(project.base_path,
-                                         project.dirname,
-                                         sample.dirname,
-                                         fcid.dirname)
-                for fq_pairname in find_fastq_read_pairs_from_dir(directory=fcid_path).keys():
-                    try:
-                        lane = parse_lane_from_filename(fq_pairname)
-                    except ValueError as e:
-                        LOG.error("Could not get lane from filename for file {} -- skipping ({})".format(fq_pairname, e))
-                        raise ValueError(error_msg)
-                    ## TODO pull from Charon database
-                    read_library = "<NotImplemented>"
-                    print("\t".join([sample.name, lane, read_library, fcid.name]), file=rtsv_fh)
-
-
-
-
+#def create_report_tsv(project):
+#    """Generate a tsv-formatted file as input for Piper and write to top level of project,
+#    unless a report.xml file exists already (as it will for Uppsala projects).
+#    Produces one report.tsv for each project, if the report.xml does not exist.
+#
+#    This file has the format:
+#
+#        #SampleName     Lane    ReadLibrary     FlowcellID
+#        P567_102        1       A               AH0JYUADXX
+#        P567_102        2       B               AH0JYUADXY
+#
+#    :param NGIProject project: The project to be converted.
+#    """
+#    report_header = ("#SampleName", "Lane", "ReadLibrary", "FlowcellID")
+#
+#    report_paths = []
+#    report_tsv_path = os.path.join(project.base_path, project.name, "report.tsv")
+#    report_xml_path = os.path.join(project.base_path, project.name, "report.xml")
+#    ## TODO I think we might need to replace this file if the project changes
+#    ##      -- might be cheapest to just generate a new one every time
+#    if os.path.exists(report_xml_path):
+#        report_paths.append(report_xml_path)
+#        LOG.info("Found preexisting report.xml file for project {project}: " \
+#                 "{report_xml}".format(project, report_xml_path))
+#
+#    #if os.path.exists(report_tsv_path):
+#    #    path, orig_filename = os.path.split(report_tsv_path)
+#    #    orig_basename, orig_ext = os.path.splitext(orig_filename)
+#    #    mv_filename = orig_basename + time.strftime("_%Y-%m-%d_%H:%M:%S") + orig_ext
+#    #    mv_path = os.path.join(path, mv_filename)
+#    #    LOG.info("Moving preexisting report.tsv file to {}".format(mv_path))
+#    #    shutil.move(report_tsv_path, mv_path)
+#    with open(report_tsv_path, 'w') as rtsv_fh:
+#        report_paths.append(report_tsv_path)
+#        LOG.info("Writing {}".format(report_tsv_path))
+#        print("\t".join(report_header), file=rtsv_fh)
+#        for sample in project:
+#            for fcid in sample:
+#                fcid_path = os.path.join(project.base_path,
+#                                         project.dirname,
+#                                         sample.dirname,
+#                                         fcid.dirname)
+#                for fq_pairname in find_fastq_read_pairs_from_dir(directory=fcid_path).keys():
+#                    try:
+#                        lane = parse_lane_from_filename(fq_pairname)
+#                    except ValueError as e:
+#                        LOG.error("Could not get lane from filename for file {} -- skipping ({})".format(fq_pairname, e))
+#                        raise ValueError(error_msg)
+#                    ## TODO pull from Charon database
+#                    read_library = "<NotImplemented>"
+#                    print("\t".join([sample.name, lane, read_library, fcid.name]), file=rtsv_fh)
