@@ -19,32 +19,30 @@ def main(demux_fcid_dir, test_step_1, restrict_to_projects=None, restrict_to_sam
         time.sleep(30) #wait for 1 minutes
         
         demux_fcid_dir = "/proj/a2010002/INBOX/140702_D00415_0052_AC41A2ANXX" # M.Kaller_14_06
-        #process_demultiplexed_flowcell(demux_fcid_dir, None, None)
-        #time.sleep(30) #wait for 1 minutes
+        process_demultiplexed_flowcell(demux_fcid_dir, None, None)
+        time.sleep(30) #wait for 1 minutes
         
         demux_fcid_dir = "/proj/a2010002/INBOX/130611_SN7001298_0148_AH0CCVADXX/" #A.Wedell_13_03 sample P567_101
-        #process_demultiplexed_flowcell(demux_fcid_dir, None, None)
-        #time.sleep(30) #wait for 1 minutes
+        process_demultiplexed_flowcell(demux_fcid_dir, None, None)
+        time.sleep(30) #wait for 1 minutes
         
         demux_fcid_dir = "/proj/a2010002/INBOX/130612_D00134_0019_AH056WADXX/" # A.Wedell_13_03 sample P567_101
-        #process_demultiplexed_flowcell(demux_fcid_dir, None, None) # this must start
-        #time.sleep(30) #wait for 1 minutes
+        process_demultiplexed_flowcell(demux_fcid_dir, None, None) # this must start
+        time.sleep(30) #wait for 1 minutes
         
         demux_fcid_dir = "/proj/a2010002/INBOX/130627_D00134_0023_AH0JYUADXX/" # A.Wedell_13_03 sample P567_102
-        #process_demultiplexed_flowcell(demux_fcid_dir, None, None) # this must start
-        #time.sleep(30) #wait for 1 minutes
+        process_demultiplexed_flowcell(demux_fcid_dir, None, None) # this must start
+        time.sleep(30) #wait for 1 minutes
         
         demux_fcid_dir = "/proj/a2010002/INBOX/130701_SN7001298_0152_AH0J92ADXX/" # A.Wedell_13_03 sample P567_102
-        #process_demultiplexed_flowcell(demux_fcid_dir, None, None) # this must start
-        #time.sleep(30) #wait for 1 minutes
+        process_demultiplexed_flowcell(demux_fcid_dir, None, None) # this must start
+        time.sleep(30) #wait for 1 minutes
         
         demux_fcid_dir = "/proj/a2010002/INBOX/130701_SN7001298_0153_BH0JMGADXX/" # A.Wedell_13_03 sample P567_102
-        #process_demultiplexed_flowcell(demux_fcid_dir, None, None) # this must start
-        #time.sleep(30) #wait for 1 minutes
+        process_demultiplexed_flowcell(demux_fcid_dir, None, None) # this must start
+        time.sleep(30) #wait for 1 minutes
         #and now a loop to update the DB
         while True:
-            import pdb
-            pdb.set_trace()
             check_update_jobs_status()
             trigger_sample_level_analysis()
             #check status every half an hour

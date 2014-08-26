@@ -429,7 +429,7 @@ def parse_qualimap_results(qualimap_results_path):
     :rtype: dict
     :raises IOError: If the qualimap_results_path file cannot be opened for reading.
     """
-    with open(filename, 'r') as fh:
+    with open(qualimap_results_path, 'r') as fh:
         current_flag=None
         data={}
         cfp=re.compile('>>>>>>> ([^\n]+)')

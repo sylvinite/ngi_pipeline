@@ -64,8 +64,9 @@ def launch_analysis_for_flowcells(projects_to_analyze, config=None, config_file_
                 for fcid in libprep:
                     # Check Charon to ensure this hasn't already been processed
                     status = CharonSession().seqrun_get(project.project_id, sample, libprep, fcid).get('alignment_status')
-                    
-                    if status and status not in ("NEW", "FAILED", "DONE"):
+                    # DEBUG
+                    #if status and status not in ("NEW", "FAILED", "DONE"):
+                    if status and status not in ("NEW", "FAILED"):
                         # If status is not NEW or FAILED (which means it is RUNNING or DONE), skip processing
                         if is_flowcell_analysis_running(project, sample, libprep, fcid, config):
                             continue
@@ -103,6 +104,8 @@ def launch_analysis_for_flowcells(projects_to_analyze, config=None, config_file_
                             continue
 
 
+## FIRST PRIORITY
+## MARIO FIXME adjust charon access etc.
 ## NOTE
 ## This function is responsable of trigger second level analyisis (i.e., sample level analysis)
 ## using the information available on the Charon.
@@ -117,33 +120,36 @@ def trigger_sample_level_analysis(config=None, config_file_path=None):
     """
     #start by getting all projects, this will likely need a specific API
     charon_session = CharonSession()
-    url = charon_session.construct_charon_url("projects")
-    projects_response = charon_session.get(url)
-    if projects_response.status_code != 200:
-        error_msg = ('Error accessing database: could not get all projects: {}'.format(project_response.reason))
-        LOG.error(error_msg)
-        raise RuntimeError(error_msg)
+    try:
+        projects_dict = charon_session.projects_get_all()['projects']
+    except (CharonError, KeyError) as e:
+        raise RuntimeError("Unable to get list of projects from Charon and cannot continue: {}".format(e))
 
-    projects_dict = projects_response.json()["projects"]
+    #url = charon_session.construct_charon_url("projects")
+    #projects_response = charon_session.get(url)
+    #if projects_response.status_code != 200:
+    #    error_msg = ('Error accessing database: could not get all projects: {}'.format(project_response.reason))
+    #    LOG.error(error_msg)
+    #    raise RuntimeError(error_msg)
+    #projects_dict = projects_response.json()["projects"]
+
 
     for project in projects_dict:
-        #check if the field Pipeline is set
-        project_id = project["projectid"]
-
+        project_id = project.get("projectid")
         try:
             workflow = get_workflow_for_project(project_id)
         except (RuntimeError) as e:
             error_msg = ("Skipping project {} because of error: {}".format(project_id, e))
             LOG.error(error_msg)
+            # Next project
             continue
-
         try:
             analysis_engine_module_name = config["analysis"]["workflows"][workflow]["analysis_engine"]
         except KeyError:
             error_msg = ("No analysis engine for workflow \"{}\" specified "
                          "in configuration file. Skipping this workflow "
                          "for project {}".format(workflow, project))
-            LOG.error(error_msg)
+            #LOG.error(error_msg)
             raise RuntimeError(error_msg)
         # Import the adapter module specified in the config file (e.g. piper_ngi)
         try:
@@ -156,32 +162,31 @@ def trigger_sample_level_analysis(config=None, config_file_path=None):
             LOG.error(error_msg)
             continue
 
+        analysis_top_dir = os.path.abspath(config["analysis"]["top_dir"])
+        proj_dir = os.path.join(analysis_top_dir, "DATA", project["name"])
+
+        try:
+            # Now recreate the project object
+            ## FIXME We can use this object now instead of repreating the database calls
+            project_obj = createIGNproject(analysis_top_dir, project["name"],  project_id)
+        except RuntimeError as e:
+            LOG.error("Skipping project {}: could not recreate object from Charon: {}".format(project_id, e))
+            continue
+        analysis_dir = os.path.join(analysis_top_dir, "ANALYSIS", project["name"] )
+
 
         #I know which engine I need to use to process sample ready, however only the engine
         #knows that are the conditions that need to be made
-        LOG.info('Checking for ready to be analysed samples in project {} with workflow {}'.format(project_id, workflow))
-        #get all the samples from Charon
-        url = charon_session.construct_charon_url("samples", project_id)
-        samples_response = charon_session.get(url)
-        if samples_response.status_code != 200:
-            error_msg = ('Error accessing database: could not get samples for projects: {}'.format(project_id,
-                            project_response.reason))
-            LOG.error(error_msg)
-            raise RuntimeError(error_msg)
-        samples_dict = samples_response.json()["samples"]
-        #now recreacte the project object
-        analysis_top_dir = os.path.abspath(config["analysis"]["top_dir"])
-        proj_dir = os.path.join(analysis_top_dir, "DATA", project["name"])
-        projectObj = createIGNproject(analysis_top_dir, project["name"],  project_id)
-
-        analysis_dir = os.path.join(analysis_top_dir, "ANALYSIS", project["name"] )
-        #import pdb
-        #pdb.set_trace()
+        LOG.info('Finding samples read to be analyzed in project {} / workflow {}'.format(project_id, workflow))
+        try:
+            samples_dict = charon_session.project_get_samples(project_id)["samples"]
+        except CharonError as e:
+            raise RuntimeError("Could not access samples for project {}: {}".format(project_id, e))
 
         for sample in samples_dict: #sample_dict is a charon object
             sample_id = sample["sampleid"]
             #check that it is not already running
-            analysis_running = check_if_sample_analysis_is_running(projectObj, projectObj.samples[sample_id], config)
+            analysis_running = check_if_sample_analysis_is_running(project_obj, project_obj.samples[sample_id], config)
             #check that this analysis is not already done
             if "status" in sample and sample["status"] == "DONE":
                 analysis_done = True
@@ -197,11 +202,11 @@ def trigger_sample_level_analysis(config=None, config_file_path=None):
                 try:
                     # note here I do not know if I am going to start some anlaysis or not, depends on the Engine that is called
                     #I am here even with project that have no analysis ... maybe better to define a flag?
-                    p_handle = analysis_module.analyse_sample_run(sample = sample , project = projectObj,
+                    p_handle = analysis_module.analyse_sample_run(sample = sample , project = project_obj,
                                                               config_file_path=config_file_path )
                     #p_handle is None when the engine decided that there is nothing to be done
                     if p_handle != 1:
-                        record_process_sample(p_handle, workflow, projectObj, sample_id, analysis_module,
+                        record_process_sample(p_handle, workflow, project_obj, sample_id, analysis_module,
                             analysis_dir, config)
                 except Exception as e:
                     error_msg = ('Cannot process sample {} in project {}: {}'.format(sample_id, project_id, e))
@@ -215,46 +220,32 @@ def trigger_sample_level_analysis(config=None, config_file_path=None):
 
 def createIGNproject(analysis_top_dir, project_name, project_id):
     project_dir = os.path.join(analysis_top_dir, "DATA", project_name)
-    project_obj = NGIProject(name=project_name, dirname=project_name,
-            project_id=project_id,
-            base_path=analysis_top_dir)
-    #I use the DB to build the object
-    #get the samples
+    project_obj = NGIProject(name=project_name,
+                             dirname=project_name,
+                             project_id=project_id,
+                             base_path=analysis_top_dir)
     charon_session = CharonSession()
-    url = charon_session.construct_charon_url("samples", project_id)
-    samples_response = charon_session.get(url)
-    if samples_response.status_code != 200:
-        error_msg = ('Error accessing database: could not get samples for projects: {}'.format(project_id,
-            project_response.reason))
-        LOG.error(error_msg)
-        raise RuntimeError(error_msg)
-    #now I have all the samples
-    samples_dict = samples_response.json()["samples"]
+    try:
+        samples_dict = charon_session.project_get_samples(project_id)["samples"]
+    except CharonError as e:
+        raise RuntimeError("Could not access samples for project {}: {}".format(project_id, e))
     for sample in samples_dict:
         sample_id = sample["sampleid"]
         sample_dir = os.path.join(project_dir, sample_id)
         sample_obj = project_obj.add_sample(name=sample_id, dirname=sample_id)
-        #now get lib preps
-        url = charon_session.construct_charon_url("libpreps", project_id, sample_id)
-        libpreps_response = charon_session.get(url)
-        if libpreps_response.status_code != 200:
-            error_msg = ('Error accessing database: could not get lib preps for sample {}: {}'.format(sample_id,
-                project_response.reason))
-            LOG.error(error_msg)
-            raise RuntimeError(error_msg)
-        libpreps_dict = libpreps_response.json()["libpreps"]
+        try:
+            libpreps_dict = charon_session.sample_get_libpreps(project_id, sample_id)["libpreps"]
+        except CharonError as e:
+            raise RuntimeError("Could not access libpreps for project {} / sample {}: {}".format(project_id,sample_id, e))
         for libprep in libpreps_dict:
             libprep_id = libprep["libprepid"]
             libprep_object = sample_obj.add_libprep(name=libprep_id,  dirname=libprep_id)
-            url = charon_session.construct_charon_url("seqruns", project_id, sample_id, libprep_id)
-            seqruns_response = charon_session.get(url)
-            if seqruns_response.status_code != 200:
-                error_msg = ('Error accessing database: could not get lib preps for sample {}: {}'.format(sample_id,
-                    seqruns_response.reason))
-                LOG.error(error_msg)
-                raise RuntimeError(error_msg)
-            seqruns_dict = seqruns_response.json()["seqruns"]
+            try:
+                seqruns_dict = charon_session.libprep_get_seqruns(project_id, sample_id, libprep_id)["seqruns"]
+            except CharonError as e:
+                raise RuntimeError("Could not access seqruns for project {} / sample {} / "
+                                   "libprep {}: {}".format(project_id, sample_id, libprep_id, e))
             for seqrun in seqruns_dict:
+                # e.g. 140528_D00415_0049_BC423WACXX
                 runid = seqrun["seqrunid"]
-                #looks like 140528_D00415_0049_BC423WACXX
-                
+    return project_obj
