@@ -29,7 +29,7 @@ def return_cl_for_workflow(workflow_name, qscripts_dir_path, setup_xml_path, glo
         LOG.error(error_msg)
         raise NotImplementedError(error_msg)
    ## TODO need tmp, logging directory
-    LOG.info("Building command line for workflow {}".format(workflow_name))
+    LOG.info('Building command line for workflow "{}"'.format(workflow_name))
     return workflow_function(qscripts_dir_path, setup_xml_path, global_config_path, output_dir)
 
 

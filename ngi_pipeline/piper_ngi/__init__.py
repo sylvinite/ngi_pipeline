@@ -70,6 +70,7 @@ def analyze_sample_run(project, sample, config=None, config_file_path=None):
     :rtype: subprocess.Popen or None
     :raises RuntimeError: If the process cannot be started
     """
+    LOG.info('Determining if we can start sample-level analysis for project "{}" / sample "{}"'.format(project, sample))
     modules_to_load = ["java/sun_jdk1.7.0_25", "R/2.15.0"]
     load_modules(modules_to_load)
     charon_session = CharonSession()
@@ -81,7 +82,7 @@ def analyze_sample_run(project, sample, config=None, config_file_path=None):
                            'proceed.'.format(project, sample))
     # Check if I can run sample level analysis
     if not sample_dict.get('total_autosomal_coverage'):     # Doesn't exist or is 0
-        LOG.info("Sample {} not yet sequenced or not yet analyzed".format(sample))
+        LOG.info('Sample "{}" from project "{}" not yet sequenced or not yet analyzed'.format(sample, project))
     # If coverage is above 20X we can proceed.
     ## Use Charon validation for this possibly
     elif float(sample_dict.get("total_autosomal_coverage")) > 20.0:
@@ -93,7 +94,7 @@ def analyze_sample_run(project, sample, config=None, config_file_path=None):
             ## FIXME I think I broke this
             build_setup_xml(project, config, sample)
             command_line = build_piper_cl(project, "merge_process_variantCall", config)
-            LOG.info("Executing command line \"{}\"...".format(command_line))
+            LOG.info('Executing command line "{}"...'.format(command_line))
             return launch_piper_job(command_line, project)
         ## FIXME define exceptions more narrowly
         except  Exception as e:
@@ -116,7 +117,7 @@ def convert_sthlm_to_uppsala(project, fcid):
     """
     # Requires sthlm2UUSNP on PATH
     cl_template = "sthlm2UUSNP -i {input_dir} -o {output_dir} -f {flowcell}"
-    LOG.info("Converting Sthlm project {} to UUSNP format".format(project))
+    LOG.info("Converting Sthlm project \"{}\" to UUSNP format".format(project))
     input_dir = os.path.join(project.base_path, "DATA", project.dirname)
     uppsala_dirname = "{}".format(project.dirname)
     output_dir = os.path.join(project.base_path, "DATA_UUSNP", uppsala_dirname)
@@ -191,15 +192,15 @@ def build_piper_cl(project, workflow_name, config):
                     "as environmental variable (\"PIPER_QSCRIPTS_DIR\").")
         raise ValueError(error_msg)
 
-    LOG.info("Building workflow command line(s) for "
-             "project {} and workflow {}".format(project, workflow_name))
+    LOG.info('Building workflow command line(s) for '
+             'project "{}" / workflow "{}"'.format(project, workflow_name))
     ## NOTE This key will probably exist on the project level, and may have multiple values.
     ##      Workflows may imply a number of substeps (e.g. basic = qc, alignment, etc.) ?
     try:
         setup_xml_path = project.setup_xml_path
     except AttributeError:
-        error_msg = ("Project {} has no setup.xml file. Skipping project "
-                     "command-line generation.".format(project))
+        error_msg = ('Project "{}" has no setup.xml file. Skipping project '
+                     'command-line generation.'.format(project))
         raise ValueError(error_msg)
 
     cl = workflows.return_cl_for_workflow(workflow_name=workflow_name,
@@ -225,11 +226,11 @@ def build_setup_xml(project, config, sample=None, libprep_id=None, seqrun_id=Non
     """
 
     if seqrun_id == None:
-        LOG.info("Building Piper setup.xml file for project {} "
-                 "sample {}".format(project, sample.name))
+        LOG.info('Building Piper setup.xml file for project "{}" '
+                 'sample "{}"'.format(project, sample.name))
     else:
-        LOG.info("Building Piper setup.xml file for project {} "
-                 "sample {}, seqrun {}".format(project, sample.name, seqrun_id))
+        LOG.info('Building Piper setup.xml file for project "{}" '
+                 'sample "{}", seqrun "{}"'.format(project, sample.name, seqrun_id))
 
     project_top_level_dir = os.path.join(project.base_path, "DATA_UUSNP", project.dirname)
     analysis_dir = os.path.join(project.base_path, "ANALYSIS", project.dirname)

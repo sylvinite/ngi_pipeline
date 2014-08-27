@@ -117,9 +117,16 @@ def remove_record_from_local_tracking(project, config=None):
 
 def is_flowcell_analysis_running(project, sample, libprep, seqrun, config=None):
     """Determine if a flowcell is currently being analyzed."""
-    LOG.info("Checking if sequencing run {}/{}/{}/{} is currently "
-             "being analyzed.".format(project.project_id, sample, libprep, seqrun))
-    return is_analysis_running(project, sample, libprep, seqrun, level="flowcell")
+    sequencing_run = "{}/{}/{}/{}".format(project.project_id, sample, libprep, seqrun)
+    LOG.info('Checking if sequencing run "{}" is currently '
+             'being analyzed.'.format(sequencing_run))
+    if is_analysis_running(project, sample, libprep, seqrun, level="flowcell"):
+        LOG.info('Sequencing run "{}" is currently being analyzed.'.format(sequencing_run))
+        return True
+    else:
+        LOG.info('Sequencing run "{}" is not currently under analysis.'.format(sequencing_run))
+        return False
+
 
 ## MARIO FIXME
 # This function should be used along with a Charon database check for sample status
@@ -382,8 +389,8 @@ def update_seq_run_for_lane(seqrun_dict, lane_alignment_metrics):
 
 def record_process_flowcell(p_handle, workflow, project, sample, libprep, seqrun,
                             analysis_module, analysis_dir, config=None):
-    LOG.info("Recording process id {} for project {}, sample {}, seqrun {} "
-             "workflow {}".format(p_handle.pid, project, sample, seqrun, workflow))
+    LOG.info('Recording process id "{}" for project "{}", sample "{}", seqrun "{}" '
+             'workflow "{}"'.format(p_handle.pid, project, sample, seqrun, workflow))
     project_dict = { "workflow": workflow,
                      "p_handle": p_handle,
                      "analysis_module": analysis_module.__name__,
@@ -398,13 +405,13 @@ def record_process_flowcell(p_handle, workflow, project, sample, libprep, seqrun
             return 
 
         db[db_key] = project_dict
-        LOG.info("Successfully recorded process id {} for project {}, sample {}, libprep {}, seqrun {}, "
-                 "workflow {}".format(p_handle.pid, project, sample, libprep, seqrun, workflow))
+        LOG.info('Successfully recorded process id "{}" for project "{}", sample "{}", libprep "{}", seqrun "{}", '
+                 'workflow "{}"'.format(p_handle.pid, project, sample, libprep, seqrun, workflow))
 
 
 def record_process_sample(p_handle, workflow, project, sample, analysis_module, analysis_dir, config=None):
-    LOG.info("Recording process id {} for project {}, sample {}, "
-             "workflow {}".format(p_handle.pid, project, sample, workflow))
+    LOG.info('Recording process id "{}" for project "{}", sample "{}", '
+             'workflow "{}"'.format(p_handle.pid, project, sample, workflow))
     project_dict = { "workflow": workflow,
                      "p_handle": p_handle,
                      "analysis_module": analysis_module.__name__,

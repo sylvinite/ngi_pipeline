@@ -117,6 +117,7 @@ def trigger_sample_level_analysis(config=None, config_file_path=None):
     :param dict config: The parsed NGI configuration file; optional.
     :param list config_file_path: The path to the NGI configuration file; optional.
     """
+    LOG.info("Starting sample-level analysis routine.")
     #start by getting all projects, this will likely need a specific API
     charon_session = CharonSession()
     try:
@@ -124,6 +125,8 @@ def trigger_sample_level_analysis(config=None, config_file_path=None):
     except (CharonError, KeyError) as e:
         raise RuntimeError("Unable to get list of projects from Charon and cannot continue: {}".format(e))
     for project in projects_dict:
+        if project.get("status") in ("CLOSED", "ABORTED"):
+            LOG.info("Skipping project {}: marked as {}".format(project, project.get("status")))
         project_id = project.get("projectid")
         try:
             workflow = get_workflow_for_project(project_id)
