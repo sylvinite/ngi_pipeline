@@ -70,7 +70,7 @@ def launch_analysis_for_flowcells(projects_to_analyze, config=None, config_file_
                                              'Charon reports it as running but not trace of it in local DB'.format(project, sample, libprep, seqrun))
                                 LOG.error(error_msg)
                         else: #otherwise I am DONE
-                            if is_flowcell_analysis_running(project, sample, libprep, fcid, config):
+                            if is_flowcell_analysis_running(project, sample, libprep, seqrun, config):
                                 error_msg = ('Charon and local db incongruency:  Project "{}", Sample "{}", Library "{}", flowcell "{}": '
                                              'Charon reports it is DONE but local db says it is RUNNING'.format(project, sample, libprep, seqrun))
                                 LOG.error(error_msg)
@@ -111,8 +111,8 @@ def launch_analysis_for_flowcells(projects_to_analyze, config=None, config_file_
                             LOG.error(error_msg)
                             continue
                     else:
-                        error_msg = ("Charon and local db incongruency:  Project {}, Sample {}, Library {}, flowcell {} "
-                                        "Charon reports it is {} but local db says it is RUNNING ".format(project, sample, libprep, fcid, status))
+                        error_msg = ('Charon and local db incongruency:  Project "{}", Sample "{}", Library "{}", flowcell "{}": '
+                                     'Charon reports it is "{}" but local db says it is RUNNING'.format(project, sample, libprep, seqrun, status))
                         LOG.error(error_msg)
                         continue
 
