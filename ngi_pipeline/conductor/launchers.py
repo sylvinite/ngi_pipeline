@@ -64,19 +64,28 @@ def launch_analysis_for_flowcells(projects_to_analyze, config=None, config_file_
                 for fcid in libprep:
                     # Check Charon to ensure this hasn't already been processed
                     status = CharonSession().seqrun_get(project.project_id, sample, libprep, fcid).get('alignment_status')
-                    # DEBUG
-                    #if status and status not in ("NEW", "FAILED", "DONE"):
-                    if status and status not in ("NEW", "FAILED"):
-                        # If status is not NEW or FAILED (which means it is RUNNING or DONE), skip processing
-                        if is_flowcell_analysis_running(project, sample, libprep, fcid, config):
-                            continue
-                    if status and status is "RUNNING":
+                    if status and status in ("RUNNING", "DONE"):
+                        # If status is  RUNNING or DONE skip processing but check that logic is respected (spok roks!!!)
+                        if status is "RUNNING":
                             if not is_flowcell_analysis_running(project, sample, libprep, fcid, config):
                                 error_msg = ("Charon and local db incongruency:  Project {}, Sample {}, Library {}, flowcell {} "
                                         "Charon reports it as running but not trace of it in local DB ".format(project, sample, libprep, fcid))
                                 LOG.error(error_msg)
-                            continue
+                        else: #otherwise I am DONE
+                            if is_flowcell_analysis_running(project, sample, libprep, fcid, config):
+                                error_msg = ("Charon and local db incongruency:  Project {}, Sample {}, Library {}, flowcell {} "
+                                        "Charon reports it is DONE but local db says it is RUNNING ".format(project, sample, libprep, fcid))
+                                LOG.error(error_msg)
+
+                        continue
+                    # if i am here the status on charon is either None, NEW, or FAILED
                     # Check the local jobs database to determine if this flowcell is already being analyzed
+                    if status and status is "FAILED":
+                        error_msg = ("FAILED:  Project {}, Sample {}, Library {}, flowcell {} "
+                                        "Charon reports FAILURE, manual investigation needed ".format(project, sample, libprep, fcid))
+                        LOG.error(error_msg)
+                        continue
+                    # at this point the status is only None or NEW, I need only to check that the analysis is already running (which would be strange)
                     if not is_flowcell_analysis_running(project, sample, libprep, fcid, config):
                         try:
                             # This workflow thing will be handled on the engine side. Here we'll just call like "piper_ngi.flowcell_level_analysis"
@@ -102,6 +111,11 @@ def launch_analysis_for_flowcells(projects_to_analyze, config=None, config_file_
                             error_msg = ('Cannot process project "{}": {}'.format(project, e))
                             LOG.error(error_msg)
                             continue
+                    else:
+                        error_msg = ("Charon and local db incongruency:  Project {}, Sample {}, Library {}, flowcell {} "
+                                        "Charon reports it is {} but local db says it is RUNNING ".format(project, sample, libprep, fcid, status))
+                        LOG.error(error_msg)
+                        continue
 
 
 ## FIRST PRIORITY
@@ -119,6 +133,7 @@ def trigger_sample_level_analysis(config=None, config_file_path=None):
     :param list config_file_path: The path to the NGI configuration file; optional.
     """
     #start by getting all projects, this will likely need a specific API
+    
     charon_session = CharonSession()
     try:
         projects_dict = charon_session.projects_get_all()['projects']
