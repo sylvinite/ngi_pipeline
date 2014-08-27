@@ -299,12 +299,12 @@ def write_to_charon_alignment_results(job_id, return_code, run_dir):
             try:
                 os.path.isdir(piper_result_dir) and os.listdir(piper_result_dir)
             except OSError as e:
-                raise ValueError("Piper result directory \"{}\" inaccessible: {}.".format(piper_result_dir, e))
+                raise ValueError("Piper result directory \"{}\" inaccessible when updating stats to Charon: {}.".format(piper_result_dir, e))
             piper_qc_dir_base = "{}.{}.{}".format(sample_id, piper_run_id, sample_id)
             piper_qc_path = "{}*/".format(os.path.join(piper_result_dir, piper_qc_dir_base))
             piper_qc_dirs = glob.glob(piper_qc_path)
-            if not piper_qc_dirs: # Something went wrong in the alignment
-                raise ValueError("Piper qc directories under \"{}\" are missing.".format(piper_qc_path))
+            if not piper_qc_dirs: # Something went wrong in the alignment or we can't parse the file format
+                raise ValueError("Piper qc directories under \"{}\" are missing or in an unexpected format when updating stats to Charon.".format(piper_qc_path))
 
             # Examine each lane and update the dict with its alignment metrics
             for qc_lane in piper_qc_dirs:
