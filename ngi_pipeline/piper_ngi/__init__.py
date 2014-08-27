@@ -225,7 +225,7 @@ def build_setup_xml(project, config, sample=None, libprep_id=None, seqrun_id=Non
     :rtype: list
     """
 
-    if seqrun_id == None:
+    if not seqrun_id:
         LOG.info('Building Piper setup.xml file for project "{}" '
                  'sample "{}"'.format(project, sample.name))
     else:
@@ -271,7 +271,7 @@ def build_setup_xml(project, config, sample=None, libprep_id=None, seqrun_id=Non
         cl_args["sfc_binary"] = "setupFileCreator"
 
 
-    if seqrun_id == None:
+    if not seqrun_id:
         output_xml_filepath = os.path.join(analysis_dir,
                                         "{}-{}-setup.xml".format(project, sample.name))
     else:
@@ -290,7 +290,7 @@ def build_setup_xml(project, config, sample=None, libprep_id=None, seqrun_id=Non
                            "--reference {reference_path} ".format(**cl_args))
     #NOTE: here I am assuming the different dir structure, it would be wiser to change the object type and have an uppsala project
 
-    if seqrun_id is None:
+    if not seqrun_id:
         #if seqrun_id is none it means I want to create a sample level setup xml
         for libprep in sample:
             for seqrun in libprep:
@@ -310,56 +310,3 @@ def build_setup_xml(project, config, sample=None, libprep_id=None, seqrun_id=Non
                      "skipping project analysis. "
                      "Error is: \"{}\". .".format(project, e))
         raise RuntimeError(error_msg)
-
-
-#def create_report_tsv(project):
-#    """Generate a tsv-formatted file as input for Piper and write to top level of project,
-#    unless a report.xml file exists already (as it will for Uppsala projects).
-#    Produces one report.tsv for each project, if the report.xml does not exist.
-#
-#    This file has the format:
-#
-#        #SampleName     Lane    ReadLibrary     FlowcellID
-#        P567_102        1       A               AH0JYUADXX
-#        P567_102        2       B               AH0JYUADXY
-#
-#    :param NGIProject project: The project to be converted.
-#    """
-#    report_header = ("#SampleName", "Lane", "ReadLibrary", "FlowcellID")
-#
-#    report_paths = []
-#    report_tsv_path = os.path.join(project.base_path, project.name, "report.tsv")
-#    report_xml_path = os.path.join(project.base_path, project.name, "report.xml")
-#    ## TODO I think we might need to replace this file if the project changes
-#    ##      -- might be cheapest to just generate a new one every time
-#    if os.path.exists(report_xml_path):
-#        report_paths.append(report_xml_path)
-#        LOG.info("Found preexisting report.xml file for project {project}: " \
-#                 "{report_xml}".format(project, report_xml_path))
-#
-#    #if os.path.exists(report_tsv_path):
-#    #    path, orig_filename = os.path.split(report_tsv_path)
-#    #    orig_basename, orig_ext = os.path.splitext(orig_filename)
-#    #    mv_filename = orig_basename + time.strftime("_%Y-%m-%d_%H:%M:%S") + orig_ext
-#    #    mv_path = os.path.join(path, mv_filename)
-#    #    LOG.info("Moving preexisting report.tsv file to {}".format(mv_path))
-#    #    shutil.move(report_tsv_path, mv_path)
-#    with open(report_tsv_path, 'w') as rtsv_fh:
-#        report_paths.append(report_tsv_path)
-#        LOG.info("Writing {}".format(report_tsv_path))
-#        print("\t".join(report_header), file=rtsv_fh)
-#        for sample in project:
-#            for fcid in sample:
-#                fcid_path = os.path.join(project.base_path,
-#                                         project.dirname,
-#                                         sample.dirname,
-#                                         fcid.dirname)
-#                for fq_pairname in find_fastq_read_pairs_from_dir(directory=fcid_path).keys():
-#                    try:
-#                        lane = parse_lane_from_filename(fq_pairname)
-#                    except ValueError as e:
-#                        LOG.error("Could not get lane from filename for file {} -- skipping ({})".format(fq_pairname, e))
-#                        raise ValueError(error_msg)
-#                    ## TODO pull from Charon database
-#                    read_library = "<NotImplemented>"
-#                    print("\t".join([sample.name, lane, read_library, fcid.name]), file=rtsv_fh)
