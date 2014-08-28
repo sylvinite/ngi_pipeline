@@ -6,9 +6,9 @@ import os
 import re
 import shelve
 
-from ngi_pipeline.log.loggers import minimal_logger
 from ngi_pipeline.database.classes import CharonSession, CharonError
 from ngi_pipeline.database.communicate import get_project_id_from_name
+from ngi_pipeline.log.loggers import minimal_logger
 from ngi_pipeline.utils.classes import with_ngi_config
 from ngi_pipeline.utils.parsers import parse_qualimap_results
 
@@ -117,19 +117,27 @@ def remove_record_from_local_tracking(project, config=None):
 
 def is_flowcell_analysis_running(project, sample, libprep, seqrun, config=None):
     """Determine if a flowcell is currently being analyzed."""
-    LOG.info("Checking if sequencing run {}/{}/{}/{} is currently "
-             "being analyzed.".format(project.project_id, sample, libprep, seqrun))
-    return is_analysis_running(project, sample, libprep, seqrun, level="flowcell")
+    sequencing_run = "{}/{}/{}/{}".format(project.project_id, sample, libprep, seqrun)
+    LOG.info('Checking if sequencing run "{}" is currently '
+             'being analyzed.'.format(sequencing_run))
+    if is_analysis_running(project, sample, libprep, seqrun, level="flowcell"):
+        LOG.info('Sequencing run "{}" is currently being analyzed.'.format(sequencing_run))
+        return True
+    else:
+        LOG.info('Sequencing run "{}" is not currently under analysis.'.format(sequencing_run))
+        return False
+
 
 ## MARIO FIXME
 # This function should be used along with a Charon database check for sample status
 # to ensure that there aren't flowcell analyses running
 def is_sample_analysis_running(project, sample, config=None):
     """Determine if a sample is currently being analyzed."""
-    raise NotImplementedError("Use the check_if_sample_analysis_is_running function for the moment.")
     LOG.info("Checking if sample {}/{} is currently "
              "being analyzed.".format(project.project_id, sample))
-    return is_analysis_running(project, sample, level="sample")
+    return check_if_sample_analysis_is_running(project, sample, config)
+    # Change to this once it's implemented
+    #return is_analysis_running(project, sample, level="sample")
 
 
 ## TODO this will be reworked once we change the way we access the database
@@ -145,43 +153,50 @@ def is_analysis_running(project, sample, libprep=None, seqrun=None, config=None,
 
 
 ## MARIO FIXME
-def check_if_sample_analysis_is_running( project, sample, config=None):
+def check_if_sample_analysis_is_running(project, sample, config=None):
     """checks if a given project/sample is currently analysed. 
-    Also check the no project working on that samples (maybe at flowcell level are running)
+    Determines if a given sample is currently being analyzed using the local job tracking
+    database as its source of information.
 
-    :param Project project: the project object
-    :param Sample sample:
+    :param NGIProject project: The Project object
+    :param NGISample sample: The Sample object
     :param dict config: The parsed configuration file (optional)
 
     :raises RuntimeError: If the configuration file cannot be found
 
-    :returns true/false
+    :returns: True or False
+    :rtype: bool
     """
-    LOG.info("checking if Project {}, Sample {}   "
-             "are currently being analysed ".format(project.name, sample))
+    ### FIXME this works for now but obviously the lookups will be much easier when we move to the SQL database
+    ### PRIORITY 2
     with get_shelve_database(config) as db:
         #get all keys, i.e., get all running projects
         running_processes = db.keys()
         #check that project_sample are not involved in any running process
         process_to_be_searched = "{}_{}".format(project, sample)
-        information_to_extract = re.compile("([a-zA-Z]\.[a-zA-Z]*_\d*_\d*)_(P\d*_\d*)(.*)")
-
+        #information_to_extract = re.compile("([a-zA-Z]\.[a-zA-Z]*_\d*_\d*)_(P\d*_\d*)(.*)")
+        ## e.g. A.Wedell_13_03_P567_102_A_140528_D00415_0049_BC423WACXX
+        ##process_pattern = re.compile(('(?P<project_name>\w\.\w+_\d+_\d+)_(?P<sample_id>P\d+_\d+)_'
+        ##                              '(?P<libprep_id>\w)_(?P<seqrun_id>\d{6}_.+_\d{4}_.{10})'))
+        # e.g. A.Wedell_13_03_P567_102
+        process_pattern = re.compile(r'(?P<project_name>\w\.\w+_\d+_\d+)_(?P<sample_id>P\d+_\d+)')
         for running_process in running_processes:
-            projectName_of_running_process    = information_to_extract.match(running_process).group(1)
-            sampleName_of_running_process     = information_to_extract.match(running_process).group(2)
-            libprep_fcid_of_running_process   = information_to_extract.match(running_process).group(3)
-            project_sample_of_running_process = "{}_{}".format(projectName_of_running_process,sampleName_of_running_process)
-            if project_sample_of_running_process == process_to_be_searched:
-                #match found, either this sample level analysis is already ongoing or I am still waiting for a fc level analysis to finish
-                if libprep_fcid_of_running_process == "": #in this case I am running sample level analysis
-                    warn_msg = ("Project {}, Sample {} "
-                         "has an entry in the local db. Sample level analysis are ongoing.".format(project, sample))
-                else:
-                    warn_msg = ("Project {}, Sample {}  "
-                         "has an entry in the local db. Waiting for a flowcell analysis to finish.".format(project, sample))
-                LOG.warn(warn_msg)
+            try:
+                m_dict = process_pattern.match(running_process).groupdict()
+            except AttributeError:
+                raise ValueError("Could not extract information from jobid string \"{}\" and cannot continue.")
+            project_name = m_dict['project_name']
+            project_id = get_project_id_from_name(project_name)
+            sample_id = m_dict['sample_id']
+            #libprep_id = m_dict['libprep_id']
+            #seqrun_id = m_dict['seqrun_id']
+            #libprep_seqrun_id = "{}_{}".format(libprep_id, seqrun_id)
+
+            project_sample = "{}_{}".format(project_id, sample_id)
+            if project_sample == process_to_be_searched:
                 return True
-        return False
+            else:
+                return False
 
 
 def write_status_to_charon(project_id, return_code):
@@ -222,7 +237,9 @@ def write_to_charon_NGI_results(job_id, return_code, run_dir):
     elif return_code == 0:
         status = "DONE"
     else:
-        status = "FAILED"
+        ## TODO we need to differentiate between COMPUTATION_FAILED and DATA_FAILED
+        ##      also there is IGNORE?
+        status = "COMPUTATION_FAILED"
     try:
         ## Could move to ngi_pipeline.utils.parsers if it gets used a lot
         # e.g. A.Wedell_13_03_P567_102
@@ -236,7 +253,7 @@ def write_to_charon_NGI_results(job_id, return_code, run_dir):
     try:
         charon_session.sample_update(project_id, sample_id, status=status)
     except CharonError as e:
-        error_msg = ('Failed to update project status to "{}" for "{}" sample {}'
+        error_msg = ('Failed to update sample status to "{}" for sample "{}" '
                      'in Charon database: {}'.format(status, project_id, sample_id, e))
         raise RuntimeError(error_msg)
 
@@ -289,12 +306,12 @@ def write_to_charon_alignment_results(job_id, return_code, run_dir):
             try:
                 os.path.isdir(piper_result_dir) and os.listdir(piper_result_dir)
             except OSError as e:
-                raise ValueError("Piper result directory \"{}\" inaccessible: {}.".format(piper_result_dir, e))
+                raise ValueError("Piper result directory \"{}\" inaccessible when updating stats to Charon: {}.".format(piper_result_dir, e))
             piper_qc_dir_base = "{}.{}.{}".format(sample_id, piper_run_id, sample_id)
             piper_qc_path = "{}*/".format(os.path.join(piper_result_dir, piper_qc_dir_base))
             piper_qc_dirs = glob.glob(piper_qc_path)
-            if not piper_qc_dirs: # Something went wrong in the alignment
-                raise ValueError("Piper qc directories under \"{}\" are missing.".format(piper_qc_path))
+            if not piper_qc_dirs: # Something went wrong in the alignment or we can't parse the file format
+                raise ValueError("Piper qc directories under \"{}\" are missing or in an unexpected format when updating stats to Charon.".format(piper_qc_path))
 
             # Examine each lane and update the dict with its alignment metrics
             for qc_lane in piper_qc_dirs:
@@ -370,33 +387,31 @@ def update_seq_run_for_lane(seqrun_dict, lane_alignment_metrics):
     seqrun_dict["mean_autosomal_coverage"] = seqrun_dict.get("mean_autosomal_coverage", 0) + lane_alignment_metrics["mean_autosomal_coverage"]
 
 
-# Change 'fcid' to 'seqrun_id'
-def record_process_flowcell(p_handle, workflow, project, sample, libprep, fcid,
+def record_process_flowcell(p_handle, workflow, project, sample, libprep, seqrun,
                             analysis_module, analysis_dir, config=None):
-    LOG.info("Recording process id {} for project {}, sample {}, fcid {} "
-             "workflow {}".format(p_handle.pid, project, sample, fcid, workflow))
+    LOG.info('Recording process id "{}" for project "{}", sample "{}", seqrun "{}" '
+             'workflow "{}"'.format(p_handle.pid, project, sample, seqrun, workflow))
     project_dict = { "workflow": workflow,
                      "p_handle": p_handle,
                      "analysis_module": analysis_module.__name__,
                      "project_id": project.project_id,
-                     "run_dir": analysis_dir
-                   }
+                     "run_dir": analysis_dir}
     with get_shelve_database(config) as db:
-        db_key = "{}_{}_{}_{}".format(project, sample, libprep, fcid)
+        db_key = "{}_{}_{}_{}".format(project, sample, libprep, seqrun)
         if db_key in db:
-            error_msg = ("Project {}, Sample {}, Library prep {}, fcid {} "
-                         "has an entry in the local db. ".format(project, sample, libprep, fcid))
+            error_msg = ("Project {}, Sample {}, Library prep {}, seqrun {} "
+                         "has an entry in the local db. ".format(project, sample, libprep, seqrun))
             LOG.warn(error_msg)
             return 
 
         db[db_key] = project_dict
-        LOG.info("Successfully recorded process id {} for project {}, sample {}, libprep {}, seqrun {}, "
-                 "workflow {}".format(p_handle.pid, project, sample, libprep, fcid,   workflow))
+        LOG.info('Successfully recorded process id "{}" for project "{}", sample "{}", libprep "{}", seqrun "{}", '
+                 'workflow "{}"'.format(p_handle.pid, project, sample, libprep, seqrun, workflow))
 
 
 def record_process_sample(p_handle, workflow, project, sample, analysis_module, analysis_dir, config=None):
-    LOG.info("Recording process id {} for project {}, sample {}, "
-             "workflow {}".format(p_handle.pid, project, sample, workflow))
+    LOG.info('Recording process id "{}" for project "{}", sample "{}", '
+             'workflow "{}"'.format(p_handle.pid, project, sample, workflow))
     project_dict = { "workflow": workflow,
                      "p_handle": p_handle,
                      "analysis_module": analysis_module.__name__,
@@ -406,14 +421,16 @@ def record_process_sample(p_handle, workflow, project, sample, analysis_module, 
     with get_shelve_database(config) as db:
         db_key = "{}_{}".format(project, sample)
         if db_key in db:
-            error_msg = ("Project {}, Sample {} "
-                         "has an entry in the local db. ".format(project, sample))
-            LOG.warn(error_msg)
-            return 
-
-        db[db_key] = project_dict
-        LOG.info("Successfully recorded process id {} for Project {}, Sample {} "
-                 "workflow {}".format(p_handle.pid, project, sample, workflow))
+            error_msg = ('Project "{}" / sample "{}" has an entry in the '
+                         'local db. '.format(project, sample))
+            raise RuntimeError(error_msg)
+        else:
+            db[db_key] = project_dict
+            LOG.info('Successfully recorded process id "{}" for project "{}" / '
+                     'sample "{}" / workflow "{}"'.format(p_handle.pid,
+                                                          project,
+                                                          sample,
+                                                          workflow))
 
 
 # Don't switch the order of these or you'll break everything
