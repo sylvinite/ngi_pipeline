@@ -85,7 +85,7 @@ def check_update_jobs_status(projects_to_check=None, config=None, config_file_pa
             #this code duplication can be avoided
             if project_dict["workflow"] == "dna_alignonly":
                 #in this case I need to update the run level infomration
-                write_to_charon_alignment_results(job_name, return_code)
+                write_to_charon_alignment_results(job_name, return_code, project_dict["run_dir"])
             elif project_dict["workflow"] == "NGI":
                     write_to_charon_NGI_results(job_name, return_code, project_dict["run_dir"])
 
@@ -145,7 +145,7 @@ def is_analysis_running(project, sample, libprep=None, seqrun=None, config=None,
     ## Something like this
     #database.check_local_jobs(project, sample, libprep, seqrun, table=level)
     ## For now:
-    db_key = "{}_{}".format(project.project_id, sample)
+    db_key = "{}_{}".format(project.name, sample)
     if libprep and seqrun:
         db_key = "{}_{}_{}".format(db_key, libprep, seqrun)
     with get_shelve_database(config) as db:
@@ -186,17 +186,17 @@ def check_if_sample_analysis_is_running(project, sample, config=None):
             except AttributeError:
                 raise ValueError("Could not extract information from jobid string \"{}\" and cannot continue.")
             project_name = m_dict['project_name']
-            project_id = get_project_id_from_name(project_name)
-            sample_id = m_dict['sample_id']
+            #project_id = get_project_id_from_name(project_name)
+            sample_id  = m_dict['sample_id']
             #libprep_id = m_dict['libprep_id']
             #seqrun_id = m_dict['seqrun_id']
             #libprep_seqrun_id = "{}_{}".format(libprep_id, seqrun_id)
 
-            project_sample = "{}_{}".format(project_id, sample_id)
+            project_sample = "{}_{}".format(project_name, sample_id)
             if project_sample == process_to_be_searched:
                 return True
-            else:
-                return False
+        #if I do not find hits I return False
+        return False
 
 
 def write_status_to_charon(project_id, return_code):
