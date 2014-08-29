@@ -190,8 +190,8 @@ class CharonSession(requests.Session):
                       lanes=None, alignment_coverage=None,
                       *args, **kwargs):
         ## TODO Consider implementing for allathese functions
-        if args: LOG.info("Ignoring extra args: {}".format(", ".join(*args)))
-        if kwargs: LOG.info("Ignoring extra kwargs: {}".format(", ".join(["{}: {}".format(k,v) for k,v in kwargs.iteritems()])))
+        if args: LOG.debug("Ignoring extra args: {}".format(", ".join(*args)))
+        if kwargs: LOG.debug("Ignoring extra kwargs: {}".format(", ".join(["{}: {}".format(k,v) for k,v in kwargs.iteritems()])))
         url = self.construct_charon_url("seqrun", projectid, sampleid, libprepid, seqrunid)
         l_dict = locals()
         data = { k: l_dict.get(k) for k in self._seqrun_params if l_dict.get(k)}

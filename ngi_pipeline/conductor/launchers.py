@@ -83,6 +83,7 @@ def launch_analysis_for_flowcells(projects_to_analyze, config=None, config_file_
                     if status and status == "FAILED":
                         error_msg = ('FAILED:  Project "{}" / sample "{}" / library "{}" / flowcell "{}": '
                                      'Charon reports FAILURE, manual investigation needed!'.format(project, sample, libprep, seqrun))
+                        ## TODO send an email or something -- this should be a Charon-related process, not done here
                         LOG.error(error_msg)
                         continue
                     # at this point the status is only None or NEW, I need only to check that the analysis is already running (which would be strange)
@@ -195,8 +196,8 @@ def trigger_sample_level_analysis(config=None, config_file_path=None):
 
         for sample_obj in project_obj: #sample_dict is a charon object
             # This status comes from the Charon database
-            if sample_obj.status == "DONE":
-                LOG.info('Sample "{}" in project "{}" has been processed succesfully.'.format(sample_obj, project_obj))
+            if sample_obj.status in ("DONE", "COMPUTATION_FAILED", "DATA_FAILED", "IGNORE"):
+                LOG.info('Sample "{}" in project "{}" will not be processed at this time: status is "{}".'.format(sample_obj, project_obj, sample_obj.status))
             # Checks the local job-tracking database to determine if this sample analysis is currently ongoing
             elif not is_sample_analysis_running(project_obj, sample_obj, config):
                 # Analysis not marked as "DONE" in Charon and also not yet running locally -- needs to be launched
@@ -211,7 +212,7 @@ def trigger_sample_level_analysis(config=None, config_file_path=None):
                     continue
                 if p_handle:    # p_handle is None when the engine decided that there is nothing to be done
                     record_process_sample(p_handle, workflow, project_obj, sample_obj,
-                                              analysis_module, analysis_dir, config)
+                                          analysis_module, analysis_dir, config)
 
 
 def recreate_project_from_db(analysis_top_dir, project_name, project_id):
