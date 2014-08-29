@@ -96,6 +96,7 @@ def do_rsync(src_files, dst_dir):
     #for f in src_files:
     #    open(os.path.join(dst_dir,os.path.basename(f)),"w").close()
     subprocess.check_call(cl)
+    #execute_command_line(cl)
     return [ os.path.join(dst_dir,os.path.basename(f)) for f in src_files ]
 
 
