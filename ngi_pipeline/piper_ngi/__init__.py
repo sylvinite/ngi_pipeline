@@ -149,7 +149,11 @@ def launch_piper_job(command_line, project):
     cwd = os.path.join(project.base_path, "ANALYSIS", project.dirname)
     ## TODO Would like to log these to the log -- can we get a Logbook filehandle-like object?
     ## TODO add exception handling
-    popen_object = execute_command_line(command_line, cwd=cwd)
+    popen_object = execute_command_line(command_line, cwd=cwd,
+                                        stdout=subprocess.PIPE,
+                                        stderr=subprocess.PIPE)
+    log_process_non_blocking(popen_object.stdout, LOG.info)
+    log_process_non_blocking(popen_object.stderr, LOG.warn)
     return popen_object
 
 

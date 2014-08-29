@@ -7,6 +7,30 @@ import sys
 
 from logbook.queues import RedisHandler
 #from ngi_pipeline.utils.config import load_yaml_config
+from Queue import Queue
+from subprocess import Popen, PIPE
+from threading import Thread
+
+
+def log_process_non_blocking(output_buffer, logging_fn):
+    """Non-blocking redirection of a buffer to a logging function.
+    A useful example:
+
+    LOG = minimal_logger(__name__)
+    p = Popen("y", stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    log_non_blocking(p.stdout, LOG.info)
+    log_non_blocking(p.stderr, LOG.warn)
+    """
+    q = Queue()
+    t = Thread(target=_enqueue_output, args=(output_buffer, q, logging_fn))
+    t.daemon = True
+    t.start()
+
+def _enqueue_output(output_buffer, queue, logging_fn):
+    for line in iter(output_buffer.readline, b''):
+        logging_fn(line)
+    output_buffer.close()
+
 
 def minimal_logger(namespace, config_path=None, extra_fields=None, debug=False):
     """Make and return a minimal console logger.
