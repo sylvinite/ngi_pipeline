@@ -36,6 +36,7 @@ def analyze_flowcell_run(project, sample, libprep, seqrun, workflow_name, config
     :rtype: subprocess.Popen
     """
     #Here I am in the Piper World: this means that I can be Engine specific!!!
+    
     modules_to_load = ["java/sun_jdk1.7.0_25", "R/2.15.0"]
     load_modules(modules_to_load)
     #things to to do
@@ -43,7 +44,7 @@ def analyze_flowcell_run(project, sample, libprep, seqrun, workflow_name, config
     # 2- build setup_xml specific for this fc run
     # 3- run piper at fc run
     try:
-        convert_sthlm_to_uppsala(project, seqrun) #this converts the entire project, it is not specific to the sample. Not a big deal, it will simply complain about the fact that it has alredy converted it
+        #convert_sthlm_to_uppsala(project, seqrun) #this converts the entire project, it is not specific to the sample. Not a big deal, it will simply complain about the fact that it has alredy converted it
         ## FIXME I think I broke this
         build_setup_xml(project, config, sample , libprep.name, seqrun.name)
         command_line = build_piper_cl(project, "dna_alignonly", config)
@@ -85,11 +86,7 @@ def analyze_sample_run(project, sample, config=None, config_file_path=None):
         LOG.info('Sample "{}" from project "{}" not yet sequenced or not yet analyzed'.format(sample, project))
     # If coverage is above 20X we can proceed.
     ## Use Charon validation for this possibly
-    elif float(sample_dict.get("total_autosomal_coverage")) > 20.0:
-        ## NOTE this may be unnecessary soon/already
-        if not sample.dirname.startswith("Sample_"):
-            # Switch to Piper naming convention for Sthlm samples
-            sample.dirname = "Sample_{}".format(sample.dirname)
+    elif float(sample_dict.get("total_autosomal_coverage")) > 2.0:
         try:
             ## FIXME I think I broke this
             build_setup_xml(project, config, sample)
@@ -232,7 +229,7 @@ def build_setup_xml(project, config, sample=None, libprep_id=None, seqrun_id=Non
         LOG.info('Building Piper setup.xml file for project "{}" '
                  'sample "{}", seqrun "{}"'.format(project, sample.name, seqrun_id))
 
-    project_top_level_dir = os.path.join(project.base_path, "DATA_UUSNP", project.dirname)
+    project_top_level_dir = os.path.join(project.base_path, "DATA", project.dirname)
     analysis_dir = os.path.join(project.base_path, "ANALYSIS", project.dirname)
     if not os.path.exists(analysis_dir):
         safe_makedir(analysis_dir, 0770)
@@ -289,16 +286,21 @@ def build_setup_xml(project, config, sample=None, libprep_id=None, seqrun_id=Non
                            "--uppnex_project_id {uppmax_proj} "
                            "--reference {reference_path} ".format(**cl_args))
     #NOTE: here I am assuming the different dir structure, it would be wiser to change the object type and have an uppsala project
-
     if not seqrun_id:
         #if seqrun_id is none it means I want to create a sample level setup xml
         for libprep in sample:
             for seqrun in libprep:
-                sample_directory = os.path.join(project_top_level_dir, seqrun.name, sample.dirname)
-                setupfilecreator_cl += " --input_sample {}".format(sample_directory)
+                sample_run_directory = os.path.join(project_top_level_dir, sample.dirname, libprep.name, seqrun.name )
+                for fastq_file_name in os.listdir(sample_run_directory):
+                    #MARIO: I am not a big fun of this, IGN object need to be created from file system in order to avoid this things
+                    fastq_file = os.path.join(sample_run_directory, fastq_file_name)
+                    setupfilecreator_cl += " --input_fastq {}".format(fastq_file)
     else:
-        sample_directory = os.path.join(project_top_level_dir, seqrun_id, sample.dirname)
-        setupfilecreator_cl += " --input_sample {}".format(sample_directory)
+        #I need to create an xml file for this sample_run
+        sample_run_directory = os.path.join(project_top_level_dir, sample.dirname, libprep_id, seqrun_id )
+        for fastq_file_name in sample.libpreps[libprep_id].seqruns[seqrun_id].fastq_files:
+            fastq_file = os.path.join(sample_run_directory, fastq_file_name)
+            setupfilecreator_cl += " --input_fastq {}".format(fastq_file)
 
     try:
         LOG.info("Executing command line: {}".format(setupfilecreator_cl))
@@ -310,3 +312,8 @@ def build_setup_xml(project, config, sample=None, libprep_id=None, seqrun_id=Non
                      "skipping project analysis. "
                      "Error is: \"{}\". .".format(project, e))
         raise RuntimeError(error_msg)
+
+
+
+
+

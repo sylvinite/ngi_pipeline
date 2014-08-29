@@ -1,5 +1,6 @@
 import argparse
 import time
+import os
 
 from ngi_pipeline.conductor.flowcell import process_demultiplexed_flowcell, process_demultiplexed_flowcells
 from ngi_pipeline.conductor.launchers import trigger_sample_level_analysis
@@ -10,9 +11,10 @@ def main(demux_fcid_dir, test_step_1, restrict_to_projects=None, restrict_to_sam
     if not test_step_1:
         process_demultiplexed_flowcell(demux_fcid_dir, restrict_to_projects, restrict_to_samples)
     elif test_step_1:
-        #this checks the status of the running process, it should ideally erase fields in the local db... not sure about it
-        check_update_jobs_status() #better to always rm the local db
-        
+    
+        demux_fcid_dir = "/proj/a2010002/INBOX/130701_SN7001298_0153_BH0JMGADXX/" # A.Wedell_13_03 sample P567_102
+        process_demultiplexed_flowcell(demux_fcid_dir, None, None) # this must start
+        time.sleep(30) #wait for 1 minutes
         
         demux_fcid_dir = "/proj/a2010002/INBOX/140528_D00415_0049_BC423WACXX" # G.Grigelioniene_14_01
         process_demultiplexed_flowcell(demux_fcid_dir, None, None)
@@ -41,12 +43,23 @@ def main(demux_fcid_dir, test_step_1, restrict_to_projects=None, restrict_to_sam
         demux_fcid_dir = "/proj/a2010002/INBOX/130701_SN7001298_0153_BH0JMGADXX/" # A.Wedell_13_03 sample P567_102
         process_demultiplexed_flowcell(demux_fcid_dir, None, None) # this must start
         time.sleep(30) #wait for 1 minutes
+        
+        
+        check_update_jobs_status()
+        trigger_sample_level_analysis()
+        
+        for demux_fcid in ("146362_3YUPS4_4614_AYSD4DN8PK", "382000_FA15AC_1819_ADT0SZ8CAV", "526414_H4VQMR_0554_A2Z2D30IMP", "636430_FHTLAG_5491_ADVN76RAX0", "694405_SGXBZU_8447_ANAY949DA1", "707581_O81L8Q_5350_ABBQEYRQQR", "958288_QH3TH9_2625_AOET9TT9AK", "992290_KV8699_9429_AJM8N4NV1U"):
+            demux_fcid_dir = os.path.join("/proj/a2010002/INBOX/", demux_fcid)
+            process_demultiplexed_flowcell(demux_fcid_dir, None, None)
+            time.sleep(30)
+        
+        
         #and now a loop to update the DB
         while True:
             check_update_jobs_status()
             trigger_sample_level_analysis()
             #check status every half an hour
-            time.sleep(1800)
+            time.sleep(3800)
 
 
 if __name__ == '__main__':
