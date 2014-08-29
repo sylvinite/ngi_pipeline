@@ -89,7 +89,7 @@ class SeqrunAnalysis(Base):
     engine = Column(String(50))
     # We can't use the process id because some processes will not be tracked this way.
     # --> Let's say this is just for Piper at the moment.
-    process_id = Column(Integer, primary_key=True)
+    process_id = Column(Integer, primary_key=True, unique=True)
 
 
     def __repr__(self):
