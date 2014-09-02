@@ -28,7 +28,6 @@ def determine_library_prep_from_fcid(project_id, sample_name, fcid):
     charon_session = CharonSession()
     libpreps_dict = charon_session.sample_get_libpreps(project_id, sample_name)['libpreps']
     for libprep in libpreps_dict:
-        import ipdb; ipdb.set_trace()
         # Get the sequencing runs and see if they match the FCID we have
         for seqrun in charon_session.libprep_get_seqruns(project_id,
                                                          sample_name,
