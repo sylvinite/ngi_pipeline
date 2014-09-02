@@ -15,19 +15,19 @@ from ngi_pipeline.utils.parsers import parse_qualimap_results
 LOG = minimal_logger(__name__)
 
 
-def get_all_tracked_processes(config=None):
-    """Returns all the processes that are being tracked locally,
-    which is to say all the processes that have a record in our local
-    process_tracking database.
-
-    :param dict config: The parsed configuration file (optional)
-
-    :returns: The dict of the entire database
-    :rtype: dict
-    """
-    with get_shelve_database(config) as db:
-        db_dict = {job_name: job_obj for job_name, job_obj in db.iteritems()}
-    return db_dict
+#def get_all_tracked_processes(config=None):
+#    """Returns all the processes that are being tracked locally,
+#    which is to say all the processes that have a record in our local
+#    process_tracking database.
+#
+#    :param dict config: The parsed configuration file (optional)
+#
+#    :returns: The dict of the entire database
+#    :rtype: dict
+#    """
+#    with get_shelve_database(config) as db:
+#        db_dict = {job_name: job_obj for job_name, job_obj in db.iteritems()}
+#    return db_dict
 
 
 # This can be run intermittently to track the status of jobs and update the database accordingly,

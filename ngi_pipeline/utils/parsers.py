@@ -25,27 +25,14 @@ def determine_library_prep_from_fcid(project_id, sample_name, fcid):
     :raises ValueError: If no match was found.
     :raises RuntimeError: If the database could not be reached (?)
     """
-    
     charon_session = CharonSession()
-    url = charon_session.construct_charon_url("libpreps", project_id, sample_name)
-    # Should return all library preps for this sample in this project
-    libpreps_response = charon_session.get(url)
-    if libpreps_response.status_code != 200:
-        raise RuntimeError("Error when accessing Charon DB: "
-                           "{}: {}".format(libpreps_response.status_code,
-                                           libpreps_response.reason))
-    for libprep in libpreps_response.json()['libpreps']:
+    libpreps_dict = charon_session.sample_get_libpreps(project_id, sample_name)['libpreps']
+    for libprep in libpreps_dict:
+        import ipdb; ipdb.set_trace()
         # Get the sequencing runs and see if they match the FCID we have
-        url = charon_session.construct_charon_url("seqruns",
-                                                  project_id,
-                                                  sample_name,
-                                                  libprep['libprepid'])
-        all_seqruns_response = charon_session.get(url)
-        if all_seqruns_response.status_code != 200:
-            raise RuntimeError("Error when accessing Charon DB: "
-                               "{}: {}".format(all_seqruns_response.status_code,
-                                               all_seqruns_response.reason))
-        for seqrun in all_seqruns_response.json()['seqruns']:
+        for seqrun in charon_session.libprep_get_seqruns(project_id,
+                                                         sample_name,
+                                                         libprep['libprepid']):
             seqrun_runid = seqrun["seqrunid"]
             if seqrun_runid == fcid:
                 return libprep['libprepid']

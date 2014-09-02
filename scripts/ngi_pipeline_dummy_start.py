@@ -9,8 +9,9 @@ from ngi_pipeline.database.process_tracking import check_update_jobs_status
 
 def main(demux_fcid_dir, test_step_1, restrict_to_projects=None, restrict_to_samples=None):
     if not test_step_1:
+
         process_demultiplexed_flowcell(demux_fcid_dir, restrict_to_projects, restrict_to_samples)
-    elif test_step_1:
+    else:
     
         demux_fcid_dir = "/proj/a2010002/INBOX/130701_SN7001298_0153_BH0JMGADXX/" # A.Wedell_13_03 sample P567_102
         process_demultiplexed_flowcell(demux_fcid_dir, None, None) # this must start
@@ -66,11 +67,11 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser("Quick launcher for testing purposes.")
     parser.add_argument("-p", "--project", dest="restrict_to_projects", action="append",
             help=("Restrict processing to these projects. "
-                  "Use flag multiple times for multiple projects.")) #            default=["G.Grigelioniene_14_01"],
+                  "Use flag multiple times for multiple projects."))
     parser.add_argument("-s", "--sample", dest= "restrict_to_samples", action="append",
             help=("Restrict processing to these samples. "
-                  "Use flag multiple times for multiple projects."))
-    parser.add_argument("demux_fcid_dir", nargs="*", action="store",
+                  "Use flag multiple times for multiple samples."))
+    parser.add_argument("demux_fcid_dir", nargs="?", action="store",
             default="/proj/a2010002/nobackup/mario/DATA/140528_D00415_0049_BC423WACXX/",
             help=("The path to the Illumina demultiplexed fc directories "
                   "to process."))

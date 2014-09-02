@@ -7,6 +7,7 @@ import os
 
 from ngi_pipeline.conductor.classes import NGIProject
 from ngi_pipeline.database.classes import CharonSession, CharonError
+from ngi_pipeline.database.filesystem import recreate_project_from_db
 from ngi_pipeline.database.communicate import get_workflow_for_project
 from ngi_pipeline.database.process_tracking import is_flowcell_analysis_running, \
                                                    is_sample_analysis_running, \
@@ -213,40 +214,3 @@ def trigger_sample_level_analysis(config=None, config_file_path=None):
                 if p_handle:    # p_handle is None when the engine decided that there is nothing to be done
                     record_process_sample(p_handle, workflow, project_obj, sample_obj,
                                           analysis_module, analysis_dir, config)
-
-
-def recreate_project_from_db(analysis_top_dir, project_name, project_id):
-    project_dir = os.path.join(analysis_top_dir, "DATA", project_name)
-    project_obj = NGIProject(name=project_name,
-                             dirname=project_name,
-                             project_id=project_id,
-                             base_path=analysis_top_dir)
-    charon_session = CharonSession()
-    try:
-        samples_dict = charon_session.project_get_samples(project_id)["samples"]
-    except CharonError as e:
-        raise RuntimeError("Could not access samples for project {}: {}".format(project_id, e))
-    for sample in samples_dict:
-        sample_id = sample.get("sampleid")
-        sample_dir = os.path.join(project_dir, sample_id)
-        sample_obj = project_obj.add_sample(name=sample_id, dirname=sample_id)
-        sample_obj.status = sample.get("status", "unknown")
-        try:
-            libpreps_dict = charon_session.sample_get_libpreps(project_id, sample_id)["libpreps"]
-        except CharonError as e:
-            raise RuntimeError("Could not access libpreps for project {} / sample {}: {}".format(project_id,sample_id, e))
-        for libprep in libpreps_dict:
-            libprep_id = libprep.get("libprepid")
-            libprep_obj = sample_obj.add_libprep(name=libprep_id,  dirname=libprep_id)
-            libprep_obj.status = libprep.get("status", "unknown")
-            try:
-                seqruns_dict = charon_session.libprep_get_seqruns(project_id, sample_id, libprep_id)["seqruns"]
-            except CharonError as e:
-                raise RuntimeError("Could not access seqruns for project {} / sample {} / "
-                                   "libprep {}: {}".format(project_id, sample_id, libprep_id, e))
-            for seqrun in seqruns_dict:
-                # e.g. 140528_D00415_0049_BC423WACXX
-                seqrun_id = seqrun.get("seqrunid")
-                seqrun_obj = libprep_obj.add_seqrun(name=seqrun_id, dirname=seqrun_id)
-                seqrun_obj.status = seqrun.get("status", "unknown")
-    return project_obj

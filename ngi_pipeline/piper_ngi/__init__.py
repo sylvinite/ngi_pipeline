@@ -312,8 +312,3 @@ def build_setup_xml(project, config, sample=None, libprep_id=None, seqrun_id=Non
                      "skipping project analysis. "
                      "Error is: \"{}\". .".format(project, e))
         raise RuntimeError(error_msg)
-
-
-
-
-

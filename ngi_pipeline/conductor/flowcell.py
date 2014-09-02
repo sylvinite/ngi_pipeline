@@ -71,7 +71,8 @@ def process_demultiplexed_flowcells(demux_fcid_dirs, restrict_to_projects=None,
                                                                  projects_to_analyze,
                                                                  restrict_to_projects,
                                                                  restrict_to_samples,
-                                                                 config)
+                                                                 create_files=True,
+                                                                 config=config)
     if not projects_to_analyze:
         if restrict_to_projects:
             error_message = ("No projects found to process; the specified flowcells "
@@ -96,9 +97,11 @@ def process_demultiplexed_flowcells(demux_fcid_dirs, restrict_to_projects=None,
     launch_analysis_for_flowcells(projects_to_analyze)
 
 
+### FIXME rework so that the creation of the NGIObjects and the actual creation of files are different functions?
 @with_ngi_config
 def setup_analysis_directory_structure(fc_dir, projects_to_analyze,
                                        restrict_to_projects=None, restrict_to_samples=None,
+                                       create_files=True,
                                        config=None, config_file_path=None):
     """
     Copy and sort files from their CASAVA-demultiplexed flowcell structure
@@ -134,7 +137,7 @@ def setup_analysis_directory_structure(fc_dir, projects_to_analyze,
     except RuntimeError as e:
         LOG.error("Error when processing flowcell dir \"{}\": {}".format(fc_dir, e))
         return []
-    fc_full_id      = fc_dir_structure['fc_full_id']
+    fc_full_id = fc_dir_structure['fc_full_id']
     if not fc_dir_structure.get('projects'):
         LOG.warn("No projects found in specified flowcell directory \"{}\"".format(fc_dir))
     # Iterate over the projects in the flowcell directory
@@ -156,7 +159,7 @@ def setup_analysis_directory_structure(fc_dir, projects_to_analyze,
         # Create a project directory if it doesn't already exist, including
         # intervening "DATA" directory
         project_dir = os.path.join(analysis_top_dir, "DATA", project_name)
-        if not os.path.exists(project_dir): safe_makedir(project_dir, 0770)
+        if not os.path.exists(project_dir) and create_files: safe_makedir(project_dir, 0770)
         try:
             project_obj = projects_to_analyze[project_dir]
         except KeyError:
@@ -166,58 +169,61 @@ def setup_analysis_directory_structure(fc_dir, projects_to_analyze,
             projects_to_analyze[project_dir] = project_obj
         # Iterate over the samples in the project
         for sample in project.get('samples', []):
-            # Our SampleSheet.csv names are like Y__Mom_14_01 for some reason
+            # Stockholm names are like Y__Mom_14_01 for some reason
             sample_name = sample['sample_name'].replace('__','.')
             # If specific samples are specified, skip those that do not match
             if restrict_to_samples and sample_name not in restrict_to_samples:
-                LOG.debug("Skipping sample {}".format(sample_name))
+                LOG.debug("Skipping sample {}: not in specified samples {}".format(sample_name, ", ".join(restrict_to_samples)))
                 continue
             LOG.info("Setting up sample {}".format(sample_name))
             # Create a directory for the sample if it doesn't already exist
             sample_dir = os.path.join(project_dir, sample_name)
-            if not os.path.exists(sample_dir): safe_makedir(sample_dir, 0770)
+            if not os.path.exists(sample_dir) and create_files: safe_makedir(sample_dir, 0770)
             # This will only create a new sample object if it doesn't already exist in the project
             sample_obj = project_obj.add_sample(name=sample_name, dirname=sample_name)
             # Get the Library Prep ID for each file
+
             pattern = re.compile(".*\.(fastq|fq)(\.gz|\.gzip|\.bz2)?$")
             fastq_files = filter(pattern.match, sample.get('files', []))
+            ## FIXME Needed?
             seqrun_dir = None
-
             for fq_file in fastq_files:
+                # Requires Charon access
                 libprep_name = determine_library_prep_from_fcid(project_id, sample_name, fc_full_id)
                 libprep_object = sample_obj.add_libprep(name=libprep_name,
                                                         dirname=libprep_name)
                 libprep_dir = os.path.join(sample_dir, libprep_name)
-                if not os.path.exists(libprep_dir): safe_makedir(libprep_dir, 0770)
+                if not os.path.exists(libprep_dir) and create_files: safe_makedir(libprep_dir, 0770)
                 seqrun_object = libprep_object.add_seqrun(name=fc_full_id,
                                                           dirname=fc_full_id)
                 seqrun_dir = os.path.join(libprep_dir, fc_full_id)
-                if not os.path.exists(seqrun_dir): safe_makedir(seqrun_dir, 0770)
+                if not os.path.exists(seqrun_dir) and create_files: safe_makedir(seqrun_dir, 0770)
                 seqrun_object.add_fastq_files(fq_file)
-            # rsync the source files to the sample directory
-            #    src: flowcell/data/project/sample
-            #    dst: project/sample/flowcell_run
-            src_sample_dir = os.path.join(fc_dir_structure['fc_dir'],
-                                          project['data_dir'],
-                                          project['project_dir'],
-                                          sample['sample_dir'])
-            for libprep in sample_obj:
-            ## NOTE to Mario what does this mean and can we avoid it
-            #this function works at run_level, so I have to process a single run
-            #it might happen that in a run we have multiple lib preps for the same sample
-                #for seqrun in libprep:
-                src_fastq_files = [ os.path.join(src_sample_dir, fastq_file)
-                                    for fastq_file in seqrun_object.fastq_files ] ##MARIO: check this
-                LOG.info("Copying fastq files from {} to {}...".format(sample_dir, seqrun_dir))
-                #try:
-                ## FIXME this exception should be handled somehow when rsync fails
-                do_rsync(src_fastq_files, seqrun_dir)
-                #except subprocess.CalledProcessError as e:
-                #    import ipdb; ipdb.set_trace()
-                #    ## TODO should we delete this libprep from the sample object in this case?
-                #    ##      this could be an issue downstream as well
-                #    LOG.warn('Error when performing rsync for "{}/{}/{}": '
-                #              '{}'.format(project, sample, libprep, e,))
+            if create_files:
+                # rsync the source files to the sample directory
+                #    src: flowcell/data/project/sample
+                #    dst: project/sample/flowcell_run
+                src_sample_dir = os.path.join(fc_dir_structure['fc_dir'],
+                                              project['data_dir'],
+                                              project['project_dir'],
+                                              sample['sample_dir'])
+                for libprep in sample_obj:
+                ## NOTE to Mario what does this mean and can we avoid it
+                #this function works at run_level, so I have to process a single run
+                #it might happen that in a run we have multiple lib preps for the same sample
+                    #for seqrun in libprep:
+                    src_fastq_files = [ os.path.join(src_sample_dir, fastq_file)
+                                        for fastq_file in seqrun_object.fastq_files ] ##MARIO: check this
+                    LOG.info("Copying fastq files from {} to {}...".format(sample_dir, seqrun_dir))
+                    #try:
+                    ## FIXME this exception should be handled somehow when rsync fails
+                    do_rsync(src_fastq_files, seqrun_dir)
+                    #except subprocess.CalledProcessError as e:
+                    #    import ipdb; ipdb.set_trace()
+                    #    ## TODO should we delete this libprep from the sample object in this case?
+                    #    ##      this could be an issue downstream as well
+                    #    LOG.warn('Error when performing rsync for "{}/{}/{}": '
+                    #              '{}'.format(project, sample, libprep, e,))
     return projects_to_analyze
 
 
@@ -287,7 +293,6 @@ def parse_casava_directory(fc_dir):
         for sample_dir in glob.glob(sample_dir_pattern):
             LOG.info("Parsing samples directory \"{}\"...".format(sample_dir.split(os.path.split(fc_dir)[0] + "/")[1]))
             fastq_file_pattern = os.path.join(sample_dir,"*.fastq.gz")
-            samplesheet_pattern = os.path.join(sample_dir,"*.csv")
             fastq_files = [os.path.basename(file) for file in glob.glob(fastq_file_pattern)]
             sample_name = os.path.basename(sample_dir).replace("Sample_","").replace('__','.')
             project_samples.append({'sample_dir': os.path.basename(sample_dir),

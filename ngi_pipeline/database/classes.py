@@ -208,6 +208,8 @@ class CharonSession(requests.Session):
         #return self.get(self.construct_charon_url('seqruns', projectid, sampleid, libprepid)).json()
 
 
+## FIXME give the CharonError all the relevant attrs from the
+##       Response object, or at least the return code
 class CharonError(RuntimeError):
     pass
 
