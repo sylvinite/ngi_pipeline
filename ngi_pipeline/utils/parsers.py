@@ -26,12 +26,13 @@ def determine_library_prep_from_fcid(project_id, sample_name, fcid):
     :raises RuntimeError: If the database could not be reached (?)
     """
     charon_session = CharonSession()
-    libpreps_dict = charon_session.sample_get_libpreps(project_id, sample_name)['libpreps']
-    for libprep in libpreps_dict:
+    libpreps = charon_session.sample_get_libpreps(project_id, sample_name)['libpreps']
+    for libprep in libpreps:
         # Get the sequencing runs and see if they match the FCID we have
-        for seqrun in charon_session.libprep_get_seqruns(project_id,
-                                                         sample_name,
-                                                         libprep['libprepid']):
+        seqruns = charon_session.libprep_get_seqruns(project_id,
+                                                     sample_name,
+                                                     libprep['libprepid'])['seqruns']
+        for seqrun in seqruns:
             seqrun_runid = seqrun["seqrunid"]
             if seqrun_runid == fcid:
                 return libprep['libprepid']
