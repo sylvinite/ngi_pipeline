@@ -179,6 +179,7 @@ def check_if_sample_analysis_is_running(project, sample, config=None):
         ##process_pattern = re.compile(('(?P<project_name>\w\.\w+_\d+_\d+)_(?P<sample_id>P\d+_\d+)_'
         ##                              '(?P<libprep_id>\w)_(?P<seqrun_id>\d{6}_.+_\d{4}_.{10})'))
         # e.g. A.Wedell_13_03_P567_102
+        import ipdb; ipdb.set_trace()
         process_pattern = re.compile(r'(?P<project_name>\w\.\w+_\d+_\d+)_(?P<sample_id>P\d+_\d+)')
         for running_process in running_processes:
             try:
@@ -244,6 +245,7 @@ def write_to_charon_NGI_results(job_id, return_code, run_dir):
         ## Could move to ngi_pipeline.utils.parsers if it gets used a lot
         # e.g. A.Wedell_13_03_P567_102
         ## FIXME won't work for Uppsala project/sample names
+        import ipdb; ipdb.set_trace()
         m_dict = re.match(r'(?P<project_name>\w\.\w+_\d+_\d+)_(?P<sample_id>P\d+_\d+)', job_id).groupdict()
         project_id = get_project_id_from_name(m_dict['project_name'])
         sample_id = m_dict['sample_id']
@@ -271,6 +273,7 @@ def write_to_charon_alignment_results(job_id, return_code, run_dir):
     """
     try:
         # e.g. A.Wedell_13_03_P567_102_A_140528_D00415_0049_BC423WACXX
+        import ipdb; ipdb.set_trace()
         m_dict = re.match(('(?P<project_name>\w\.\w+_\d+_\d+)_(?P<sample_id>P\d+_\d+)_'
                       '(?P<libprep_id>\w)_(?P<seqrun_id>\d{6}_.+_\d{4}_.{10})'), job_id).groupdict()
     except AttributeError:

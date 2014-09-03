@@ -182,14 +182,22 @@ def setup_analysis_directory_structure(fc_dir, projects_to_analyze,
             # This will only create a new sample object if it doesn't already exist in the project
             sample_obj = project_obj.add_sample(name=sample_name, dirname=sample_name)
             # Get the Library Prep ID for each file
-
             pattern = re.compile(".*\.(fastq|fq)(\.gz|\.gzip|\.bz2)?$")
             fastq_files = filter(pattern.match, sample.get('files', []))
-            ## FIXME Needed?
-            seqrun_dir = None
+            # For each fastq file, create the libprep and seqrun objects
+            # and add the fastq file to the seqprep object
+            # Note again that these objects only get created if they don't yet exist;
+            # if they do exist, the existing object is returned
             for fq_file in fastq_files:
                 # Requires Charon access
-                libprep_name = determine_library_prep_from_fcid(project_id, sample_name, fc_full_id)
+                try:
+                    libprep_name = determine_library_prep_from_fcid(project_id, sample_name, fc_full_id)
+                except ValueError:
+                    # This flowcell has not got library prep information in Charon and
+                    # is probably an Uppsala project; if so, we can parse the libprep name
+                    # from the SampleSheet.csv
+                    ## FIXME Need to get the SampleSheet location from the earlier parse_casava_dir fn
+                    libprep_name = determine_library_prep_from_samplesheet()
                 libprep_object = sample_obj.add_libprep(name=libprep_name,
                                                         dirname=libprep_name)
                 libprep_dir = os.path.join(sample_dir, libprep_name)
@@ -199,31 +207,34 @@ def setup_analysis_directory_structure(fc_dir, projects_to_analyze,
                 seqrun_dir = os.path.join(libprep_dir, fc_full_id)
                 if not os.path.exists(seqrun_dir) and create_files: safe_makedir(seqrun_dir, 0770)
                 seqrun_object.add_fastq_files(fq_file)
-            if create_files:
+            if fastq_files and create_files:
                 # rsync the source files to the sample directory
                 #    src: flowcell/data/project/sample
-                #    dst: project/sample/flowcell_run
+                #    dst: project/sample/libprep/flowcell_run
                 src_sample_dir = os.path.join(fc_dir_structure['fc_dir'],
                                               project['data_dir'],
                                               project['project_dir'],
                                               sample['sample_dir'])
-                for libprep in sample_obj:
-                ## NOTE to Mario what does this mean and can we avoid it
+                for libprep_obj in sample_obj:
                 #this function works at run_level, so I have to process a single run
                 #it might happen that in a run we have multiple lib preps for the same sample
-                    #for seqrun in libprep:
-                    src_fastq_files = [ os.path.join(src_sample_dir, fastq_file)
-                                        for fastq_file in seqrun_object.fastq_files ] ##MARIO: check this
-                    LOG.info("Copying fastq files from {} to {}...".format(sample_dir, seqrun_dir))
-                    #try:
-                    ## FIXME this exception should be handled somehow when rsync fails
-                    do_rsync(src_fastq_files, seqrun_dir)
-                    #except subprocess.CalledProcessError as e:
-                    #    import ipdb; ipdb.set_trace()
-                    #    ## TODO should we delete this libprep from the sample object in this case?
-                    #    ##      this could be an issue downstream as well
-                    #    LOG.warn('Error when performing rsync for "{}/{}/{}": '
-                    #              '{}'.format(project, sample, libprep, e,))
+                    for seqrun_obj in libprep_obj:
+                        src_fastq_files = [os.path.join(src_sample_dir, fastq_file) for
+                                           fastq_file in seqrun_obj.fastq_files]
+                        seqrun_dst_dir = os.path.join(project_obj.base_path, project_obj.dirname,
+                                                      sample_obj.dirname, libprep_obj.dirname,
+                                                      seqrun_obj.dirname)
+                        LOG.info("Copying fastq files from {} to {}...".format(src_sample_dir, seqrun_dir))
+                        #try:
+                        ## FIXME this exception should be handled somehow when rsync fails
+                        do_rsync(src_fastq_files, seqrun_dir)
+                        #except subprocess.CalledProcessError as e:
+                        #    ## TODO Here the rsync has failed
+                        #    ##      should we delete this libprep from the sample object in this case?
+                        #    ##      this could be an issue downstream if e.g. Piper expects these files
+                        #    ##      and they are missing
+                        #    LOG.warn('Error when performing rsync for "{}/{}/{}": '
+                        #              '{}'.format(project, sample, libprep, e,))
     return projects_to_analyze
 
 

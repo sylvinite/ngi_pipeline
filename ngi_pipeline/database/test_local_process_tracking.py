@@ -3,8 +3,8 @@ import shelve
 import tempfile
 import unittest
 
-from ngi_pipeline.database.process_tracking import get_shelve_database, \
-                                                   remove_record_from_local_tracking
+from ngi_pipeline.database.local_process_tracking import get_shelve_database, \
+                                                         remove_record_from_local_tracking
 
 class TestProcessTracking(unittest.TestCase):
 

@@ -93,8 +93,10 @@ def find_fastq_read_pairs(file_list):
     # --> This is the standard Illumina/Uppsala format (and Sthlm -> August 1st 2014)
     #     Format: <sample_name>_<index>_<lane>_<read>_<group>.fastq.gz
     #     Example: NA10860_NR_TAAGGC_L005_R1_001.fastq.gz
+    import ipdb; ipdb.set_trace()
     suffix_pattern = re.compile(r'(.*)fastq')
     # Cut off at the read group
+    import ipdb; ipdb.set_trace()
     file_format_pattern = re.compile(r'(.*)_(?:R\d|\d\.).*')
     matches_dict = collections.defaultdict(list)
     for file_pathname in file_list:
@@ -135,6 +137,7 @@ def parse_lane_from_filename(sample_basename):
     """
     # Stockholm or \
     # Illumina
+    import ipdb; ipdb.set_trace()
     match = re.match(r'(?P<lane>\d)_\d{6}_\w{10}_(?P<project>P\d{3})_(?P<sample>\d{3}).*', sample_basename) or \
             re.match(r'.*_L\d{2}(?P<lane>\d{1}).*', sample_basename)
             #re.match(r'(?P<project>P\d{3})_(?P<sample>\w+)_.*_L(?P<lane>\d{3})', sample_basename)
@@ -168,6 +171,7 @@ def get_flowcell_id_from_dirtree(path):
     :rtype: str
     :raises ValueError: If the flowcell ID cannot be determined
     """
+    import ipdb; ipdb.set_trace()
     flowcell_pattern = re.compile(r'\d{4,6}_(?P<fcid>[A-Z0-9]{10})')
     try:
         # NGI format (4-dir)

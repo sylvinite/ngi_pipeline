@@ -9,10 +9,10 @@ from ngi_pipeline.conductor.classes import NGIProject
 from ngi_pipeline.database.classes import CharonSession, CharonError
 from ngi_pipeline.database.filesystem import recreate_project_from_db
 from ngi_pipeline.database.communicate import get_workflow_for_project
-from ngi_pipeline.database.process_tracking import is_flowcell_analysis_running, \
-                                                   is_sample_analysis_running, \
-                                                   record_process_flowcell, \
-                                                   record_process_sample
+from ngi_pipeline.database.local_process_tracking import is_flowcell_analysis_running, \
+                                                         is_sample_analysis_running, \
+                                                         record_process_flowcell, \
+                                                         record_process_sample
 from ngi_pipeline.log.loggers import minimal_logger
 from ngi_pipeline.utils.classes import with_ngi_config
 
