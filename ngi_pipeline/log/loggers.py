@@ -28,7 +28,9 @@ def log_process_non_blocking(output_buffer, logging_fn):
 
 def _enqueue_output(output_buffer, queue, logging_fn):
     for line in iter(output_buffer.readline, b''):
-        logging_fn(line)
+        # the fastest hack FIXME
+        #logging_fn(line)
+        logging_fn(line + "\n")
     output_buffer.close()
 
 
@@ -85,6 +87,7 @@ def minimal_logger(namespace, config_path=None, extra_fields=None, debug=False):
     return log
 
 
+# Uh yeah I don't think this works
 def file_logger(namespace, config_file , log_file, log_path_key = None):
     CONFIG = cl.load_config(config_file)
     if not log_path_key:
