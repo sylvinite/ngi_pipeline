@@ -1,46 +1,88 @@
 import json
 
 from ngi_pipeline.database.classes import CharonSession, CharonError
+from ngi_pipeline.log.loggers import minimal_logger
+
+LOG = minimal_logger(__name__)
 
 
 ## FIXME this is a hack, improve it soon/later/someday
-##       (/never)
-def create_charon_entries_from_project(project, overwrite=False):
+##       (/never):q
+def create_charon_entries_from_project(project, force_overwrite=False):
     """Given a project object, creates the relevant entries
     in Charon.
 
     :param NGIProject project: The NGIProject object
-    :param bool overwrite: If this is set to true, overwrite existing entries in Charon (default false)
+    :param bool force_overwrite: If this is set to true, overwrite existing entries in Charon (default false)
     """
     charon_session = CharonSession()
     try:
-        charon_session.project_create(project.project_id)
+        charon_session.project_create(projectid=project.project_id,
+                                      name=project.name,
+                                      status="SEQUENCED")
     except CharonError:
-        ## TODO implement the overwrite functionality
-        pass
+        if force_overwrite:
+            LOG.warn('Overwriting data for project "{}"'.format(project))
+            charon_session.project_update(projectid=project.project_id,
+                                          name=project.name,
+                                          status="SEQUENCED")
+        else:
+            raise
     for sample in project:
         try:
-            charon_session.sample_create(project.project_id,
-                                         sample.name)
+            charon_session.sample_create(projectid=project.project_id,
+                                         sampleid=sample.name,
+                                         status="NEW")
         except CharonError:
-            pass
+            if force_overwrite:
+                LOG.warn('Overwriting data for project "{}" / '
+                         'sample "{}"'.format(project, sample))
+                charon_session.sample_update(projectid=project.project_id,
+                                             sampleid=sample.name,
+                                             status="NEW")
+            else:
+                raise
         for libprep in sample:
             try:
-                charon_session.libprep_create(project.project_id,
-                                              sample.name,
-                                              libprep.name)
+                charon_session.libprep_create(projectid=project.project_id,
+                                              sampleid=sample.name,
+                                              libprepid=libprep.name,
+                                              status="NEW")
             except CharonError:
-                pass
+                if force_overwrite:
+                    LOG.warn('Overwriting data for project "{}" / '
+                             'sample "{}" / libprep "{}"'.format(project, sample,
+                                                                 libprep))
+                    charon_session.libprep_update(projectid=project.project_id,
+                                                  sampleid=sample.name,
+                                                  libprepid=libprep.name,
+                                                  status="NEW")
+                else:
+                    raise
             for seqrun in libprep:
                 try:
-                    charon_session.seqrun_create(project.project_id,
-                                                 sample.name,
-                                                 libprep.name,
-                                                 seqrun.name,
+                    charon_session.seqrun_create(projectid=project.project_id,
+                                                 sampleid=sample.name,
+                                                 libprepid=libprep.name,
+                                                 seqrunid=seqrun.name,
                                                  total_reads=0,
-                                                 mean_autosomal_coverage=0)
-                except CharonError:
-                    pass
+                                                 mean_autosomal_coverage=0,
+                                                 sequencing_status="DONE",
+                                                 alignment_status="NEW")
+                except CharonError as e:
+                    import ipdb; ipdb.set_trace()
+                    if force_overwrite:
+                        LOG.warn('Overwriting data for project "{}" / '
+                                 'sample "{}" / libprep "{}" / '
+                                 'seqrun "{}"'.format(project, sample,
+                                                      libprep, seqrun))
+                        charon_session.seqrun_update(projectid=project.project_id,
+                                                     sampleid=sample.name,
+                                                     libprepid=libprep.name,
+                                                     seqrunid=seqrun.name,
+                                                     status="NEW")
+                    else:
+                        raise
 
 
 def recreate_project_from_db(analysis_top_dir, project_name, project_id):

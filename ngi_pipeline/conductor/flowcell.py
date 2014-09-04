@@ -197,7 +197,8 @@ def setup_analysis_directory_structure(fc_dir, projects_to_analyze,
                     # is probably an Uppsala project; if so, we can parse the libprep name
                     # from the SampleSheet.csv
                     ## FIXME Need to get the SampleSheet location from the earlier parse_casava_dir fn
-                    libprep_name = determine_library_prep_from_samplesheet()
+                    #libprep_name = determine_library_prep_from_samplesheet()
+                    libprep_name = "A"
                 libprep_object = sample_obj.add_libprep(name=libprep_name,
                                                         dirname=libprep_name)
                 libprep_dir = os.path.join(sample_dir, libprep_name)

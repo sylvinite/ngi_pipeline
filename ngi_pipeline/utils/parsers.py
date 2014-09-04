@@ -5,7 +5,7 @@ import re
 import xml.etree.cElementTree as ET
 import xml.parsers.expat
 
-from ngi_pipeline.database.classes import CharonSession
+from ngi_pipeline.database.classes import CharonSession, CharonError
 from ngi_pipeline.log.loggers import minimal_logger
 from ngi_pipeline.utils.classes import memoized
 
@@ -23,21 +23,35 @@ def determine_library_prep_from_fcid(project_id, sample_name, fcid):
     :returns: The library prep (e.g. "A")
     :rtype str
     :raises ValueError: If no match was found.
-    :raises RuntimeError: If the database could not be reached (?)
     """
     charon_session = CharonSession()
-    libpreps = charon_session.sample_get_libpreps(project_id, sample_name)['libpreps']
-    for libprep in libpreps:
-        # Get the sequencing runs and see if they match the FCID we have
-        seqruns = charon_session.libprep_get_seqruns(project_id,
-                                                     sample_name,
-                                                     libprep['libprepid'])['seqruns']
-        for seqrun in seqruns:
-            seqrun_runid = seqrun["seqrunid"]
-            if seqrun_runid == fcid:
-                return libprep['libprepid']
-    raise ValueError('No library prep found for project "{}" / sample "{}" '
-                     '/ fcid "{}"'.format(project_id, sample_name, fcid))
+    try:
+        libpreps = charon_session.sample_get_libpreps(project_id, sample_name)['libpreps']
+        if libpreps:
+            for libprep in libpreps:
+                # Get the sequencing runs and see if they match the FCID we have
+                seqruns = charon_session.libprep_get_seqruns(project_id,
+                                                             sample_name,
+                                                             libprep['libprepid'])['seqruns']
+                if seqruns:
+                    for seqrun in seqruns:
+                        seqrun_runid = seqrun["seqrunid"]
+                        if seqrun_runid == fcid:
+                            return libprep['libprepid']
+                else:
+                    ## HACK HACK FIXME HACK
+                    ## need more careful though / implementation
+                    raise CharonError("No seqruns found!", 404)
+        else:
+            ## HACK HACK FIXME HACK
+            ## it's 17:36
+            raise CharonError("No libpreps found!", 404)
+    except CharonError as e:
+        if e.status_code == 404:
+            raise ValueError('No library prep found for project "{}" / sample "{}" '
+                             '/ fcid "{}"'.format(project_id, sample_name, fcid))
+        else:
+            raise
 
 
 def find_fastq_read_pairs_from_dir(directory):
