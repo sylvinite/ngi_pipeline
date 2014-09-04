@@ -92,7 +92,7 @@ def get_workflow_for_project(project_id):
     :returns: The names of the workflow that should be run.
     :rtype: str
     :raises ValueError: If the project cannot be found in the database or if the project lacks a pipeline/workflow value
-    :raises RuntimeError: If there is some other database problem
+    :raises CharonError: If there is some other database problem
     """
     charon_session = CharonSession()
     try:

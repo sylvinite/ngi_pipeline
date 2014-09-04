@@ -31,15 +31,12 @@ def launch_analysis_for_flowcells(projects_to_analyze, config=None, config_file_
     :param dict config: The parsed NGI configuration file; optional/has default.
     :param str config_file_path: The path to the NGI configuration file; optional/has default.
     """
-    
-
     for project in projects_to_analyze:
         # Get information from Charon regarding which workflows to run
         try:
             workflow = get_workflow_for_project(project.project_id)
-        except CharonError as e:
-            error_msg = ("Skipping project {} because of error: {}".format(project, e))
-            LOG.error(error_msg)
+        except (ValueError, CharonError) as e:
+            LOG.error("Skipping project {} because of error: {}".format(project, e))
             continue
         try:
             analysis_engine_module_name = config["analysis"]["workflows"][workflow]["analysis_engine"]
