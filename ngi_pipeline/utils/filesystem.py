@@ -49,7 +49,7 @@ def load_modules(modules_list):
 def execute_command_line(cl, stdout=None, stderr=None, cwd=None):
     """Execute a command line and return the subprocess.Popen object.
 
-    :param cl: Can be either a list or a string, if string, gets shlex.splitted
+    :param cl: Can be either a list or a string; if string, gets shlex.splitted
     :param file stdout: The filehandle destination for STDOUT (can be None)
     :param file stderr: The filehandle destination for STDERR (can be None)
     :param str cwd: The directory to be used as CWD for the process launched

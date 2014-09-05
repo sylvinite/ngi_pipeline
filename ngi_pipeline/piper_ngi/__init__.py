@@ -40,7 +40,10 @@ def analyze_flowcell_run(project, sample, libprep, seqrun, workflow_name, config
     try:
         build_setup_xml(project, config, sample , libprep.name, seqrun.name)
         command_line = build_piper_cl(project, "dna_alignonly", config)
-        return launch_piper_job(command_line, project)
+        ## HACK fix later
+        log_file_name = "{}-{}-{}-{}.log".format(project, sample, libprep, seqrun)
+        log_file_path = os.path.join(project.base_path, "ANALYSIS", project.dirname, log_file_name)
+        return launch_piper_job(command_line, project, log_file_path=log_file_path)
     ## FIXME define exceptions more narrowly
     except Exception as e:
         error_msg = ('Processing project "{}" / sample "{}" / libprep "{}" / '
@@ -99,7 +102,7 @@ def analyze_sample_run(project, sample, config=None, config_file_path=None):
                  'waiting more data.'.format(sample))
 
 
-def launch_piper_job(command_line, project):
+def launch_piper_job(command_line, project, log_file_path=None):
     """Launch the Piper command line.
 
     :param str command_line: The command line to execute
@@ -111,7 +114,17 @@ def launch_piper_job(command_line, project):
     cwd = os.path.join(project.base_path, "ANALYSIS", project.dirname)
     ## TODO Would like to log these to the log -- can we get a Logbook filehandle-like object?
     ## TODO add exception handling
-    popen_object = execute_command_line(command_line, cwd=cwd)
+    popen_object = execute_command_line(command_line, cwd=cwd,
+                                        stdout=subprocess.PIPE,
+                                        stderr=subprocess.PIPE)
+    if not log_file_path:
+        log_process_non_blocking(popen_object.stdout, LOG.info)
+        log_process_non_blocking(popen_object.stderr, LOG.warn)
+    else:
+        # Hack hack
+        log_file = open(log_file_path, 'a')
+        log_process_non_blocking(popen_object.stdout, log_file.write)
+        log_process_non_blocking(popen_object.stderr, log_file.write)
     return popen_object
 
 
