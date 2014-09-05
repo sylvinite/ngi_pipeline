@@ -57,14 +57,16 @@ def launch_analysis_for_flowcells(projects_to_analyze, config=None, config_file_
             # Next project
             continue
 
+        charon_session = CharonSession()
+        set_new_seqrun_status = None
         for sample in project:
             for libprep in sample:
                 for seqrun in libprep:
                     # Check Charon to ensure this hasn't already been processed
-                    status = CharonSession().seqrun_get(project.project_id, sample, libprep, seqrun).get('alignment_status')
-                    if status and status in ("RUNNING", "DONE"):
-                        # If status is  RUNNING or DONE skip processing but check that logic is respected (spok roks!!!)
-                        if status is "RUNNING":
+                    charon_reported_status = charon_session.seqrun_get(project.project_id, sample, libprep, seqrun).get('alignment_status')
+                    if charon_reported_status and charon_reported_status in ("RUNNING", "DONE"):
+                        # If charon_reported_status is  RUNNING or DONE skip processing but check that logic is respected (spok roks!!!)
+                        if charon_reported_status is "RUNNING":
                             if not is_flowcell_analysis_running(project, sample, libprep, seqrun, config):
                                 error_msg = ('Charon and local db incongruency: project "{}" / sample "{}" / library "{}" / flowcell "{}": '
                                              'Charon reports it as running but not trace of it in local DB'.format(project, sample, libprep, seqrun))
@@ -76,15 +78,15 @@ def launch_analysis_for_flowcells(projects_to_analyze, config=None, config_file_
                                 LOG.error(error_msg)
 
                         continue
-                    # if i am here the status on charon is either None, NEW, or FAILED
+                    # if i am here the charon_reported_status on charon is either None, NEW, or FAILED
                     # Check the local jobs database to determine if this flowcell is already being analyzed
-                    if status and status == "FAILED":
+                    if charon_reported_status and charon_reported_status == "FAILED":
                         error_msg = ('FAILED:  Project "{}" / sample "{}" / library "{}" / flowcell "{}": '
                                      'Charon reports FAILURE, manual investigation needed!'.format(project, sample, libprep, seqrun))
-                        ## TODO send an email or something -- this should be a Charon-related process, not done here
+                        ## TODO send an email or something, but that should be a Charon-related process, not done here
                         LOG.error(error_msg)
                         continue
-                    # at this point the status is only None or NEW, I need only to check that the analysis is already running (which would be strange)
+                    # at this point the charon_reported_status is only None or NEW, I need only to check that the analysis is already running (which would be strange)
                     if not is_flowcell_analysis_running(project, sample, libprep, seqrun, config):
                         try:
                             # This workflow thing will be handled on the engine side. Here we'll just call like "piper_ngi.flowcell_level_analysis"
@@ -106,26 +108,35 @@ def launch_analysis_for_flowcells(projects_to_analyze, config=None, config_file_
                             ## NOTE what happens when the process fails? we still get a Popen object I think?
                             if p_handle:
                                 record_process_flowcell(p_handle, workflow_name, project, sample, libprep, seqrun, analysis_module, project.analysis_dir, config)
+                            set_new_seqrun_status = "RUNNING"
                         # TODO which exceptions can we expect to be raised here?
                         except Exception as e:
-                            error_msg = ('Cannot process project "{}": {}'.format(project, e))
-                            LOG.error(error_msg)
+                            LOG.error('Cannot process project "{}" / sample "{}" / libprep "{}" / '
+                                      'seqrun "{}": {}'.format(project, sample, libprep, seqrun, e))
+                            set_new_seqrun_status = "FAILED"
                             continue
                     else:
-                        error_msg = ('Charon and local db incongruency:  Project "{}", Sample "{}", Library "{}", flowcell "{}": '
-                                     'Charon reports it is "{}" but local db says it is RUNNING'.format(project, sample, libprep, seqrun, status))
+                        error_msg = ('Charon and local db incongruency: Skipping analysis of project "{}" / '
+                                     'sample "{}" / library "{}" / seqrun "{}": Charon reports it is "{}" '
+                                     'but local db says it is running'.format(project, sample, libprep, seqrun, charon_reported_status))
                         LOG.error(error_msg)
                         continue
+                    if set_new_seqrun_status:
+                        try:
+                           LOG.info('Updating Charon entry for project "{}" / sample "{}" / libprep "{}" / '
+                                    'seqrun "{}" to "{}"'.format(project, sample, libprep, seqrun, set_new_seqrun_status))
+                           charon_session.seqrun_update(projectid=project, sampleid=sample,
+                                                        libprepid=libprep, seqrunid=seqrun,
+                                                        alignment_status=set_new_seqrun_status)
+                        except CharonError as e:
+                           LOG.error("...could not update Charon!: {}".format(e))
 
 
 ## FIRST PRIORITY
-## MARIO FIXME adjust charon access etc.
-## NOTE
 ## This function is responsable of trigger second level analyisis (i.e., sample level analysis)
 ## using the information available on the Charon.
-## TOO MANY CALLS TO CHARON ARE MADE HERE: we need to restrict them
 @with_ngi_config
-def trigger_sample_level_analysis(config=None, config_file_path=None):
+def trigger_sample_level_analysis(restrict_to_projects=None, restrict_to_samples=None, config=None, config_file_path=None):
     """Triggers secondary analysis based on what is found on Charon
     for now this will work only with Piper/IGN
 
@@ -133,14 +144,21 @@ def trigger_sample_level_analysis(config=None, config_file_path=None):
     :param list config_file_path: The path to the NGI configuration file; optional.
     """
     LOG.info("Starting sample-level analysis routine.")
-    #start by getting all projects, this will likely need a specific API
-    
+    if not restrict_to_projects: restrict_to_projects = []
+    if not restrict_to_samples: restrict_to_samples = []
     charon_session = CharonSession()
     try:
+        ## TODO it would be nice here if we had Charon just give us all projects matching a certain set of criteria
+        ##      eventually there will be too many projects to just grab them all
         projects_dict = charon_session.projects_get_all()['projects']
     except (CharonError, KeyError) as e:
         raise RuntimeError("Unable to get list of projects from Charon and cannot continue: {}".format(e))
     for project in projects_dict:
+        if restrict_to_projects and project.get('name') not in restrict_to_projects and \
+                                    project.get('projectid') not in restrict_to_projects:
+            LOG.debug('Skipping project "{}": not in specified list of projects ' \
+                     '({})'.format(project.get('name'), ", ".join(restrict_to_projects)))
+            continue
         if project.get("status") in ("CLOSED", "ABORTED"):
             LOG.info("Skipping project {}: marked as {}".format(project, project.get("status")))
         project_id = project.get("projectid")
@@ -182,20 +200,22 @@ def trigger_sample_level_analysis(config=None, config_file_path=None):
             continue
         analysis_dir = os.path.join(analysis_top_dir, "ANALYSIS", project["name"] )
 
-
         #I know which engine I need to use to process sample ready, however only the engine
         #knows that are the conditions that need to be made
         LOG.info('Finding samples read to be analyzed in project {} / workflow {}'.format(project_id, workflow))
         try:
             samples_dict = charon_session.project_get_samples(project_id)["samples"]
         except CharonError as e:
-            raise RuntimeError("Could not access samples for project {}: {}".format(project_id, e))
-
+            raise RuntimeError('"Could not access samples for project "{}": "{}"'.format(project_id, e))
 
         for sample_obj in project_obj: #sample_dict is a charon object
+            if restrict_to_samples and sample_obj.name in restrict_to_samples:
+                LOG.debug('Skipping sample "{}": not in specified list of samples ({})'.format(", ".join(restrict_to_samples)))
+                continue
             # This status comes from the Charon database
             if sample_obj.status in ("DONE", "COMPUTATION_FAILED", "DATA_FAILED", "IGNORE"):
-                LOG.info('Sample "{}" in project "{}" will not be processed at this time: status is "{}".'.format(sample_obj, project_obj, sample_obj.status))
+                LOG.info('Sample "{}" in project "{}" will not be processed at this time: '
+                         'status is "{}".'.format(sample_obj, project_obj, sample_obj.status))
             # Checks the local job-tracking database to determine if this sample analysis is currently ongoing
             elif not is_sample_analysis_running(project_obj, sample_obj, config):
                 # Analysis not marked as "DONE" in Charon and also not yet running locally -- needs to be launched

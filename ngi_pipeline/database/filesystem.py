@@ -1,5 +1,7 @@
 import json
+import os
 
+from ngi_pipeline.conductor.classes import NGIProject
 from ngi_pipeline.database.classes import CharonSession, CharonError
 from ngi_pipeline.log.loggers import minimal_logger
 
@@ -22,8 +24,9 @@ def create_charon_entries_from_project(project, force_overwrite=False):
                                       status="SEQUENCED")
     except CharonError:
         if force_overwrite:
-            LOG.warn('Overwriting data for project "{}"'.format(project))
-            charon_session.project_update(projectid=project.project_id,
+            LOG.warn('Deleting/recreating data for project "{}"'.format(project))
+            charon_session.project_delete(projectid=project.project_id)
+            charon_session.project_create(projectid=project.project_id,
                                           name=project.name,
                                           status="SEQUENCED")
         else:

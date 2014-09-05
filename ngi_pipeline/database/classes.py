@@ -194,7 +194,7 @@ class CharonSession(requests.Session):
         if kwargs: LOG.debug("Ignoring extra kwargs: {}".format(", ".join(["{}: {}".format(k,v) for k,v in kwargs.iteritems()])))
         url = self.construct_charon_url("seqrun", projectid, sampleid, libprepid, seqrunid)
         l_dict = locals()
-        data = { k: l_dict.get(k) for k in self._seqrun_params if l_dict.get(k)}
+        data = { k: str(l_dict.get(k)) for k in self._seqrun_params if l_dict.get(k)}
         return self.put(url, json.dumps(data)).text
 
     def seqrun_reset(self, projectid, sampleid, libprepid, seqrunid):

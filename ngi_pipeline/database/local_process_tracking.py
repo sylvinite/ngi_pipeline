@@ -14,6 +14,9 @@ from ngi_pipeline.utils.parsers import parse_qualimap_results
 
 LOG = minimal_logger(__name__)
 
+## e.g. A.Wedell_13_03_P567_102_A_140528_D00415_0049_BC423WACXX                         <-- sthlm
+##  or  ND-0522_NA10860_PCR-free_SX398_NA10860_PCR-free_140821_D00458_0029_AC45JGANXX   <-- uusnp
+STHLM_UUSNP_RE = re.compile(r'(?P<project_name>\w\.\w+_\d+_\d+|\w{2}-\d+)_(?P<sample_id>[\w-]+)_(?P<libprep_id>\w|\w{2}\d{3}_\2)_(?P<seqrun_id>\d{6}_\w+_\d{4}_.{10})')
 
 #def get_all_tracked_processes(config=None):
 #    """Returns all the processes that are being tracked locally,
@@ -133,10 +136,10 @@ def is_flowcell_analysis_running(project, sample, libprep, seqrun, config=None):
 # to ensure that there aren't flowcell analyses running
 def is_sample_analysis_running(project, sample, config=None):
     """Determine if a sample is currently being analyzed."""
-    LOG.info("Checking if sample {}/{} is currently "
-             "being analyzed.".format(project.project_id, sample))
     return check_if_sample_analysis_is_running(project, sample, config)
     # Change to this once it's implemented
+    #LOG.info("Checking if sample {}/{} is currently "
+    #         "being analyzed...".format(project.project_id, sample))
     #return is_analysis_running(project, sample, level="sample")
 
 
@@ -169,23 +172,18 @@ def check_if_sample_analysis_is_running(project, sample, config=None):
     """
     ### FIXME this works for now but obviously the lookups will be much easier when we move to the SQL database
     ### PRIORITY 2
+    LOG.info("Checking if sample {}/{} is currently "
+             "being analyzed...".format(project.project_id, sample))
     with get_shelve_database(config) as db:
         #get all keys, i.e., get all running projects
         running_processes = db.keys()
         #check that project_sample are not involved in any running process
         process_to_be_searched = "{}_{}".format(project, sample)
-        #information_to_extract = re.compile("([a-zA-Z]\.[a-zA-Z]*_\d*_\d*)_(P\d*_\d*)(.*)")
-        ## e.g. A.Wedell_13_03_P567_102_A_140528_D00415_0049_BC423WACXX
-        ##process_pattern = re.compile(('(?P<project_name>\w\.\w+_\d+_\d+)_(?P<sample_id>P\d+_\d+)_'
-        ##                              '(?P<libprep_id>\w)_(?P<seqrun_id>\d{6}_.+_\d{4}_.{10})'))
-        # e.g. A.Wedell_13_03_P567_102
-        import ipdb; ipdb.set_trace()
-        process_pattern = re.compile(r'(?P<project_name>\w\.\w+_\d+_\d+)_(?P<sample_id>P\d+_\d+)')
         for running_process in running_processes:
             try:
-                m_dict = process_pattern.match(running_process).groupdict()
+                m_dict = STHLM_UUSNP_RE.match(running_process).groupdict()
             except AttributeError:
-                raise ValueError("Could not extract information from jobid string \"{}\" and cannot continue.")
+                raise ValueError("Could not extract information from jobid string \"{}\" and cannot continue.".format(running_process))
             project_name = m_dict['project_name']
             #project_id = get_project_id_from_name(project_name)
             sample_id  = m_dict['sample_id']
@@ -195,8 +193,10 @@ def check_if_sample_analysis_is_running(project, sample, config=None):
 
             project_sample = "{}_{}".format(project_name, sample_id)
             if project_sample == process_to_be_searched:
+                LOG.info('...sample run "{}" is currently being analyzed.'.format(process_to_be_searched))
                 return True
         #if I do not find hits I return False
+        LOG.info('...sample run "{}" is not currently being analyzed.'.format(process_to_be_searched))
         return False
 
 
@@ -242,11 +242,8 @@ def write_to_charon_NGI_results(job_id, return_code, run_dir):
         ##      also there is IGNORE?
         status = "COMPUTATION_FAILED"
     try:
-        ## Could move to ngi_pipeline.utils.parsers if it gets used a lot
-        # e.g. A.Wedell_13_03_P567_102
-        ## FIXME won't work for Uppsala project/sample names
-        import ipdb; ipdb.set_trace()
-        m_dict = re.match(r'(?P<project_name>\w\.\w+_\d+_\d+)_(?P<sample_id>P\d+_\d+)', job_id).groupdict()
+        m_dict = STHLM_UUSNP_RE.match(job_id).groupdict()
+        #m_dict = re.match(r'?P<project_name>\w\.\w+_\d+_\d+|\w{2}-\d+)_(?P<sample_id>[\w-]+)_(?P<libprep_id>\w|\w{2}\d{3}_\2)_(?P<seqrun_id>\d{6}_\w+_\d{4}_.{10})', job_id).groupdict()
         project_id = get_project_id_from_name(m_dict['project_name'])
         sample_id = m_dict['sample_id']
     except (TypeError, AttributeError):
@@ -272,10 +269,9 @@ def write_to_charon_alignment_results(job_id, return_code, run_dir):
     :raises RuntimeError: If the Charon database could not be updated
     """
     try:
-        # e.g. A.Wedell_13_03_P567_102_A_140528_D00415_0049_BC423WACXX
-        import ipdb; ipdb.set_trace()
-        m_dict = re.match(('(?P<project_name>\w\.\w+_\d+_\d+)_(?P<sample_id>P\d+_\d+)_'
-                      '(?P<libprep_id>\w)_(?P<seqrun_id>\d{6}_.+_\d{4}_.{10})'), job_id).groupdict()
+        m_dict = STHLM_UUSNP_RE.match(job_id).groupdict()
+        #m_dict = re.match(('(?P<project_name>\w\.\w+_\d+_\d+)_(?P<sample_id>P\d+_\d+)_'
+        #              '(?P<libprep_id>\w)_(?P<seqrun_id>\d{6}_.+_\d{4}_.{10})'), job_id).groupdict()
     except AttributeError:
         raise ValueError("Could not parse job_id \"{}\"; does not match template.".format(job_id))
     project_name = m_dict["project_name"]

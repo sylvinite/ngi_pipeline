@@ -63,7 +63,7 @@ def analyze_sample_run(project, sample, config=None, config_file_path=None):
     :rtype: subprocess.Popen or None
     :raises RuntimeError: If the process cannot be started
     """
-    LOG.info('Determining if we can start sample-level analysis for project "{}" / sample "{}"'.format(project, sample))
+    LOG.info('Determining if we can start sample-level analysis for project "{}" / sample "{}"...'.format(project, sample))
     modules_to_load = ["java/sun_jdk1.7.0_25", "R/2.15.0"]
     load_modules(modules_to_load)
     charon_session = CharonSession()
@@ -75,13 +75,17 @@ def analyze_sample_run(project, sample, config=None, config_file_path=None):
                            'proceed.'.format(project, sample))
     # Check if I can run sample level analysis
     if not sample_dict.get('total_autosomal_coverage'):     # Doesn't exist or is 0
-        LOG.info('Sample "{}" from project "{}" not yet sequenced or not yet analyzed'.format(sample, project))
+        LOG.info('...individual sequencing runs from sample "{}" / project "{}" '
+                 'not yet sequenced or not yet analyzed; waiting to proceed '
+                 'with sample-level analysis'.format(sample, project))
     # If coverage is above 20X we can proceed.
     ## Use Charon validation for this possibly
     elif float(sample_dict.get("total_autosomal_coverage")) > 2.0:
+        LOG.info('...sample "{}" from project "{}" ready for sample-level analysis. '
+                 'Proceed with workflow "{}"'.format(project, sample,"merge_process_varaintCall"))
         try:
-            ## FIXME I think I broke this
             build_setup_xml(project, config, sample)
+            ## TODO Need to get workflow from somewhere
             command_line = build_piper_cl(project, "merge_process_variantCall", config)
             LOG.info('Executing command line "{}"...'.format(command_line))
             return launch_piper_job(command_line, project)
@@ -185,15 +189,14 @@ def build_setup_xml(project, config, sample=None, libprep_id=None, seqrun_id=Non
                  'sample "{}"'.format(project, sample.name))
     else:
         LOG.info('Building Piper setup.xml file for project "{}" '
-                 'sample "{}", seqrun "{}"'.format(project, sample.name, seqrun_id))
+                 'sample "{}", libprep "{}", seqrun "{}"'.format(project, sample,
+                                                                 libprep_id, seqrun_id))
 
     project_top_level_dir = os.path.join(project.base_path, "DATA", project.dirname)
     analysis_dir = os.path.join(project.base_path, "ANALYSIS", project.dirname)
     if not os.path.exists(analysis_dir):
         safe_makedir(analysis_dir, 0770)
-
     cl_args = {'project': project.name}
-
     # Load needed data from database
     try:
         # Information we need from the database:
@@ -214,9 +217,9 @@ def build_setup_xml(project, config, sample=None, libprep_id=None, seqrun_id=Non
         cl_args["reference_path"] = config['supported_genomes'][reference_genome]
         cl_args["uppmax_proj"] = config['environment']['project_id']
     except KeyError as e:
-        error_msg = ("Could not load required information from"
-                     " configuration file and cannot continue with project {}:"
-                     " value \"{}\" missing".format(project, e.message))
+        error_msg = ("Could not load required information from "
+                     "configuration file and cannot continue with project {}: "
+                     "value \"{}\" missing".format(project, e.message))
         raise ValueError(error_msg)
 
     try:
