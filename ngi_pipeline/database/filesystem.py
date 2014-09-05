@@ -10,29 +10,36 @@ LOG = minimal_logger(__name__)
 
 ## FIXME this is a hack, improve it soon/later/someday
 ##       (/never):q
-def create_charon_entries_from_project(project, force_overwrite=False):
+def create_charon_entries_from_project(project, workflow="NGI", force_overwrite=False):
     """Given a project object, creates the relevant entries
     in Charon.
 
     :param NGIProject project: The NGIProject object
+    :param str workflow: The workflow to assign for this project (default NGI)
     :param bool force_overwrite: If this is set to true, overwrite existing entries in Charon (default false)
     """
     charon_session = CharonSession()
     try:
+        status="SEQUENCED"
+        LOG.info('Creating project "{}" with status "{}" and workflow "{}"'.format(project, status, workflow))
         charon_session.project_create(projectid=project.project_id,
                                       name=project.name,
-                                      status="SEQUENCED")
+                                      status=status,
+                                      pipeline=workflow)
     except CharonError:
         if force_overwrite:
-            LOG.warn('Deleting/recreating data for project "{}"'.format(project))
+            LOG.warn('Deleting project "{}" from Charon'.format(project))
+            LOG.info('Creating project "{}" with status "{}" and workflow "{}"'.format(project, status, workflow))
             charon_session.project_delete(projectid=project.project_id)
             charon_session.project_create(projectid=project.project_id,
                                           name=project.name,
-                                          status="SEQUENCED")
+                                          status=status,
+                                          pipeline=workflow)
         else:
             raise
     for sample in project:
         try:
+            LOG.info('Creating sample "{}"'.format(sample))
             charon_session.sample_create(projectid=project.project_id,
                                          sampleid=sample.name,
                                          status="NEW")
@@ -47,6 +54,7 @@ def create_charon_entries_from_project(project, force_overwrite=False):
                 raise
         for libprep in sample:
             try:
+                LOG.info('Creating libprep "{}"'.format(libprep))
                 charon_session.libprep_create(projectid=project.project_id,
                                               sampleid=sample.name,
                                               libprepid=libprep.name,
@@ -64,6 +72,7 @@ def create_charon_entries_from_project(project, force_overwrite=False):
                     raise
             for seqrun in libprep:
                 try:
+                    LOG.info('Creating seqrun "{}"'.format(seqrun))
                     charon_session.seqrun_create(projectid=project.project_id,
                                                  sampleid=sample.name,
                                                  libprepid=libprep.name,

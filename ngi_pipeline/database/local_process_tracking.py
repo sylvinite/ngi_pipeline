@@ -16,21 +16,22 @@ LOG = minimal_logger(__name__)
 
 ## e.g. A.Wedell_13_03_P567_102_A_140528_D00415_0049_BC423WACXX                         <-- sthlm
 ##  or  ND-0522_NA10860_PCR-free_SX398_NA10860_PCR-free_140821_D00458_0029_AC45JGANXX   <-- uusnp
-STHLM_UUSNP_RE = re.compile(r'(?P<project_name>\w\.\w+_\d+_\d+|\w{2}-\d+)_(?P<sample_id>[\w-]+)_(?P<libprep_id>\w|\w{2}\d{3}_\2)_(?P<seqrun_id>\d{6}_\w+_\d{4}_.{10})')
+STHLM_UUSNP_SEQRUN_RE = re.compile(r'(?P<project_name>\w\.\w+_\d+_\d+|\w{2}-\d+)_(?P<sample_id>[\w-]+)_(?P<libprep_id>\w|\w{2}\d{3}_\2)_(?P<seqrun_id>\d{6}_\w+_\d{4}_.{10})')
+STHLM_UUSNP_SAMPLE_RE = re.compile(r'(?P<project_name>\w\.\w+_\d+_\d+|\w{2}-\d+)_(?P<sample_id>[\w-]+)')
 
-#def get_all_tracked_processes(config=None):
-#    """Returns all the processes that are being tracked locally,
-#    which is to say all the processes that have a record in our local
-#    process_tracking database.
-#
-#    :param dict config: The parsed configuration file (optional)
-#
-#    :returns: The dict of the entire database
-#    :rtype: dict
-#    """
-#    with get_shelve_database(config) as db:
-#        db_dict = {job_name: job_obj for job_name, job_obj in db.iteritems()}
-#    return db_dict
+def get_all_tracked_processes(config=None):
+    """Returns all the processes that are being tracked locally,
+    which is to say all the processes that have a record in our local
+    process_tracking database.
+
+    :param dict config: The parsed configuration file (optional)
+
+    :returns: The dict of the entire database
+    :rtype: dict
+    """
+    with get_shelve_database(config) as db:
+        db_dict = {job_name: job_obj for job_name, job_obj in db.iteritems()}
+    return db_dict
 
 
 # This can be run intermittently to track the status of jobs and update the database accordingly,
@@ -62,6 +63,8 @@ def check_update_jobs_status(projects_to_check=None, config=None, config_file_pa
             # from the local db; otherwise, leave it and try again next cycle.
             try:
                 project_id = project_dict['project_id']
+                if projects_to_check and project_id not in projects_to_check:
+                    continue
                 ## MARIO FIXME
                 ### THIS IS NOT REALLY CORRECT, HERE TRIGGER KNOWS DETAILS ABOUT ENGINE!!!!
                 if project_dict["workflow"] == "dna_alignonly":
@@ -107,10 +110,11 @@ def remove_record_from_local_tracking(project, config=None):
     :raises RuntimeError: If the record could not be deleted
     """
     LOG.info('Attempting to remove local process record for '
-             'project "{}"'.format(project))
+             'project "{}"...'.format(project))
     with get_shelve_database(config) as db:
         try:
             del db[project]
+            LOG.info("...successfully removed.")
         except KeyError:
             error_msg = ('Project "{}" not found in local process '
                          'tracking database.'.format(project))
@@ -155,7 +159,9 @@ def is_analysis_running(project, sample, libprep=None, seqrun=None, config=None,
         return db_key in db
 
 
-## MARIO FIXME
+## MARIO FIXME this doesn't check if there are flowcell analyses running
+##             this is all horrible but will change when we move to SQL
+##             and build a proper monitoring/syncing submodule
 def check_if_sample_analysis_is_running(project, sample, config=None):
     """checks if a given project/sample is currently analysed. 
     Determines if a given sample is currently being analyzed using the local job tracking
@@ -181,7 +187,7 @@ def check_if_sample_analysis_is_running(project, sample, config=None):
         process_to_be_searched = "{}_{}".format(project, sample)
         for running_process in running_processes:
             try:
-                m_dict = STHLM_UUSNP_RE.match(running_process).groupdict()
+                m_dict = STHLM_UUSNP_SAMPLE_RE.match(running_process).groupdict()
             except AttributeError:
                 raise ValueError("Could not extract information from jobid string \"{}\" and cannot continue.".format(running_process))
             project_name = m_dict['project_name']
@@ -222,6 +228,7 @@ def write_status_to_charon(project_id, return_code):
 
 ## FIXME This needs to be moved to the engine_ngi or else some generic format needs to be created
 ##       and a dict passed back to this function. Something like that.
+## BUG is this just for seqrun results? Doesn't work for sample??
 def write_to_charon_NGI_results(job_id, return_code, run_dir):
     """Update the status of a sequencing run after alignment.
 
@@ -242,7 +249,7 @@ def write_to_charon_NGI_results(job_id, return_code, run_dir):
         ##      also there is IGNORE?
         status = "COMPUTATION_FAILED"
     try:
-        m_dict = STHLM_UUSNP_RE.match(job_id).groupdict()
+        m_dict = STHLM_UUSNP_SAMPLE_RE.match(job_id).groupdict()
         #m_dict = re.match(r'?P<project_name>\w\.\w+_\d+_\d+|\w{2}-\d+)_(?P<sample_id>[\w-]+)_(?P<libprep_id>\w|\w{2}\d{3}_\2)_(?P<seqrun_id>\d{6}_\w+_\d{4}_.{10})', job_id).groupdict()
         project_id = get_project_id_from_name(m_dict['project_name'])
         sample_id = m_dict['sample_id']
@@ -269,7 +276,7 @@ def write_to_charon_alignment_results(job_id, return_code, run_dir):
     :raises RuntimeError: If the Charon database could not be updated
     """
     try:
-        m_dict = STHLM_UUSNP_RE.match(job_id).groupdict()
+        m_dict = STHLM_UUSNP_SEQRUN_RE.match(job_id).groupdict()
         #m_dict = re.match(('(?P<project_name>\w\.\w+_\d+_\d+)_(?P<sample_id>P\d+_\d+)_'
         #              '(?P<libprep_id>\w)_(?P<seqrun_id>\d{6}_.+_\d{4}_.{10})'), job_id).groupdict()
     except AttributeError:
@@ -403,7 +410,10 @@ def record_process_flowcell(p_handle, workflow, project, sample, libprep, seqrun
             LOG.warn(error_msg)
             return 
 
-        db[db_key] = project_dict
+        try:
+            db[db_key] = project_dict
+        except Exception as e:
+            raise
         LOG.info('Successfully recorded process id "{}" for project "{}", sample "{}", libprep "{}", seqrun "{}", '
                  'workflow "{}"'.format(p_handle.pid, project, sample, libprep, seqrun, workflow))
 

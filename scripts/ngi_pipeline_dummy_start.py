@@ -1,3 +1,19 @@
+"""
+project A.Wedell_13_03 is well suited for testing
+A.Wedell_13_03
+/proj/a2010002/INBOX/130611_SN7001298_0148_AH0CCVADXX/    --> P567_101
+/proj/a2010002/INBOX/130612_D00134_0019_AH056WADXX/       --> P567_101
+/proj/a2010002/INBOX/130627_D00134_0023_AH0JYUADXX/       --> P567_102
+/proj/a2010002/INBOX/130701_SN7001298_0152_AH0J92ADXX/    --> P567_102
+/proj/a2010002/INBOX/130701_SN7001298_0153_BH0JMGADXX/    --> P567_102
+G.Grigelioniene_14_01
+/proj/a2010002/INBOX/140528_D00415_0049_BC423WACXX        --> P1142_101
+M.Kaller_14_06
+/proj/a2010002/INBOX/140702_D00415_0052_AC41A2ANXX        --> P1171_1
+
+
+"""
+
 import argparse
 import time
 import os
@@ -9,7 +25,7 @@ from ngi_pipeline.database.local_process_tracking import check_update_jobs_statu
 
 def main(demux_fcid_dir, test_step_1, restrict_to_projects=None, restrict_to_samples=None):
     if not test_step_1:
-        process_demultiplexed_flowcell(demux_fcid_dir[0], restrict_to_projects, restrict_to_samples)
+        process_demultiplexed_flowcell(demux_fcid_dir, restrict_to_projects, restrict_to_samples)
     elif test_step_1:
     
         demux_fcid_dir = "/proj/a2010002/INBOX/130701_SN7001298_0153_BH0JMGADXX/" # A.Wedell_13_03 sample P567_102
@@ -78,18 +94,3 @@ if __name__ == '__main__':
             help=("Simulation of pipeline behaviour using A.Wedell_13_03, M.Kaller_14_06, and G.Grigelione..."))
     args_dict = vars(parser.parse_args())
     main(**args_dict)
-"""
-project A.Wedell_13_03 is well suited for testing
-A.Wedell_13_03
-/proj/a2010002/INBOX/130611_SN7001298_0148_AH0CCVADXX/    --> P567_101
-/proj/a2010002/INBOX/130612_D00134_0019_AH056WADXX/       --> P567_101
-/proj/a2010002/INBOX/130627_D00134_0023_AH0JYUADXX/       --> P567_102
-/proj/a2010002/INBOX/130701_SN7001298_0152_AH0J92ADXX/    --> P567_102
-/proj/a2010002/INBOX/130701_SN7001298_0153_BH0JMGADXX/    --> P567_102
-G.Grigelioniene_14_01
-/proj/a2010002/INBOX/140528_D00415_0049_BC423WACXX        --> P1142_101
-M.Kaller_14_06
-/proj/a2010002/INBOX/140702_D00415_0052_AC41A2ANXX        --> P1171_1
-
-
-"""

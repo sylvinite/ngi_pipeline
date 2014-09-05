@@ -11,7 +11,7 @@ import time
 
 from ngi_pipeline.piper_ngi import workflows
 from ngi_pipeline.database.classes import CharonSession, CharonError
-from ngi_pipeline.log.loggers import minimal_logger
+from ngi_pipeline.log.loggers import log_process_non_blocking, minimal_logger
 from ngi_pipeline.utils.filesystem import load_modules, execute_command_line, safe_makedir
 from ngi_pipeline.utils.classes import with_ngi_config
 from ngi_pipeline.utils.parsers import parse_lane_from_filename, find_fastq_read_pairs_from_dir, \
@@ -41,9 +41,9 @@ def analyze_flowcell_run(project, sample, libprep, seqrun, workflow_name, config
         build_setup_xml(project, config, sample , libprep.name, seqrun.name)
         command_line = build_piper_cl(project, "dna_alignonly", config)
         ## HACK fix later
-        log_file_name = "{}-{}-{}-{}.log".format(project, sample, libprep, seqrun)
-        log_file_path = os.path.join(project.base_path, "ANALYSIS", project.dirname, log_file_name)
-        return launch_piper_job(command_line, project, log_file_path=log_file_path)
+        #log_file_name = "{}-{}-{}-{}.log".format(project, sample, libprep, seqrun)
+        #log_file_path = os.path.join(project.base_path, "ANALYSIS", project.dirname, log_file_name)
+        return launch_piper_job(command_line, project)
     ## FIXME define exceptions more narrowly
     except Exception as e:
         error_msg = ('Processing project "{}" / sample "{}" / libprep "{}" / '
@@ -114,17 +114,19 @@ def launch_piper_job(command_line, project, log_file_path=None):
     cwd = os.path.join(project.base_path, "ANALYSIS", project.dirname)
     ## TODO Would like to log these to the log -- can we get a Logbook filehandle-like object?
     ## TODO add exception handling
+    if log_file_path:
+        try:
+            file_handle = open(file_handle_path, 'a')
+        except Exception as e:
+            LOG.error('Could not open log file "{}"; reverting to standard logger (error: {})'.format(log_file_path, e))
+            log_file_path = None
     popen_object = execute_command_line(command_line, cwd=cwd,
-                                        stdout=subprocess.PIPE,
-                                        stderr=subprocess.PIPE)
-    if not log_file_path:
-        log_process_non_blocking(popen_object.stdout, LOG.info)
-        log_process_non_blocking(popen_object.stderr, LOG.warn)
-    else:
-        # Hack hack
-        log_file = open(log_file_path, 'a')
-        log_process_non_blocking(popen_object.stdout, log_file.write)
-        log_process_non_blocking(popen_object.stderr, log_file.write)
+    #                                    stdout=(log_file_path or subprocess.PIPE),
+    #                                    stderr=(log_file_path or subprocess.PIPE)
+                                        )
+    #if not log_file_path:
+    #    log_process_non_blocking(popen_object.stdout, LOG.info)
+    #    log_process_non_blocking(popen_object.stderr, LOG.warn)
     return popen_object
 
 

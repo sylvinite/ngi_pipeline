@@ -9,7 +9,8 @@ from ngi_pipeline.conductor.classes import NGIProject
 from ngi_pipeline.database.classes import CharonSession, CharonError
 from ngi_pipeline.database.filesystem import recreate_project_from_db
 from ngi_pipeline.database.communicate import get_workflow_for_project
-from ngi_pipeline.database.local_process_tracking import is_flowcell_analysis_running, \
+from ngi_pipeline.database.local_process_tracking import check_update_jobs_status, \
+                                                         is_flowcell_analysis_running, \
                                                          is_sample_analysis_running, \
                                                          record_process_flowcell, \
                                                          record_process_sample
@@ -58,7 +59,6 @@ def launch_analysis_for_flowcells(projects_to_analyze, config=None, config_file_
             continue
 
         charon_session = CharonSession()
-        set_new_seqrun_status = None
         for sample in project:
             for libprep in sample:
                 for seqrun in libprep:
@@ -66,7 +66,7 @@ def launch_analysis_for_flowcells(projects_to_analyze, config=None, config_file_
                     charon_reported_status = charon_session.seqrun_get(project.project_id, sample, libprep, seqrun).get('alignment_status')
                     if charon_reported_status and charon_reported_status in ("RUNNING", "DONE"):
                         # If charon_reported_status is  RUNNING or DONE skip processing but check that logic is respected (spok roks!!!)
-                        if charon_reported_status is "RUNNING":
+                        if charon_reported_status == "RUNNING":
                             if not is_flowcell_analysis_running(project, sample, libprep, seqrun, config):
                                 error_msg = ('Charon and local db incongruency: project "{}" / sample "{}" / library "{}" / flowcell "{}": '
                                              'Charon reports it as running but not trace of it in local DB'.format(project, sample, libprep, seqrun))
@@ -80,6 +80,7 @@ def launch_analysis_for_flowcells(projects_to_analyze, config=None, config_file_
                         continue
                     # if i am here the charon_reported_status on charon is either None, NEW, or FAILED
                     # Check the local jobs database to determine if this flowcell is already being analyzed
+                    set_new_seqrun_status = None
                     if charon_reported_status and charon_reported_status == "FAILED":
                         error_msg = ('FAILED:  Project "{}" / sample "{}" / library "{}" / flowcell "{}": '
                                      'Charon reports FAILURE, manual investigation needed!'.format(project, sample, libprep, seqrun))
@@ -102,6 +103,8 @@ def launch_analysis_for_flowcells(projects_to_analyze, config=None, config_file_
                             ## TODO I think we need to detach these sessions or something as they will die
                             ##      when the main Python thread dies; however, this means ctrl-c will not kill them.
                             ##      This is probably alright as this will generally be run automatically.
+                            LOG.info('Attempting to launch flowcell analysis for project "{}" / sample "{}" / '
+                                     'libprep "{}" / seqrun "{}", workflow "{}"'.format(project, sample, libprep, seqrun, workflow))
                             p_handle = analysis_module.analyze_flowcell_run(project=project,
                                                                             sample=sample,
                                                                             libprep=libprep,
@@ -110,8 +113,11 @@ def launch_analysis_for_flowcells(projects_to_analyze, config=None, config_file_
 
                             ## NOTE what happens when the process fails? we still get a Popen object I think?
                             if p_handle:
+                                LOG.info("...success! Attempting to record job in local jobs database. Hope this works!")
                                 record_process_flowcell(p_handle, workflow_name, project, sample, libprep, seqrun, analysis_module, project.analysis_dir, config)
-                            set_new_seqrun_status = "RUNNING"
+                                set_new_seqrun_status = "RUNNING"
+                            else:
+                                LOG.error("...failed! Retry again later or something")
                         # TODO which exceptions can we expect to be raised here?
                         except Exception as e:
                             LOG.error('Cannot process project "{}" / sample "{}" / libprep "{}" / '
@@ -124,13 +130,15 @@ def launch_analysis_for_flowcells(projects_to_analyze, config=None, config_file_
                                      'but local db says it is running'.format(project, sample, libprep, seqrun, charon_reported_status))
                         LOG.error(error_msg)
                         continue
+                    import ipdb; ipdb.set_trace()
                     if set_new_seqrun_status:
                         try:
                            LOG.info('Updating Charon entry for project "{}" / sample "{}" / libprep "{}" / '
-                                    'seqrun "{}" to "{}"'.format(project, sample, libprep, seqrun, set_new_seqrun_status))
+                                    'seqrun "{}" to "{}"...'.format(project, sample, libprep, seqrun, set_new_seqrun_status))
                            charon_session.seqrun_update(projectid=project, sampleid=sample,
                                                         libprepid=libprep, seqrunid=seqrun,
                                                         alignment_status=set_new_seqrun_status)
+                           LOG.info("...success.")
                         except CharonError as e:
                            LOG.error("...could not update Charon!: {}".format(e))
 
@@ -146,6 +154,8 @@ def trigger_sample_level_analysis(restrict_to_projects=None, restrict_to_samples
     :param dict config: The parsed NGI configuration file; optional.
     :param list config_file_path: The path to the NGI configuration file; optional.
     """
+    # Update all jobs status first
+    check_update_jobs_status()
     LOG.info("Starting sample-level analysis routine.")
     if not restrict_to_projects: restrict_to_projects = []
     if not restrict_to_samples: restrict_to_samples = []
