@@ -82,7 +82,6 @@ def create_charon_entries_from_project(project, workflow="NGI", force_overwrite=
                                                  sequencing_status="DONE",
                                                  alignment_status="NEW")
                 except CharonError as e:
-                    import ipdb; ipdb.set_trace()
                     if force_overwrite:
                         LOG.warn('Overwriting data for project "{}" / '
                                  'sample "{}" / libprep "{}" / '

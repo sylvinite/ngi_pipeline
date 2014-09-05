@@ -76,7 +76,6 @@ def rebuild_project_obj_from_Charon(analysis_top_dir, project_name, project_id):
             for seqrun in seqruns_dict:
                 runid = seqrun["runid"]
                 #140528_D00415_0049_BC423WACXX   --> 140528_BC423WACXX
-                import ipdb; ipdb.set_trace()
                 parse_FC = re.compile("(\d{6})_(.*)_(.*)_(.*)")
                 fc_short_run_id = "{}_{}".format(parse_FC.match(runid).group(1), parse_FC.match(runid).group(4))
                 seqrun_object = libprep_object.add_seqrun(name=fc_short_run_id,

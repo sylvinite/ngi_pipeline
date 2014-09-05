@@ -130,7 +130,6 @@ def launch_analysis_for_flowcells(projects_to_analyze, config=None, config_file_
                                      'but local db says it is running'.format(project, sample, libprep, seqrun, charon_reported_status))
                         LOG.error(error_msg)
                         continue
-                    import ipdb; ipdb.set_trace()
                     if set_new_seqrun_status:
                         try:
                            LOG.info('Updating Charon entry for project "{}" / sample "{}" / libprep "{}" / '
