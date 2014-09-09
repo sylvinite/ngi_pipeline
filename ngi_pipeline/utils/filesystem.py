@@ -46,10 +46,11 @@ def load_modules(modules_list):
         raise RuntimeError("".join(error_msgs))
 
 
-def execute_command_line(cl, stdout=None, stderr=None, cwd=None):
+def execute_command_line(cl, stdout=None, shell=False, stderr=None, cwd=None):
     """Execute a command line and return the subprocess.Popen object.
 
     :param cl: Can be either a list or a string; if string, gets shlex.splitted
+    :param bool shell: value of shell to pass to subprocess
     :param file stdout: The filehandle destination for STDOUT (can be None)
     :param file stderr: The filehandle destination for STDERR (can be None)
     :param str cwd: The directory to be used as CWD for the process launched
@@ -62,14 +63,19 @@ def execute_command_line(cl, stdout=None, stderr=None, cwd=None):
     if cwd and not os.path.isdir(cwd):
         LOG.warn("CWD specified, \"{}\", is not a valid directory for "
                  "command \"{}\". Setting to None.".format(cwd, cl))
+        ## FIXME Better to just raise an exception
         cwd = None
-    if type(cl) is str:
+    if type(cl) is str and shell == False:
+        LOG.info("Executing command line: {}".format(cl))
         cl = shlex.split(cl)
-    LOG.info("Executing command line: {}".format(" ".join(cl)))
+    if type(cl) is list and shell == True:
+        cl = " ".join(cl)
+        LOG.info("Executing command line: {}".format(cl))
     try:
-        p_handle = subprocess.Popen(cl, stdout = stdout,
-                                        stderr = stderr,
-                                        cwd = cwd)
+        p_handle = subprocess.Popen(cl, stdout=stdout,
+                                        stderr=stderr,
+                                        cwd=cwd,
+                                        shell=shell)
         error_msg = None
     except OSError:
         error_msg = ("Cannot execute command; missing executable on the path? "
@@ -114,6 +120,20 @@ def safe_makedir(dname, mode=0777):
                 raise
     return dname
 
+def rotate_log(path):
+    if os.path.exists(path) and os.path.isfile(path):
+        file_name, extension = os.splitext(path)
+        current_datetime = datetime.datetime.now().strftime("%Y-%m-%d_%H:%M:%S:%f")
+        rotate_file_path = "{}-{}{}".format(file_name, current_datetime, extension) 
+        ## TODO what exceptions can we get here? OSError probably
+        try:
+            LOG.info('Attempting to rotate log file "{}" to "{}"...'.format(path, rotate_file_path))
+            ## FIXME check if the log file is currently open!!
+            ## This whole thing is a temporary fix anyway so I guess it's not important.
+            ## we won't be using files as logs in any event once we get ELK working.
+            shutil.move(path, rotate_file_path)
+        except OSError as e:
+            raise OSError('Could not rotate log file "{}" to "{}": {}'.format(path, rotate_file_path, e))
 
 @contextlib.contextmanager
 def curdir_tmpdir(remove=True):
