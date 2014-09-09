@@ -40,7 +40,7 @@ def analyze_flowcell_run(project, sample, libprep, seqrun, workflow_name, config
     try:
         ## Temporarily logging to a file until we get ELK set up
         log_file_base = "{}-{}-{}-{}".format(project, sample, libprep, seqrun)
-        log_file_path = os.path.join(project.base_path, "ANALYSIS", project.dirname,
+        log_file_path = os.path.join(project.base_path, "ANALYSIS", project.dirname, "logs",
                                       "{}.log".format(log_file_base))
         rotate_log(log_file_path)
         # Store the exit code of detached processes
@@ -51,7 +51,7 @@ def analyze_flowcell_run(project, sample, libprep, seqrun, workflow_name, config
         command_line = build_piper_cl(project, "dna_alignonly", exit_code_path, config)
         return launch_piper_job(command_line, project, log_file_path)
     ## FIXME define exceptions more narrowly
-    except Exception as e:
+    except RuntimeError as e:
         error_msg = ('Processing project "{}" / sample "{}" / libprep "{}" / '
                      'seqrun "{}" failed: {}'.format(project, sample, libprep, seqrun,
                                                    e.__repr__()))
@@ -102,7 +102,6 @@ def analyze_sample_run(project, sample, config=None, config_file_path=None):
         ## FIXME define exceptions more narrowly
         except  Exception as e:
             error_msg = 'Processing project "{}" / sample "{}" failed: {}'.format(project, sample, e.__repr__())
-            #LOG.error(error_msg)
             raise
     else:
         LOG.info('Insufficient coverage for sample "{}" to start sample-level analysis: '
@@ -119,19 +118,20 @@ def launch_piper_job(command_line, project, log_file_path=None):
     :rtype: subprocess.Popen
     """
     cwd = os.path.join(project.base_path, "ANALYSIS", project.dirname)
+    file_handle=None
     if log_file_path:
         try:
-            file_handle = open(file_handle_path, 'w')
+            file_handle = open(log_file_path, 'w')
         except Exception as e:
             LOG.error('Could not open log file "{}"; reverting to standard logger (error: {})'.format(log_file_path, e))
             log_file_path = None
     popen_object = execute_command_line(command_line, cwd=cwd, shell=True,
-                                        #stdout=(log_file_path or subprocess.PIPE),
-                                        #stderr=(log_file_path or subprocess.PIPE)
+                                        stdout=(file_handle or subprocess.PIPE),
+                                        stderr=(file_handle or subprocess.PIPE)
                                         )
-    #if not log_file_path:
-    #    log_process_non_blocking(popen_object.stdout, LOG.info)
-    #    log_process_non_blocking(popen_object.stderr, LOG.warn)
+    if not log_file_path:
+        log_process_non_blocking(popen_object.stdout, LOG.info)
+        log_process_non_blocking(popen_object.stderr, LOG.warn)
     return popen_object
 
 

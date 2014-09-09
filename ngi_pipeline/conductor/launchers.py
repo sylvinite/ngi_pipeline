@@ -10,10 +10,10 @@ from ngi_pipeline.database.classes import CharonSession, CharonError
 from ngi_pipeline.database.filesystem import recreate_project_from_db
 from ngi_pipeline.database.communicate import get_workflow_for_project
 from ngi_pipeline.database.local_process_tracking import check_update_jobs_status, \
-                                                         is_flowcell_analysis_running, \
-                                                         is_sample_analysis_running, \
-                                                         record_process_flowcell, \
                                                          record_process_sample
+from ngi_pipeline.piper_ngi.local_process_tracking import is_seqrun_analysis_running, \
+                                                          is_sample_analysis_running, \
+                                                          record_process_seqrun
 from ngi_pipeline.log.loggers import minimal_logger
 from ngi_pipeline.utils.classes import with_ngi_config
 
@@ -67,12 +67,12 @@ def launch_analysis_for_flowcells(projects_to_analyze, config=None, config_file_
                     if charon_reported_status and charon_reported_status in ("RUNNING", "DONE"):
                         # If charon_reported_status is  RUNNING or DONE skip processing but check that logic is respected (spok roks!!!)
                         if charon_reported_status == "RUNNING":
-                            if not is_flowcell_analysis_running(project, sample, libprep, seqrun, config):
+                            if not is_seqrun_analysis_running(project, sample, libprep, seqrun, config):
                                 error_msg = ('Charon and local db incongruency: project "{}" / sample "{}" / library "{}" / flowcell "{}": '
                                              'Charon reports it as running but not trace of it in local DB'.format(project, sample, libprep, seqrun))
                                 LOG.error(error_msg)
                         else: #otherwise I am DONE
-                            if is_flowcell_analysis_running(project, sample, libprep, seqrun, config):
+                            if is_seqrun_analysis_running(project, sample, libprep, seqrun, config):
                                 error_msg = ('Charon and local db incongruency:  Project "{}", Sample "{}", Library "{}", flowcell "{}": '
                                              'Charon reports it is DONE but local db says it is RUNNING'.format(project, sample, libprep, seqrun))
                                 LOG.error(error_msg)
@@ -91,7 +91,7 @@ def launch_analysis_for_flowcells(projects_to_analyze, config=None, config_file_
                         LOG.warn("Continuing with project anyway (remove me later)")
                         #continue
                     # at this point the status is only None or NEW, I need only to check that the analysis is already running (which would be strange)
-                    if not is_flowcell_analysis_running(project, sample, libprep, seqrun, config):
+                    if not is_seqrun_analysis_running(project, sample, libprep, seqrun, config):
                         try:
                             # This workflow thing will be handled on the engine side. Here we'll just call like "piper_ngi.flowcell_level_analysis"
                             # or something and it will handle which workflows to execute (qc, alignment, ...)
@@ -114,7 +114,16 @@ def launch_analysis_for_flowcells(projects_to_analyze, config=None, config_file_
                             ## NOTE what happens when the process fails? we still get a Popen object I think?
                             if p_handle:
                                 LOG.info("...success! Attempting to record job in local jobs database. Hope this works!")
-                                record_process_flowcell(p_handle, workflow_name, project, sample, libprep, seqrun, analysis_module, project.analysis_dir, config)
+                                record_process_seqrun(project=project,
+                                                      sample=sample,
+                                                      libprep=libprep,
+                                                      seqrun=seqrun,
+                                                      workflow_name=workflow_name,
+                                                      analysis_module_name=analysis_module.__name__,
+                                                      analysis_dir=project.analysis_dir,
+                                                      pid=p_handle.pid,
+                                                      config=config)
+                                LOG.info("...success!")
                                 set_new_seqrun_status = "RUNNING"
                             else:
                                 LOG.error("...failed! Retry again later or something")

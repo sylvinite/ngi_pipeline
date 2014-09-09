@@ -14,3 +14,13 @@ def synchronize_localdb_with_charon():
             import ipdb; ipdb.set_trace()
         elif sample_match:
             import ipdb; ipdb.set_trace()
+
+
+from ngi_pipeline.database.sqlalchemy_db import get_db_session, Base
+
+def sql_synchronize_localdb_with_charon():
+    # List all tables
+    all_tables_names = Base.metadata.tables.keys()
+    for name in all_tables_names:
+        print name
+
