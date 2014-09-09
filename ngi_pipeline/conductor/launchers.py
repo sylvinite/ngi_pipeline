@@ -9,11 +9,12 @@ from ngi_pipeline.conductor.classes import NGIProject
 from ngi_pipeline.database.classes import CharonSession, CharonError
 from ngi_pipeline.database.filesystem import recreate_project_from_db
 from ngi_pipeline.database.communicate import get_workflow_for_project
-from ngi_pipeline.database.local_process_tracking import check_update_jobs_status, \
-                                                         record_process_sample
+## YOU'RE NEXT
+from ngi_pipeline.database.local_process_tracking import check_update_jobs_status
 from ngi_pipeline.piper_ngi.local_process_tracking import is_seqrun_analysis_running, \
                                                           is_sample_analysis_running, \
-                                                          record_process_seqrun
+                                                          record_process_seqrun, \
+                                                          record_process_sample
 from ngi_pipeline.log.loggers import minimal_logger
 from ngi_pipeline.utils.classes import with_ngi_config
 
@@ -248,5 +249,14 @@ def trigger_sample_level_analysis(restrict_to_projects=None, restrict_to_samples
                     LOG.error(error_msg)
                     continue
                 if p_handle:    # p_handle is None when the engine decided that there is nothing to be done
-                    record_process_sample(p_handle, workflow, project_obj, sample_obj,
-                                          analysis_module, analysis_dir, config)
+                    record_process_sample(project=project_obj,
+                                          sample=sample_obj,
+                                          workflow_name=workflow,
+                                          analysis_module_name=analysis_module.__name__(),
+                                          analysis_dir=project.analysis_dir,
+                                          pid=p_handle.pid,
+                                          config=config)
+                    #record_process_sample(p_handle, workflow, project_obj, sample_obj,
+                    #                      analysis_module, analysis_dir, config)
+                else:
+                    raise Exception("Aaaaagggrhghrhgrhghgh")

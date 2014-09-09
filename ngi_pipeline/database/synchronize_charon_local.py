@@ -23,4 +23,3 @@ def sql_synchronize_localdb_with_charon():
     all_tables_names = Base.metadata.tables.keys()
     for name in all_tables_names:
         print name
-
