@@ -12,7 +12,7 @@ import time
 from ngi_pipeline.piper_ngi import workflows
 from ngi_pipeline.database.classes import CharonSession, CharonError
 from ngi_pipeline.log.loggers import log_process_non_blocking, minimal_logger
-from ngi_pipeline.utils.filesystem import load_modules, execute_command_line, safe_makedir
+from ngi_pipeline.utils.filesystem import load_modules, execute_command_line, rotate_log, safe_makedir
 from ngi_pipeline.utils.classes import with_ngi_config
 from ngi_pipeline.utils.parsers import parse_lane_from_filename, find_fastq_read_pairs_from_dir, \
                                        get_flowcell_id_from_dirtree
@@ -38,12 +38,18 @@ def analyze_flowcell_run(project, sample, libprep, seqrun, workflow_name, config
     modules_to_load = ["java/sun_jdk1.7.0_25", "R/2.15.0"]
     load_modules(modules_to_load)
     try:
+        ## Temporarily logging to a file until we get ELK set up
+        log_file_base = "{}-{}-{}-{}".format(project, sample, libprep, seqrun)
+        log_file_path = os.path.join(project.base_path, "ANALYSIS", project.dirname,
+                                      "{}.log".format(log_file_base))
+        rotate_log(log_file_path)
+        # Store the exit code of detached processes
+        exit_code_path = os.path.join(project.base_path, "ANALYSIS", project.dirname, "logs",
+                                      "{}-exitcode.txt".format(log_file_base))
+
         build_setup_xml(project, config, sample , libprep.name, seqrun.name)
-        command_line = build_piper_cl(project, "dna_alignonly", config)
-        ## HACK fix later
-        #log_file_name = "{}-{}-{}-{}.log".format(project, sample, libprep, seqrun)
-        #log_file_path = os.path.join(project.base_path, "ANALYSIS", project.dirname, log_file_name)
-        return launch_piper_job(command_line, project)
+        command_line = build_piper_cl(project, "dna_alignonly", exit_code_path, config)
+        return launch_piper_job(command_line, project, log_file_path)
     ## FIXME define exceptions more narrowly
     except Exception as e:
         error_msg = ('Processing project "{}" / sample "{}" / libprep "{}" / '
@@ -89,7 +95,8 @@ def analyze_sample_run(project, sample, config=None, config_file_path=None):
         try:
             build_setup_xml(project, config, sample)
             ## TODO Need to get workflow from somewhere
-            command_line = build_piper_cl(project, "merge_process_variantCall", config)
+            ## FIXME need exit_code_path
+            command_line = build_piper_cl(project, "merge_process_variantCall", None, config)
             LOG.info('Executing command line "{}"...'.format(command_line))
             return launch_piper_job(command_line, project)
         ## FIXME define exceptions more narrowly
@@ -112,17 +119,15 @@ def launch_piper_job(command_line, project, log_file_path=None):
     :rtype: subprocess.Popen
     """
     cwd = os.path.join(project.base_path, "ANALYSIS", project.dirname)
-    ## TODO Would like to log these to the log -- can we get a Logbook filehandle-like object?
-    ## TODO add exception handling
     if log_file_path:
         try:
-            file_handle = open(file_handle_path, 'a')
+            file_handle = open(file_handle_path, 'w')
         except Exception as e:
             LOG.error('Could not open log file "{}"; reverting to standard logger (error: {})'.format(log_file_path, e))
             log_file_path = None
-    popen_object = execute_command_line(command_line, cwd=cwd,
-    #                                    stdout=(log_file_path or subprocess.PIPE),
-    #                                    stderr=(log_file_path or subprocess.PIPE)
+    popen_object = execute_command_line(command_line, cwd=cwd, shell=True,
+                                        #stdout=(log_file_path or subprocess.PIPE),
+                                        #stderr=(log_file_path or subprocess.PIPE)
                                         )
     #if not log_file_path:
     #    log_process_non_blocking(popen_object.stdout, LOG.info)
@@ -130,10 +135,11 @@ def launch_piper_job(command_line, project, log_file_path=None):
     return popen_object
 
 
-def build_piper_cl(project, workflow_name, config):
+def build_piper_cl(project, workflow_name, exit_code_path, config):
     """Determine which workflow to run for a project and build the appropriate command line.
     :param NGIProject project: The project object to analyze.
     :param str workflow_name: The name of the workflow to execute
+    :param str exit_code_path: The path to the file to which the exit code for this cl will be written
     :param dict config: The (parsed) configuration file for this machine/environment.
 
     :returns: A list of Project objects with command lines to execute attached.
@@ -182,7 +188,16 @@ def build_piper_cl(project, workflow_name, config):
                                           setup_xml_path=setup_xml_path,
                                           global_config_path=piper_global_config_path,
                                           output_dir=project.analysis_dir)
-    return cl
+    return add_exit_code_recording(cl, exit_code_path)
+
+
+def add_exit_code_recording(cl, exit_code_path):
+    """Takes a command line and returns it with increased pizzaz"""
+    record_exit_code = "; echo $? > {}".format(exit_code_path)
+    if type(cl) is list:
+        # This should work, right? Right
+        cl = " ".join(cl)
+    return cl + record_exit_code
 
 
 def build_setup_xml(project, config, sample=None, libprep_id=None, seqrun_id=None):
