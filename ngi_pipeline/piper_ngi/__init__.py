@@ -10,6 +10,7 @@ import subprocess
 import time
 
 from ngi_pipeline.piper_ngi import workflows
+from ngi_pipeline.piper_ngi.utils import create_log_file_path, create_exit_code_file_path
 from ngi_pipeline.database.classes import CharonSession, CharonError
 from ngi_pipeline.log.loggers import log_process_non_blocking, minimal_logger
 from ngi_pipeline.utils.filesystem import load_modules, execute_command_line, rotate_log, safe_makedir
@@ -38,19 +39,16 @@ def analyze_flowcell_run(project, sample, libprep, seqrun, workflow_name, config
     modules_to_load = ["java/sun_jdk1.7.0_25", "R/2.15.0"]
     load_modules(modules_to_load)
     try:
+        workflow_name = "dna_alignonly"
         ## Temporarily logging to a file until we get ELK set up
-        log_file_base = "{}-{}-{}-{}".format(project, sample, libprep, seqrun)
-        log_file_path = os.path.join(project.base_path, "ANALYSIS", project.dirname, "logs",
-                                      "{}.log".format(log_file_base))
+        log_file_path = create_log_file_path(project, sample, libprep, seqrun, workflow_name)
         rotate_log(log_file_path)
         # Store the exit code of detached processes
-        exit_code_path = os.path.join(project.base_path, "ANALYSIS", project.dirname, "logs",
-                                      "{}-exitcode.txt".format(log_file_base))
-
+        exit_code_path = create_exit_code_file_path(project, sample, libprep, seqrun, workflow_name)
         build_setup_xml(project, config, sample , libprep.name, seqrun.name)
-        command_line = build_piper_cl(project, "dna_alignonly", exit_code_path, config)
+        ## Need to pull workflow name from db or something
+        command_line = build_piper_cl(project, workflow_name, exit_code_path, config)
         return launch_piper_job(command_line, project, log_file_path)
-    ## FIXME define exceptions more narrowly
     except RuntimeError as e:
         error_msg = ('Processing project "{}" / sample "{}" / libprep "{}" / '
                      'seqrun "{}" failed: {}'.format(project, sample, libprep, seqrun,
@@ -94,11 +92,15 @@ def analyze_sample_run(project, sample, config=None, config_file_path=None):
                  'Proceed with workflow "{}"'.format(project, sample,"merge_process_varaintCall"))
         try:
             build_setup_xml(project, config, sample)
-            ## TODO Need to get workflow from somewhere
-            ## FIXME need exit_code_path
-            command_line = build_piper_cl(project, "merge_process_variantCall", None, config)
+            workflow_name = "merge_process_variantCall"
+            ## Temporarily logging to a file until we get ELK set up
+            log_file_path = create_log_file_path(project, sample, workflow_name=workflow_name)
+            rotate_log(log_file_path)
+            exit_code_path = create_exit_code_file_path(project, sample, workflow_name)
+            # Need to get workflow from config file or somewhere
+            command_line = build_piper_cl(project, workflow_name, exit_code_path, config)
             LOG.info('Executing command line "{}"...'.format(command_line))
-            return launch_piper_job(command_line, project)
+            return launch_piper_job(command_line, project, log_file_path)
         ## FIXME define exceptions more narrowly
         except  Exception as e:
             error_msg = 'Processing project "{}" / sample "{}" failed: {}'.format(project, sample, e.__repr__())

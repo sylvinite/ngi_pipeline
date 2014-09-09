@@ -25,6 +25,7 @@ LOG = minimal_logger(__name__)
 # into projects. It runs only at the highest "flowcell" or "sequencing run" level, e.g. individual fastq files
 # with none of their relationships considered (i.e. two fastq files from the same sample are analyzed independently).
 @with_ngi_config
+## TODO change name to trigger_seqrun_analysis or something
 def launch_analysis_for_flowcells(projects_to_analyze, config=None, config_file_path=None):
     """Launch the appropriate flowcell-level analysis for each fastq file in the project.
 
@@ -151,9 +152,6 @@ def launch_analysis_for_flowcells(projects_to_analyze, config=None, config_file_
                            LOG.error("...could not update Charon!: {}".format(e))
 
 
-## FIRST PRIORITY
-## This function is responsable of trigger second level analyisis (i.e., sample level analysis)
-## using the information available on the Charon.
 @with_ngi_config
 def trigger_sample_level_analysis(restrict_to_projects=None, restrict_to_samples=None, config=None, config_file_path=None):
     """Triggers secondary analysis based on what is found on Charon

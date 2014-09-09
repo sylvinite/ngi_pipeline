@@ -34,9 +34,9 @@ def is_seqrun_analysis_running(project, sample, libprep, seqrun, config=None):
              'being analyzed...'.format(sequencing_run))
     session = get_db_session()
     db_q = session.query(SeqrunAnalysis).filter_by(project_id=project.project_id,
-                                                sample_id=sample.name,
-                                                libprep_id=libprep.name,
-                                                seqrun_id=seqrun.name)
+                                                   sample_id=sample.name,
+                                                   libprep_id=libprep.name,
+                                                   seqrun_id=seqrun.name)
     if session.query(db_q.exists()).scalar():
         LOG.info('...sequencing run "{}" is currently being analyzed.'.format(sequencing_run))
         return True
