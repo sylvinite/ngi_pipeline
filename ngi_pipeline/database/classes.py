@@ -194,7 +194,7 @@ class CharonSession(requests.Session):
         if kwargs: LOG.debug("Ignoring extra kwargs: {}".format(", ".join(["{}: {}".format(k,v) for k,v in kwargs.iteritems()])))
         url = self.construct_charon_url("seqrun", projectid, sampleid, libprepid, seqrunid)
         l_dict = locals()
-        data = { k: l_dict.get(k) for k in self._seqrun_params if l_dict.get(k)}
+        data = { k: str(l_dict.get(k)) for k in self._seqrun_params if l_dict.get(k)}
         return self.put(url, json.dumps(data)).text
 
     def seqrun_reset(self, projectid, sampleid, libprepid, seqrunid):
@@ -208,8 +208,11 @@ class CharonSession(requests.Session):
         #return self.get(self.construct_charon_url('seqruns', projectid, sampleid, libprepid)).json()
 
 
+## TODO create different CharonError subclasses for different codes (e.g. 400, 404)
 class CharonError(RuntimeError):
-    pass
+    def __init__(self, message, status_code=None, *args, **kwargs):
+        self.status_code = status_code
+        super(CharonError, self).__init__(message, *args, **kwargs)
 
 
 class validate_response(object):
@@ -223,21 +226,21 @@ class validate_response(object):
         # There are certainly more failure codes I need to add here
         self.FAILURE_CODES = {
                 400: (CharonError, ("Charon access failure: invalid input "
-                                   "data (reason '{response.reason}' / "
-                                   "code {response.status_code} / "
-                                   "url '{response.url}')")),
+                                    "data (reason '{response.reason}' / "
+                                    "code {response.status_code} / "
+                                    "url '{response.url}')")),
                 404: (CharonError, ("Charon access failure: not found "
-                                   "in database (reason '{response.reason}' / "
-                                   "code {response.status_code} / "
-                                   "url '{response.url}')")), # when else can we get this? malformed URL?
+                                    "in database (reason '{response.reason}' / "
+                                    "code {response.status_code} / "
+                                    "url '{response.url}')")), # when else can we get this? malformed URL?
                 405: (CharonError, ("Charon access failure: method not "
-                                     "allowed (reason '{response.reason}' / "
-                                     "code {response.status_code} / "
-                                     "url '{response.url}')")),
+                                    "allowed (reason '{response.reason}' / "
+                                    "code {response.status_code} / "
+                                    "url '{response.url}')")),
                 409: (CharonError, ("Charon access failure: document "
-                                   "revision conflict (reason '{response.reason}' / "
-                                   "code {response.status_code} / "
-                                   "url '{response.url}')")),}
+                                    "revision conflict (reason '{response.reason}' / "
+                                    "code {response.status_code} / "
+                                    "url '{response.url}')")),}
 
     def __call__(self, *args, **kwargs):
         response = self.f(*args, **kwargs)
@@ -249,5 +252,5 @@ class validate_response(object):
                 err_type = CharonError
                 err_msg = ("Charon access failure: {response.reason} "
                            "(code {response.status_code} / url '{response.url}')")
-            raise err_type(err_msg.format(**locals()))
+            raise err_type(err_msg.format(**locals()), response.status_code)
         return response

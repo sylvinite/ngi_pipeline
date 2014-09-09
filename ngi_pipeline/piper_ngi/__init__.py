@@ -10,9 +10,10 @@ import subprocess
 import time
 
 from ngi_pipeline.piper_ngi import workflows
+from ngi_pipeline.piper_ngi.utils import create_log_file_path, create_exit_code_file_path
 from ngi_pipeline.database.classes import CharonSession, CharonError
-from ngi_pipeline.log.loggers import minimal_logger
-from ngi_pipeline.utils.filesystem import load_modules, execute_command_line, safe_makedir
+from ngi_pipeline.log.loggers import log_process_non_blocking, minimal_logger
+from ngi_pipeline.utils.filesystem import load_modules, execute_command_line, rotate_log, safe_makedir
 from ngi_pipeline.utils.classes import with_ngi_config
 from ngi_pipeline.utils.parsers import parse_lane_from_filename, find_fastq_read_pairs_from_dir, \
                                        get_flowcell_id_from_dirtree
@@ -38,11 +39,17 @@ def analyze_flowcell_run(project, sample, libprep, seqrun, workflow_name, config
     modules_to_load = ["java/sun_jdk1.7.0_25", "R/2.15.0"]
     load_modules(modules_to_load)
     try:
+        workflow_name = "dna_alignonly"
+        ## Temporarily logging to a file until we get ELK set up
+        log_file_path = create_log_file_path(project, sample, libprep, seqrun, workflow_name)
+        rotate_log(log_file_path)
+        # Store the exit code of detached processes
+        exit_code_path = create_exit_code_file_path(project, sample, libprep, seqrun, workflow_name)
         build_setup_xml(project, config, sample , libprep.name, seqrun.name)
-        command_line = build_piper_cl(project, "dna_alignonly", config)
-        return launch_piper_job(command_line, project)
-    ## FIXME define exceptions more narrowly
-    except Exception as e:
+        ## Need to pull workflow name from db or something
+        command_line = build_piper_cl(project, workflow_name, exit_code_path, config)
+        return launch_piper_job(command_line, project, log_file_path)
+    except RuntimeError as e:
         error_msg = ('Processing project "{}" / sample "{}" / libprep "{}" / '
                      'seqrun "{}" failed: {}'.format(project, sample, libprep, seqrun,
                                                    e.__repr__()))
@@ -63,7 +70,7 @@ def analyze_sample_run(project, sample, config=None, config_file_path=None):
     :rtype: subprocess.Popen or None
     :raises RuntimeError: If the process cannot be started
     """
-    LOG.info('Determining if we can start sample-level analysis for project "{}" / sample "{}"'.format(project, sample))
+    LOG.info('Determining if we can start sample-level analysis for project "{}" / sample "{}"...'.format(project, sample))
     modules_to_load = ["java/sun_jdk1.7.0_25", "R/2.15.0"]
     load_modules(modules_to_load)
     charon_session = CharonSession()
@@ -75,27 +82,35 @@ def analyze_sample_run(project, sample, config=None, config_file_path=None):
                            'proceed.'.format(project, sample))
     # Check if I can run sample level analysis
     if not sample_dict.get('total_autosomal_coverage'):     # Doesn't exist or is 0
-        LOG.info('Sample "{}" from project "{}" not yet sequenced or not yet analyzed'.format(sample, project))
+        LOG.info('...individual sequencing runs from sample "{}" / project "{}" '
+                 'not yet sequenced or not yet analyzed; waiting to proceed '
+                 'with sample-level analysis'.format(sample, project))
     # If coverage is above 20X we can proceed.
     ## Use Charon validation for this possibly
     elif float(sample_dict.get("total_autosomal_coverage")) > 2.0:
+        LOG.info('...sample "{}" from project "{}" ready for sample-level analysis. '
+                 'Proceed with workflow "{}"'.format(project, sample,"merge_process_varaintCall"))
         try:
-            ## FIXME I think I broke this
             build_setup_xml(project, config, sample)
-            command_line = build_piper_cl(project, "merge_process_variantCall", config)
+            workflow_name = "merge_process_variantCall"
+            ## Temporarily logging to a file until we get ELK set up
+            log_file_path = create_log_file_path(project, sample, workflow_name=workflow_name)
+            rotate_log(log_file_path)
+            exit_code_path = create_exit_code_file_path(project, sample, workflow_name)
+            # Need to get workflow from config file or somewhere
+            command_line = build_piper_cl(project, workflow_name, exit_code_path, config)
             LOG.info('Executing command line "{}"...'.format(command_line))
-            return launch_piper_job(command_line, project)
+            return launch_piper_job(command_line, project, log_file_path)
         ## FIXME define exceptions more narrowly
         except  Exception as e:
             error_msg = 'Processing project "{}" / sample "{}" failed: {}'.format(project, sample, e.__repr__())
-            #LOG.error(error_msg)
             raise
     else:
         LOG.info('Insufficient coverage for sample "{}" to start sample-level analysis: '
                  'waiting more data.'.format(sample))
 
 
-def launch_piper_job(command_line, project):
+def launch_piper_job(command_line, project, log_file_path=None):
     """Launch the Piper command line.
 
     :param str command_line: The command line to execute
@@ -105,16 +120,28 @@ def launch_piper_job(command_line, project):
     :rtype: subprocess.Popen
     """
     cwd = os.path.join(project.base_path, "ANALYSIS", project.dirname)
-    ## TODO Would like to log these to the log -- can we get a Logbook filehandle-like object?
-    ## TODO add exception handling
-    popen_object = execute_command_line(command_line, cwd=cwd)
+    file_handle=None
+    if log_file_path:
+        try:
+            file_handle = open(log_file_path, 'w')
+        except Exception as e:
+            LOG.error('Could not open log file "{}"; reverting to standard logger (error: {})'.format(log_file_path, e))
+            log_file_path = None
+    popen_object = execute_command_line(command_line, cwd=cwd, shell=True,
+                                        stdout=(file_handle or subprocess.PIPE),
+                                        stderr=(file_handle or subprocess.PIPE)
+                                        )
+    if not log_file_path:
+        log_process_non_blocking(popen_object.stdout, LOG.info)
+        log_process_non_blocking(popen_object.stderr, LOG.warn)
     return popen_object
 
 
-def build_piper_cl(project, workflow_name, config):
+def build_piper_cl(project, workflow_name, exit_code_path, config):
     """Determine which workflow to run for a project and build the appropriate command line.
     :param NGIProject project: The project object to analyze.
     :param str workflow_name: The name of the workflow to execute
+    :param str exit_code_path: The path to the file to which the exit code for this cl will be written
     :param dict config: The (parsed) configuration file for this machine/environment.
 
     :returns: A list of Project objects with command lines to execute attached.
@@ -163,7 +190,16 @@ def build_piper_cl(project, workflow_name, config):
                                           setup_xml_path=setup_xml_path,
                                           global_config_path=piper_global_config_path,
                                           output_dir=project.analysis_dir)
-    return cl
+    return add_exit_code_recording(cl, exit_code_path)
+
+
+def add_exit_code_recording(cl, exit_code_path):
+    """Takes a command line and returns it with increased pizzaz"""
+    record_exit_code = "; echo $? > {}".format(exit_code_path)
+    if type(cl) is list:
+        # This should work, right? Right
+        cl = " ".join(cl)
+    return cl + record_exit_code
 
 
 def build_setup_xml(project, config, sample=None, libprep_id=None, seqrun_id=None):
@@ -185,15 +221,14 @@ def build_setup_xml(project, config, sample=None, libprep_id=None, seqrun_id=Non
                  'sample "{}"'.format(project, sample.name))
     else:
         LOG.info('Building Piper setup.xml file for project "{}" '
-                 'sample "{}", seqrun "{}"'.format(project, sample.name, seqrun_id))
+                 'sample "{}", libprep "{}", seqrun "{}"'.format(project, sample,
+                                                                 libprep_id, seqrun_id))
 
     project_top_level_dir = os.path.join(project.base_path, "DATA", project.dirname)
     analysis_dir = os.path.join(project.base_path, "ANALYSIS", project.dirname)
     if not os.path.exists(analysis_dir):
         safe_makedir(analysis_dir, 0770)
-
     cl_args = {'project': project.name}
-
     # Load needed data from database
     try:
         # Information we need from the database:
@@ -214,9 +249,9 @@ def build_setup_xml(project, config, sample=None, libprep_id=None, seqrun_id=Non
         cl_args["reference_path"] = config['supported_genomes'][reference_genome]
         cl_args["uppmax_proj"] = config['environment']['project_id']
     except KeyError as e:
-        error_msg = ("Could not load required information from"
-                     " configuration file and cannot continue with project {}:"
-                     " value \"{}\" missing".format(project, e.message))
+        error_msg = ("Could not load required information from "
+                     "configuration file and cannot continue with project {}: "
+                     "value \"{}\" missing".format(project, e.message))
         raise ValueError(error_msg)
 
     try:
@@ -270,8 +305,3 @@ def build_setup_xml(project, config, sample=None, libprep_id=None, seqrun_id=Non
                      "skipping project analysis. "
                      "Error is: \"{}\". .".format(project, e))
         raise RuntimeError(error_msg)
-
-
-
-
-
