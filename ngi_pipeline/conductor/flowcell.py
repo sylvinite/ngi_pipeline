@@ -159,7 +159,9 @@ def setup_analysis_directory_structure(fc_dir, projects_to_analyze,
         # Create a project directory if it doesn't already exist, including
         # intervening "DATA" directory
         project_dir = os.path.join(analysis_top_dir, "DATA", project_name)
-        if not os.path.exists(project_dir) and create_files: safe_makedir(project_dir, 0770)
+        if create_files:
+            safe_makedir(project_dir, 0770)
+            safe_makedir(os.path.join(project_dir, "log"), 0770)
         try:
             project_obj = projects_to_analyze[project_dir]
         except KeyError:
@@ -178,7 +180,7 @@ def setup_analysis_directory_structure(fc_dir, projects_to_analyze,
             LOG.info("Setting up sample {}".format(sample_name))
             # Create a directory for the sample if it doesn't already exist
             sample_dir = os.path.join(project_dir, sample_name)
-            if not os.path.exists(sample_dir) and create_files: safe_makedir(sample_dir, 0770)
+            if create_files: safe_makedir(sample_dir, 0770)
             # This will only create a new sample object if it doesn't already exist in the project
             sample_obj = project_obj.add_sample(name=sample_name, dirname=sample_name)
             # Get the Library Prep ID for each file
@@ -202,11 +204,11 @@ def setup_analysis_directory_structure(fc_dir, projects_to_analyze,
                 libprep_object = sample_obj.add_libprep(name=libprep_name,
                                                         dirname=libprep_name)
                 libprep_dir = os.path.join(sample_dir, libprep_name)
-                if not os.path.exists(libprep_dir) and create_files: safe_makedir(libprep_dir, 0770)
+                if create_files: safe_makedir(libprep_dir, 0770)
                 seqrun_object = libprep_object.add_seqrun(name=fc_full_id,
                                                           dirname=fc_full_id)
                 seqrun_dir = os.path.join(libprep_dir, fc_full_id)
-                if not os.path.exists(seqrun_dir) and create_files: safe_makedir(seqrun_dir, 0770)
+                if create_files: safe_makedir(seqrun_dir, 0770)
                 seqrun_object.add_fastq_files(fq_file)
             if fastq_files and create_files:
                 # rsync the source files to the sample directory
