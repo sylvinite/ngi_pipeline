@@ -20,7 +20,7 @@ def get_project_id_from_name(project_name):
     try:
         project_id = charon_session.project_get(project_name)
     except CharonError as e:
-        if e.return_code == 404:
+        if e.status_code == 404:
             raise ValueError('Project "{}" missing from database: {}'.format(project_name, e))
         else:
             raise RuntimeError(e)
