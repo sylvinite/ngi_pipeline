@@ -18,31 +18,32 @@ Base = declarative_base()
 Session = sessionmaker()
 
 
-
 @with_ngi_config
 def get_db_session(database_path=None, config=None, config_file_path=None):
     """Return a session connection to the database."""
     if not database_path:
         database_path = config['database']['record_tracking_db_path']
-    if not os.path.exists(database_path):
+    database_abspath = os.path.abspath(database_path)
+    if not os.path.exists(database_abspath):
         LOG.info('Creating local job tracking database "{}"'.format(database_path))
         # This needs to be called somehow even if the engine already exists
         # possibly this should be module-level
-        engine = create_database_populate_schema(database_path)
+        engine = create_database_populate_schema(database_abspath)
     else:
-        LOG.debug('Local job tracking database at "{}" already exists; connecting.'.format(database_path))
-        engine = _init_engine(location)
+        LOG.debug('Local job tracking database at "{}" already exists; '
+                  'connecting.'.format(database_abspath))
+        engine = _init_engine(database_abspath)
     # Bind the Session to the engine
     Session.configure(bind=engine)
     # Instantiate
     return Session()
-    
 
 
 def _init_engine(database_path):
     """Create the engine connection."""
-    ## engine = create_engine('sqlite:///{}'.format(database_path))
-    return create_engine('sqlite:///:memory:', echo=True)
+    database_abspath = os.path.abspath(database_path)
+    return create_engine('sqlite:////{}'.format(database_abspath))
+    #return create_engine('sqlite:///:memory:', echo=True)
 
 
 def create_database_populate_schema(location):
@@ -66,27 +67,20 @@ def create_database_populate_schema(location):
 
 # seqrun_processes = session.query(SeqrunAnalysis).filter_by(project=project.name, ...)
 
-#def track_flowcellrun_process(project_id, sample_id, libprep_id,
-#                              seqrun_id, engine, process_id):
-#    session = get_db_session()
-#    FlowcellRunAnalysis(project_id, sample_id, libprep_id, seqrun_id, engine, process_id)
-
-
-#def track_samplerun_analysis(project, sample, engine, process_id):
-#    session = get_db_session()
-#    SampleRunAnalysis(project, sample, engine, process_id)
-
-
 class SeqrunAnalysis(Base):
     __tablename__ = 'seqrunanalysis'
 
     project_id = Column(String(50))
+    project_name = Column(String(50))
+    project_base_path = Column(String(100))
     sample_id = Column(String(50))
     libprep_id = Column(String(50))
     seqrun_id = Column(String(100))
     # I suppose one day we might have 16 lanes
-    lane_num = Column(Integer)
+    #lane_num = Column(Integer)
+    workflow = Column(String(50))
     engine = Column(String(50))
+    analysis_dir = Column(String(100))
     # We can't use the process id because some processes will not be tracked this way.
     # --> Let's say this is just for Piper at the moment.
     process_id = Column(Integer, primary_key=True, unique=True)
@@ -94,20 +88,22 @@ class SeqrunAnalysis(Base):
 
     def __repr__(self):
         # locals() as a dict for str.format: nice-looking and easy but seems a little sneaky. Discuss!
-        return ("<FlowcellRunAnalysis({project_id}/{sample_id}/{libprep_id}/{seqrun_id}/{lane_num}: "
-                "process id {process_id}, engine {engine})>".format(project_id=self.project_id,
-                                                                    sample_id=self.sample_id,
-                                                                    libprep_id=self.libprep_id,
-                                                                    seqrun_id=self.seqrun_id,
-                                                                    lane_num=self.lane_num,
-                                                                    process_id=self.process_id,
-                                                                    engine=self.engine))
+        return ("<FlowcellRunAnalysis({project_id}/{sample_id}/{libprep_id}/{seqrun_id}: "
+                "process id {process_id}, engine {engine}, "
+                "workflow {workflow})>".format(project_id=self.project_id,
+                                               sample_id=self.sample_id,
+                                               libprep_id=self.libprep_id,
+                                               seqrun_id=self.seqrun_id,
+                                               process_id=self.process_id,
+                                               engine=self.engine,
+                                               workflow=self.workflow))
 
 
 class SampleAnalysis(Base):
     __tablename__ = 'sampleanalysis'
 
     project_id = Column(String(50))
+    project_name = Column(String(50))
     sample_id = Column(String(50), primary_key=True)
     engine = Column(String(50))
     process_id = Column(Integer, unique=True)
@@ -120,5 +116,3 @@ class SampleAnalysis(Base):
                                                          sample_id=self.sample_id,
                                                          process_id=self.process_id,
                                                          engine=self.engine))
-
-
