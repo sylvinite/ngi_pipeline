@@ -1,4 +1,4 @@
-from ngi_pipeline.database.classes import CharonSession
+from ngi_pipeline.database.classes import CharonSession, CharonError
 
 from ngi_pipeline.log.loggers import minimal_logger
 
