@@ -72,6 +72,7 @@ class SeqrunAnalysis(Base):
 
     project_id = Column(String(50))
     project_name = Column(String(50))
+    project_base_path = Column(String(100))
     sample_id = Column(String(50))
     libprep_id = Column(String(50))
     seqrun_id = Column(String(100))

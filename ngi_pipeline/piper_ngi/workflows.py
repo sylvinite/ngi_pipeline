@@ -8,7 +8,7 @@ from ngi_pipeline.log.loggers import minimal_logger
 
 LOG = minimal_logger(__name__)
 
-def return_cl_for_workflow(workflow_name, qscripts_dir_path, setup_xml_path, global_config_path, output_dir= None):
+def return_cl_for_workflow(workflow_name, qscripts_dir_path, setup_xml_path, global_config_path, output_dir=None):
     """Return an executable-ready Piper command line.
 
     :param str workflow_name: The name of the Piper workflow to be run.

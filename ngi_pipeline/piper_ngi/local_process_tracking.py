@@ -1,18 +1,133 @@
-from ngi_pipeline.piper_ngi.database import get_db_session, SeqrunAnalysis
+from ngi_pipeline.database.classes import CharonSession, CharonError
 from ngi_pipeline.log.loggers import minimal_logger
+from ngi_pipeline.piper_ngi.database import get_db_session, SeqrunAnalysis, SampleAnalysis
+from ngi_pipeline.piper_ngi.utils import create_exit_code_file_path
 from ngi_pipeline.utils.parsers import STHLM_UUSNP_SEQRUN_RE, STHLM_UUSNP_SAMPLE_RE
 
 
 LOG = minimal_logger(__name__)
 
 
+def update_charon_with_local_jobs_status():
+    session = get_db_session()
+    charon_session = CharonSession()
+
+    # Sequencing Run Analyses
+    for seqrun_entry in session.query(SeqrunAnalysis).all():
+
+        # Local names
+        workflow = seqrun_entry.workflow
+        project_name = seqrun_entry.project_name
+        project_id = seqrun_entry.project_id
+        project_base_path = seqrun_entry.project_base_path
+        sample_id = seqrun_entry.sample_id
+        libprep_id = seqrun_entry.libprep_id
+        seqrun_id = seqrun_entry.seqrun_id
+
+        exit_code = get_exit_code(workflow_name=workflow,
+                                  project_base_path=project_base_path,
+                                  project_name=project_name,
+                                  sample_id=sample_id,
+                                  libprep_id=libprep_id,
+                                  seqrun_id=seqrun_id)
+        if exit_code == 0:
+            # 0 -> Job finished successfully
+            ## Need to somehow casecade status levels down from seqrun->libprep->sample->project
+            charon_session.seqrun_update(projectid=project_id,
+                                         sampleid=sample_id,
+                                         libprepid=libprep_id,
+                                         seqrunid=seqrun_id,
+                                         alignment_status="DONE")
+            ## TODO To be implemented
+            #write_workflow_results_to_charon(workflow=workflow,
+            #                                 base_path=project_base_path,
+            #                                 project_name=project_name,
+            #                                 sample_name=sample_name,
+            #                                 libprep_id=libprep_id,
+            #                                 seqrun_id=seqrun_id)
+        elif exit_code == 1:
+            # 1 -> Job failed (DATA_FAILURE / COMPUTATION_FAILURE ?)
+            charon_session.seqrun_update(projectid=project_id,
+                                         sampleid=sample_id,
+                                         libprepid=libprep_id,
+                                         seqrunid=seqrun_id,
+                                         alignment_status="FAILED")
+            session.delete(seqrun_entry)
+        else:
+            # None -> Job still running
+            charon_status = charon_session.seqrun_get(projectid=project_id,
+                                                      sampleid=sample_id,
+                                                      libprepid=libprep_id,
+                                                      seqrunid=seqrun_id)['alignment_status']
+            if not charon_status == "RUNNING":
+                LOG.warn('Tracking inconsistency for project "{}" / sample "{}" '
+                         'libprep "{}" / seqrun "{}": Charon status is "{}" but '
+                         'local process tracking database indicates it is running. '
+                         'Setting value in Charon to RUNNING.'.format(project_name,
+                                                                      sample_id,
+                                                                      libprep_id,
+                                                                      seqrun_id,
+                                                                      charon_status))
+                charon_session.seqrun_update(project_id=project_id,
+                                             sample_id=sample_id,
+                                             libprep_id=libprep_id,
+                                             seqrun_id=seqrun_id,
+                                             alignment_status="RUNNING")
+    for sample_entry in session.query(SampleAnalysis).all():
+
+        # Local names
+        workflow = sample_entry.workflow
+        project_name = sample_entry.project_name
+        project_id = sample_entry.project_id
+        project_base_path = sample_entry.project_base_path
+        sample_id = sample_entry.sample_id
+
+        exit_code = get_exit_code(workflow_name=workflow,
+                                  project_base_path=project_base_path,
+                                  project_name=project_name,
+                                  sample_id=sample_id)
+        if exit_code == 0:
+            # 0 -> Job finished successfully
+            ## Need to somehow casecade status levels down from seqrun->libprep->sample->project
+            charon_session.sample_update(projectid=project_id,
+                                         sampleid=sample_id,
+                                         status="DONE")
+            ## TODO To be implemented
+            write_workflow_results_to_charon(workflow=workflow,
+                                             base_path=project_base_path,
+                                             project_name=project_name,
+                                             sample_name=sample_name)
+        elif exit_code == 1:
+            # 1 -> Job failed (DATA_FAILURE / COMPUTATION_FAILURE ?)
+            charon_session.sample_update(projectid=project_id,
+                                         sampleid=sample_id,
+                                         status="FAILED")
+            session.delete(sample_entry)
+        else:
+            # None -> Job still running
+            charon_status = charon_session.sample_get(projectid=project_id,
+                                                      sampleid=sample_id)['status']
+            if not charon_status == "RUNNING":
+                LOG.warn('Tracking inconsistency for project "{}" / sample "{}": '
+                         'Charon status is "{}" but local process tracking '
+                         'database indicates it is running. '
+                         'Setting value in Charon to RUNNING.'.format(project_name,
+                                                                      sample_id,
+                                                                      charon_status))
+                charon_session.seqrun_update(projectid=project_id,
+                                             sampleid=sample_id,
+                                             status="RUNNING")
+
+
 def record_process_seqrun(project, sample, libprep, seqrun, workflow_name,
-                          analysis_module_name, analysis_dir, pid, config=None):
-    LOG.info('Recording process id "{}" for project "{}", sample "{}", seqrun "{}" '
-             'workflow "{}"'.format(pid, project, sample, seqrun, workflow_name))
+                          analysis_module_name, analysis_dir, pid):
+    LOG.info('Recording process id "{}" for project "{}", sample "{}", libprep "{}", '
+             'seqrun "{}", workflow "{}"'.format(pid, project, sample, libprep,
+                                                 seqrun, workflow_name))
     session = get_db_session()
     seqrun_db_obj = SeqrunAnalysis(project_id=project.project_id,
                                    project_name=project.name,
+                                   project_base_path=project.base_path,
                                    sample_id=sample.name,
                                    libprep_id=libprep.name,
                                    seqrun_id=seqrun.name,
@@ -22,18 +137,53 @@ def record_process_seqrun(project, sample, libprep, seqrun, workflow_name,
                                    process_id=pid)
     session.add(seqrun_db_obj)
     session.commit()
-    LOG.info('Successfully recorded process id "{}" for project "{}", sample "{}", libprep "{}", seqrun "{}",'
+    LOG.info('Successfully recorded process id "{}" for project "{}", sample "{}", '
+             'libprep "{}", seqrun "{}", workflow "{}"'.format(pid,
+                                                               project,
+                                                               sample,
+                                                               libprep,
+                                                               seqrun,
+                                                               workflow_name))
+
+
+def record_process_sample(project, sample, workflow_name, analysis_module_name,
+                          analysis_dir, pid, config=None):
+    LOG.info('Recording process id "{}" for project "{}", sample "{}", '
+             'workflow "{}"'.format(pid, project, sample, workflow_name))
+    session = get_db_session()
+    seqrun_db_obj = SampleAnalysis(project_id=project.project_id,
+                                   project_name=project.name,
+                                   project_base_path=project.base_path,
+                                   sample_id=sample.name,
+                                   engine=analysis_module_name,
+                                   workflow=workflow_name,
+                                   analysis_dir=analysis_dir,
+                                   process_id=pid)
+    session.add(seqrun_db_obj)
+    session.commit()
+    LOG.info('Successfully recorded process id "{}" for project "{}", sample "{}", '
              'workflow "{}"'.format(pid, project, sample, libprep, seqrun, workflow_name))
 
 
-## TODO Should we add "workflow" as a key?
-def is_seqrun_analysis_running(project, sample, libprep, seqrun, config=None):
-    """Determine if a flowcell is currently being analyzed."""
+# Do we need this function?
+def is_seqrun_analysis_running_local(workflow, project, sample, libprep, seqrun):
+    """Determine if a flowcell is currently being analyzed by accessing the local
+    process tracking database.
+
+    :param str workflow: The workflow name
+    :param NGIProject project: The NGIProject object
+    :param NGISample sample: The NGISample object
+    :param NGILibraryPrep libprep: The NGILibraryPrep object
+    :param NGISeqRun seqrun: The NGISeqRun object
+
+    :returns: True if under analysis, False otherwise
+    """
     sequencing_run = "{}/{}/{}/{}".format(project.project_id, sample, libprep, seqrun)
     LOG.info('Checking if sequencing run "{}" is currently '
              'being analyzed...'.format(sequencing_run))
     session = get_db_session()
-    db_q = session.query(SeqrunAnalysis).filter_by(project_id=project.project_id,
+    db_q = session.query(SeqrunAnalysis).filter_by(workflow=workflow,
+                                                   project_id=project.project_id,
                                                    sample_id=sample.name,
                                                    libprep_id=libprep.name,
                                                    seqrun_id=seqrun.name)
@@ -44,62 +194,40 @@ def is_seqrun_analysis_running(project, sample, libprep, seqrun, config=None):
         LOG.info('...sequencing run "{}" is not currently under analysis.'.format(sequencing_run))
         return False
 
-
-## MARIO FIXME
-# This function should be used along with a Charon database check for sample status
-# to ensure that there aren't flowcell analyses running
-def is_sample_analysis_running(project, sample, config=None):
-    """Determine if a sample is currently being analyzed."""
-    return check_if_sample_analysis_is_running(project, sample, config)
-    # Change to this once it's implemented
-    #LOG.info("Checking if sample {}/{} is currently "
-    #         "being analyzed...".format(project.project_id, sample))
-    #return is_analysis_running(project, sample, level="sample")
-
-
-## MARIO FIXME this doesn't check if there are flowcell analyses running
-##             this is all horrible but will change when we move to SQL
-##             and build a proper monitoring/syncing submodule
-def check_if_sample_analysis_is_running(project, sample, config=None):
-    """checks if a given project/sample is currently analysed. 
-    Determines if a given sample is currently being analyzed using the local job tracking
-    database as its source of information.
-
-    :param NGIProject project: The Project object
-    :param NGISample sample: The Sample object
-    :param dict config: The parsed configuration file (optional)
-
-    :raises RuntimeError: If the configuration file cannot be found
-
-    :returns: True or False
-    :rtype: bool
-    """
-    ### FIXME this works for now but obviously the lookups will be much easier when we move to the SQL database
-    ### PRIORITY 2
-    LOG.info("Checking if sample {}/{} is currently "
-             "being analyzed...".format(project.project_id, sample))
-    with get_shelve_database(config) as db:
-        #get all keys, i.e., get all running projects
-        running_processes = db.keys()
-        #check that project_sample are not involved in any running process
-        process_to_be_searched = "{}_{}".format(project, sample)
-        for running_process in running_processes:
-            try:
-                m_dict = STHLM_UUSNP_SAMPLE_RE.match(running_process).groupdict()
-            except AttributeError:
-                raise ValueError("Could not extract information from jobid string \"{}\" and cannot continue.".format(running_process))
-            project_name = m_dict['project_name']
-            #project_id = get_project_id_from_name(project_name)
-            sample_id  = m_dict['sample_id']
-            #libprep_id = m_dict['libprep_id']
-            #seqrun_id = m_dict['seqrun_id']
-            #libprep_seqrun_id = "{}_{}".format(libprep_id, seqrun_id)
-
-            project_sample = "{}_{}".format(project_name, sample_id)
-            if project_sample == process_to_be_searched:
-                LOG.info('...sample run "{}" is currently being analyzed.'.format(process_to_be_searched))
-                return True
-        #if I do not find hits I return False
-        LOG.info('...sample run "{}" is not currently being analyzed.'.format(process_to_be_searched))
+# Do we need this function?
+def is_sample_analysis_running_local(workflow, project, sample):
+    """Determine if a sample is currently being analyzed by accessing the local
+    process tracking database."""
+    sample_run_name = "{}/{}".format(project.project_id, sample)
+    LOG.info('Checking if sample run "{}" is currently '
+             'being analyzed...'.format(sample_run_name))
+    session = get_db_session()
+    db_q = session.query(SampleAnalysis).filter_by(workflow=workflow,
+                                                   project_id=project.project_id,
+                                                   sample_id=sample.name)
+    if session.query(db_q.exists()).scalar():
+        LOG.info('...sample run "{}" is currently being analyzed.'.format(sample_run_name))
+        return True
+    else:
+        LOG.info('...sample run "{}" is not currently under analysis.'.format(sample_run_name))
         return False
 
+
+
+def get_exit_code(workflow_name, project_base_path, project_name,
+                  sample_id, libprep_id=None, seqrun_id=None):
+    exit_code_file_path = create_exit_code_file_path(workflow_name,
+                                                     project_base_path,
+                                                     project_name,
+                                                     sample_id,
+                                                     libprep_id,
+                                                     seqrun_id)
+    try:
+        with open(exit_code_file_path, 'r') as f:
+            exit_code = int(f.read().strip())
+            return exit_code
+    except IOError as e:
+        if e.errno == 2:    # No such file or directory
+            return None     # Process is not yet complete
+    except ValueError as e:
+        raise ValueError('Could not determine job exit status: not an integer ("{}")'.format(e))

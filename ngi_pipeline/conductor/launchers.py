@@ -9,11 +9,12 @@ from ngi_pipeline.conductor.classes import NGIProject
 from ngi_pipeline.database.classes import CharonSession, CharonError
 from ngi_pipeline.database.filesystem import recreate_project_from_db
 from ngi_pipeline.database.communicate import get_workflow_for_project
-from ngi_pipeline.database.local_process_tracking import check_update_jobs_status, \
-                                                         record_process_sample
-from ngi_pipeline.piper_ngi.local_process_tracking import is_seqrun_analysis_running, \
-                                                          is_sample_analysis_running, \
-                                                          record_process_seqrun
+## YOU'RE NEXT
+from ngi_pipeline.database.local_process_tracking import check_update_jobs_status
+from ngi_pipeline.piper_ngi.local_process_tracking import is_seqrun_analysis_running_local, \
+                                                          is_sample_analysis_running_local, \
+                                                          record_process_seqrun, \
+                                                          record_process_sample
 from ngi_pipeline.log.loggers import minimal_logger
 from ngi_pipeline.utils.classes import with_ngi_config
 
@@ -68,12 +69,20 @@ def launch_analysis_for_flowcells(projects_to_analyze, config=None, config_file_
                     if charon_reported_status and charon_reported_status in ("RUNNING", "DONE"):
                         # If charon_reported_status is  RUNNING or DONE skip processing but check that logic is respected (spok roks!!!)
                         if charon_reported_status == "RUNNING":
-                            if not is_seqrun_analysis_running(project, sample, libprep, seqrun, config):
+                            if not is_seqrun_analysis_running_local(workflow=workflow,
+                                                                    project=project,
+                                                                    sample=sample,
+                                                                    libprep=libprep,
+                                                                    seqrun=seqrun):
                                 error_msg = ('Charon and local db incongruency: project "{}" / sample "{}" / library "{}" / flowcell "{}": '
                                              'Charon reports it as running but not trace of it in local DB'.format(project, sample, libprep, seqrun))
                                 LOG.error(error_msg)
                         else: #otherwise I am DONE
-                            if is_seqrun_analysis_running(project, sample, libprep, seqrun, config):
+                            if is_seqrun_analysis_running_local(workflow=workflow,
+                                                                project=project,
+                                                                sample=sample,
+                                                                libprep=libprep,
+                                                                seqrun=seqrun):
                                 error_msg = ('Charon and local db incongruency:  Project "{}", Sample "{}", Library "{}", flowcell "{}": '
                                              'Charon reports it is DONE but local db says it is RUNNING'.format(project, sample, libprep, seqrun))
                                 LOG.error(error_msg)
@@ -92,7 +101,11 @@ def launch_analysis_for_flowcells(projects_to_analyze, config=None, config_file_
                         LOG.warn("Continuing with project anyway (remove me later)")
                         #continue
                     # at this point the status is only None or NEW, I need only to check that the analysis is already running (which would be strange)
-                    if not is_seqrun_analysis_running(project, sample, libprep, seqrun, config):
+                    if not is_seqrun_analysis_running_local(workflow=workflow,
+                                                            project=project,
+                                                            sample=sample,
+                                                            libprep=libprep,
+                                                            seqrun=seqrun):
                         try:
                             # This workflow thing will be handled on the engine side. Here we'll just call like "piper_ngi.flowcell_level_analysis"
                             # or something and it will handle which workflows to execute (qc, alignment, ...)
@@ -122,8 +135,7 @@ def launch_analysis_for_flowcells(projects_to_analyze, config=None, config_file_
                                                       workflow_name=workflow_name,
                                                       analysis_module_name=analysis_module.__name__,
                                                       analysis_dir=project.analysis_dir,
-                                                      pid=p_handle.pid,
-                                                      config=config)
+                                                      pid=p_handle.pid)
                                 LOG.info("...success!")
                                 set_new_seqrun_status = "RUNNING"
                             else:
@@ -236,7 +248,9 @@ def trigger_sample_level_analysis(restrict_to_projects=None, restrict_to_samples
                 LOG.info('Sample "{}" in project "{}" will not be processed at this time: '
                          'status is "{}".'.format(sample_obj, project_obj, sample_obj.status))
             # Checks the local job-tracking database to determine if this sample analysis is currently ongoing
-            elif not is_sample_analysis_running(project_obj, sample_obj, config):
+            elif not is_sample_analysis_running_local(workflow=workflow,
+                                                      project=project_obj,
+                                                      sample=sample_obj):
                 # Analysis not marked as "DONE" in Charon and also not yet running locally -- needs to be launched
                 ## FIXME Mario this needs to be engine-agnostic
                 try:
@@ -248,5 +262,14 @@ def trigger_sample_level_analysis(restrict_to_projects=None, restrict_to_samples
                     LOG.error(error_msg)
                     continue
                 if p_handle:    # p_handle is None when the engine decided that there is nothing to be done
-                    record_process_sample(p_handle, workflow, project_obj, sample_obj,
-                                          analysis_module, analysis_dir, config)
+                    record_process_sample(project=project_obj,
+                                          sample=sample_obj,
+                                          workflow_name=workflow,
+                                          analysis_module_name=analysis_module.__name__(),
+                                          analysis_dir=project.analysis_dir,
+                                          pid=p_handle.pid,
+                                          config=config)
+                    #record_process_sample(p_handle, workflow, project_obj, sample_obj,
+                    #                      analysis_module, analysis_dir, config)
+                else:
+                    raise Exception("Aaaaagggrhghrhgrhghgh")
