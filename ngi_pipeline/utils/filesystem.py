@@ -2,6 +2,7 @@ from __future__ import print_function
 
 import collections
 import contextlib
+import datetime
 import functools
 import os
 import shlex
@@ -120,20 +121,31 @@ def safe_makedir(dname, mode=0777):
                 raise
     return dname
 
-def rotate_log(path):
-    if os.path.exists(path) and os.path.isfile(path):
-        file_name, extension = os.splitext(path)
+def rotate_log(log_file_path, new_subdirectory="rotated_logs"):
+    if os.path.exists(log_file_path) and os.path.isfile(log_file_path):
+        file_name, extension = os.path.splitext(log_file_path)
         current_datetime = datetime.datetime.now().strftime("%Y-%m-%d_%H:%M:%S:%f")
-        rotate_file_path = "{}-{}{}".format(file_name, current_datetime, extension) 
-        ## TODO what exceptions can we get here? OSError probably
+        if new_subdirectory:
+            rotated_file_basepath = os.path.join(os.path.dirname(log_file_path),
+                                                 new_subdirectory)
+            safe_makedir(rotated_file_basepath)
+        else:
+            rotated_file_basepath = os.path.dirname(log_file_path)
+        rotate_file_path = os.path.join(rotated_file_basepath,
+                                        "{}-{}.rotated{}".format(file_name,
+                                                                 current_datetime,
+                                                                 extension))
+        ## TODO what exceptions can we get here? OSError, else?
         try:
-            LOG.info('Attempting to rotate log file "{}" to "{}"...'.format(path, rotate_file_path))
+            LOG.info('Attempting to rotate log file "{}" to '
+                     '"{}"...'.format(log_file_path, rotate_file_path))
             ## FIXME check if the log file is currently open!!
             ## This whole thing is a temporary fix anyway so I guess it's not important.
             ## we won't be using files as logs in any event once we get ELK working.
-            shutil.move(path, rotate_file_path)
+            shutil.move(log_file_path, rotate_file_path)
         except OSError as e:
-            raise OSError('Could not rotate log file "{}" to "{}": {}'.format(path, rotate_file_path, e))
+            raise OSError('Could not rotate log file "{}" to "{}": '
+                          '{}'.format(log_file_path, rotate_file_path, e))
 
 @contextlib.contextmanager
 def curdir_tmpdir(remove=True):

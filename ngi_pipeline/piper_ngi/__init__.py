@@ -41,10 +41,10 @@ def analyze_flowcell_run(project, sample, libprep, seqrun, workflow_name, config
     try:
         workflow_name = "dna_alignonly"
         ## Temporarily logging to a file until we get ELK set up
-        log_file_path = create_log_file_path(project, sample, libprep, seqrun, workflow_name)
+        log_file_path = create_log_file_path(workflow_name, project, sample, libprep, seqrun)
         rotate_log(log_file_path)
         # Store the exit code of detached processes
-        exit_code_path = create_exit_code_file_path(project, sample, libprep, seqrun, workflow_name)
+        exit_code_path = create_exit_code_file_path(workflow_name, project, sample, libprep, seqrun)
         build_setup_xml(project, config, sample , libprep.name, seqrun.name)
         ## Need to pull workflow name from db or something
         command_line = build_piper_cl(project, workflow_name, exit_code_path, config)
