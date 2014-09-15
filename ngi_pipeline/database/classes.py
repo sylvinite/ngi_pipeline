@@ -209,7 +209,7 @@ class CharonSession(requests.Session):
 
 
 ## TODO create different CharonError subclasses for different codes (e.g. 400, 404)
-class CharonError(RuntimeError):
+class CharonError(Exception):
     def __init__(self, message, status_code=None, *args, **kwargs):
         self.status_code = status_code
         super(CharonError, self).__init__(message, *args, **kwargs)

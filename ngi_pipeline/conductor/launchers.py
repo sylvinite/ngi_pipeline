@@ -10,7 +10,8 @@ from ngi_pipeline.database.classes import CharonSession, CharonError
 from ngi_pipeline.database.filesystem import recreate_project_from_db
 from ngi_pipeline.database.communicate import get_workflow_for_project
 ## YOU'RE NEXT
-from ngi_pipeline.database.local_process_tracking import check_update_jobs_status
+#from ngi_pipeline.database.local_process_tracking import check_update_jobs_status
+from ngi_pipeline.piper_ngi.local_process_tracking import update_charon_with_local_jobs_status
 from ngi_pipeline.piper_ngi.local_process_tracking import is_seqrun_analysis_running_local, \
                                                           is_sample_analysis_running_local, \
                                                           record_process_seqrun, \
@@ -35,8 +36,7 @@ def launch_analysis_for_flowcells(projects_to_analyze, config=None, config_file_
     :param str config_file_path: The path to the NGI configuration file; optional/has default.
     """
     # Update all jobs status first
-    ## FIXME check_update_jobs_status doesn't work with the new SQL backend
-    #check_update_jobs_status()
+    update_charon_with_local_jobs_status()
     for project in projects_to_analyze:
         # Get information from Charon regarding which workflows to run
         try:
@@ -181,7 +181,7 @@ def trigger_sample_level_analysis(restrict_to_projects=None, restrict_to_samples
     :param list config_file_path: The path to the NGI configuration file; optional.
     """
     # Update all jobs status first
-    check_update_jobs_status()
+    update_charon_with_local_jobs_status()
     LOG.info("Starting sample-level analysis routine.")
     if not restrict_to_projects: restrict_to_projects = []
     if not restrict_to_samples: restrict_to_samples = []
