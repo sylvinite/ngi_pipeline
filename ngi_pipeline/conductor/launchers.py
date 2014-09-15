@@ -34,6 +34,9 @@ def launch_analysis_for_flowcells(projects_to_analyze, config=None, config_file_
     :param dict config: The parsed NGI configuration file; optional/has default.
     :param str config_file_path: The path to the NGI configuration file; optional/has default.
     """
+    # Update all jobs status first
+    ## FIXME check_update_jobs_status doesn't work with the new SQL backend
+    #check_update_jobs_status()
     for project in projects_to_analyze:
         # Get information from Charon regarding which workflows to run
         try:
@@ -66,6 +69,10 @@ def launch_analysis_for_flowcells(projects_to_analyze, config=None, config_file_
                 for seqrun in libprep:
                     # Check Charon to ensure this hasn't already been processed
                     charon_reported_status = charon_session.seqrun_get(project.project_id, sample, libprep, seqrun).get('alignment_status')
+                    ## FIXME
+                    ## THIS IS BROKEN, the project-level analysis is generally "NGI" but we're
+                    ## recording it as "dna_alignonly" via a hard-coded line in piper_ngi/__init_.py
+                    workflow = "dna_alignonly"  #must be taken from somewhere, either config file or Charon
                     if charon_reported_status and charon_reported_status in ("RUNNING", "DONE"):
                         # If charon_reported_status is  RUNNING or DONE skip processing but check that logic is respected (spok roks!!!)
                         if charon_reported_status == "RUNNING":
@@ -87,7 +94,8 @@ def launch_analysis_for_flowcells(projects_to_analyze, config=None, config_file_
                                              'Charon reports it is DONE but local db says it is RUNNING'.format(project, sample, libprep, seqrun))
                                 LOG.error(error_msg)
 
-                        continue
+                        ## FIXME removing this while testing
+                        #continue
                     # if i am here the charon_reported_status on charon is either None, NEW, or FAILED
                     # Check the local jobs database to determine if this flowcell is already being analyzed
                     set_new_seqrun_status = None
@@ -156,7 +164,7 @@ def launch_analysis_for_flowcells(projects_to_analyze, config=None, config_file_
                         try:
                            LOG.info('Updating Charon entry for project "{}" / sample "{}" / libprep "{}" / '
                                     'seqrun "{}" to "{}"...'.format(project, sample, libprep, seqrun, set_new_seqrun_status))
-                           charon_session.seqrun_update(projectid=project, sampleid=sample,
+                           charon_session.seqrun_update(projectid=project.project_id, sampleid=sample,
                                                         libprepid=libprep, seqrunid=seqrun,
                                                         alignment_status=set_new_seqrun_status)
                            LOG.info("...success.")

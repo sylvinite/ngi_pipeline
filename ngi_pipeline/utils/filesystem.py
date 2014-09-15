@@ -123,14 +123,16 @@ def safe_makedir(dname, mode=0777):
 
 def rotate_log(log_file_path, new_subdirectory="rotated_logs"):
     if os.path.exists(log_file_path) and os.path.isfile(log_file_path):
-        file_name, extension = os.path.splitext(log_file_path)
+        file_path, extension = os.path.splitext(log_file_path)
+        file_name = os.path.basename(file_path)
         current_datetime = datetime.datetime.now().strftime("%Y-%m-%d_%H:%M:%S:%f")
         if new_subdirectory:
             rotated_file_basepath = os.path.join(os.path.dirname(log_file_path),
                                                  new_subdirectory)
-            safe_makedir(rotated_file_basepath)
         else:
             rotated_file_basepath = os.path.dirname(log_file_path)
+        safe_makedir(rotated_file_basepath)
+
         rotate_file_path = os.path.join(rotated_file_basepath,
                                         "{}-{}.rotated{}".format(file_name,
                                                                  current_datetime,

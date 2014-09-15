@@ -28,10 +28,11 @@ def create_charon_entries_from_project(project, workflow="NGI", force_overwrite=
                                       pipeline=workflow)
     except CharonError:
         if force_overwrite:
-            LOG.warn('Deleting project "{}" from Charon'.format(project))
-            LOG.info('Creating project "{}" with status "{}" and workflow "{}"'.format(project, status, workflow))
-            charon_session.project_delete(projectid=project.project_id)
-            charon_session.project_create(projectid=project.project_id,
+            #LOG.warn('Deleting project "{}" from Charon'.format(project))
+            #LOG.info('Creating project "{}" with status "{}" and workflow "{}"'.format(project, status, workflow))
+            LOG.warn('Overwriting data for project "{}"'.format(project))
+            #charon_session.project_delete(projectid=project.project_id)
+            charon_session.project_update(projectid=project.project_id,
                                           name=project.name,
                                           status=status,
                                           pipeline=workflow)

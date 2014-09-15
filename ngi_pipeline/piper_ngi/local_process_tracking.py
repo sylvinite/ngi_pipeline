@@ -135,6 +135,7 @@ def record_process_seqrun(project, sample, libprep, seqrun, workflow_name,
                                    workflow=workflow_name,
                                    analysis_dir=analysis_dir,
                                    process_id=pid)
+    ## FIXME We must make sure that an entry for this doesn't already exist!
     session.add(seqrun_db_obj)
     session.commit()
     LOG.info('Successfully recorded process id "{}" for project "{}", sample "{}", '
@@ -159,6 +160,7 @@ def record_process_sample(project, sample, workflow_name, analysis_module_name,
                                    workflow=workflow_name,
                                    analysis_dir=analysis_dir,
                                    process_id=pid)
+    ## FIXME We must make sure that an entry for this doesn't already exist!
     session.add(seqrun_db_obj)
     session.commit()
     LOG.info('Successfully recorded process id "{}" for project "{}", sample "{}", '
