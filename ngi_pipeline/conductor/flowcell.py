@@ -278,22 +278,22 @@ def parse_casava_directory(fc_dir):
     :rtype: dict
 
     :raises RuntimeError: If the fc_dir does not exist or cannot be accessed,
-                          or if Flowcell RunMetrics could not be parsed properly.
     """
     projects = []
     fc_dir = os.path.abspath(fc_dir)
     LOG.info("Parsing flowcell directory \"{}\"...".format(fc_dir))
-    parser = FlowcellRunMetricsParser(fc_dir)
-    run_info = parser.parseRunInfo()
+    #parser = FlowcellRunMetricsParser(fc_dir)
+    #run_info = parser.parseRunInfo()
     #runparams = parser.parseRunParameters()
-    try:
-        #fc_name    = run_info['Flowcell']
-        #fc_date    = run_info['Date']
-        #fc_pos     = runparams['FCPosition']
-        fc_full_id = run_info['Id']
-    except KeyError as e:
-        raise RuntimeError("Could not parse flowcell information {} "
-                           "from Flowcell RunMetrics in flowcell {}".format(e, fc_dir))
+    #try:
+    #    #fc_name    = run_info['Flowcell']
+    #    #fc_date    = run_info['Date']
+    #    #fc_pos     = runparams['FCPosition']
+    #    fc_full_id = run_info['Id']
+    #except KeyError as e:
+    #    raise RuntimeError("Could not parse flowcell information {} "
+    #                       "from Flowcell RunMetrics in flowcell {}".format(e, fc_dir))
+    fc_full_id = os.path.basename(fc_dir)
     # "Unaligned*" because SciLifeLab dirs are called "Unaligned_Xbp"
     # (where "X" is the index length) and there is also an "Unaligned" folder
     unaligned_dir_pattern = os.path.join(fc_dir,"Unaligned*")
