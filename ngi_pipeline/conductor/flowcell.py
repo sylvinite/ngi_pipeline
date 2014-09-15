@@ -10,6 +10,7 @@ import sys
 
 from ngi_pipeline.conductor.classes import NGIProject
 from ngi_pipeline.conductor.launchers import launch_analysis_for_flowcells
+from ngi_pipeline.database.classes import CharonError
 from ngi_pipeline.database.communicate import get_project_id_from_name
 from ngi_pipeline.log.loggers import minimal_logger
 from ngi_pipeline.utils.classes import with_ngi_config
@@ -149,7 +150,7 @@ def setup_analysis_directory_structure(fc_dir, projects_to_analyze,
         try:
             # This requires Charon access -- maps e.g. "Y.Mom_14_01" to "P123"
             project_id = get_project_id_from_name(project_name)
-        except (RuntimeError, ValueError) as e:
+        except (CharonError, RuntimeError, ValueError) as e:
             error_msg = ('Cannot proceed with project "{}" due to '
                          'Charon-related error: {}'.format(project_name, e))
             LOG.error(error_msg)

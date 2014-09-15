@@ -9,7 +9,7 @@ LOG = minimal_logger(__name__)
 
 
 ## FIXME this is a hack, improve it soon/later/someday
-##       (/never):q
+##       (/never)
 def create_charon_entries_from_project(project, workflow="NGI", force_overwrite=False):
     """Given a project object, creates the relevant entries
     in Charon.
