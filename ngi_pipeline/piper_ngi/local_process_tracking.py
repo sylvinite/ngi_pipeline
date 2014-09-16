@@ -19,7 +19,6 @@ def update_charon_with_local_jobs_status():
     # Sequencing Run Analyses
     for seqrun_entry in session.query(SeqrunAnalysis).all():
 
-        import ipdb; ipdb.set_trace()
         # Local names
         workflow = seqrun_entry.workflow
         project_name = seqrun_entry.project_name
