@@ -40,10 +40,14 @@ class CharonSession(requests.Session):
     #                                   headers=self._api_token_dict,
     #                                   *args, **kwargs))
 
-        self.get = validate_response(functools.partial(self.get, headers=self._api_token_dict, timeout=10))
-        self.post = validate_response(functools.partial(self.post, headers=self._api_token_dict, timeout=10))
-        self.put = validate_response(functools.partial(self.put, headers=self._api_token_dict, timeout=10))
-        self.delete = validate_response(functools.partial(self.delete, headers=self._api_token_dict, timeout=10))
+        self.get = validate_response(functools.partial(self.get,
+                    headers=self._api_token_dict, timeout=3))
+        self.post = validate_response(functools.partial(self.post,
+                    headers=self._api_token_dict, timeout=3))
+        self.put = validate_response(functools.partial(self.put,
+                    headers=self._api_token_dict, timeout=3))
+        self.delete = validate_response(functools.partial(self.delete,
+                    headers=self._api_token_dict, timeout=3))
 
         self._project_params = ("projectid", "name", "status", "pipeline", "bpa")
         self._sample_params = ("sampleid", "status", "received", "qc_status",
