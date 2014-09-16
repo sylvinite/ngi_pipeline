@@ -7,27 +7,39 @@ import sys
 
 from ngi_pipeline.conductor.flowcell import setup_analysis_directory_structure
 from ngi_pipeline.database.filesystem import create_charon_entries_from_project
+from ngi_pipeline.log.loggers import minimal_logger
 from ngi_pipeline.utils.classes import with_ngi_config
+from ngi_pipeline.utils.filesystem import recreate_project_from_filesystem
+
+LOG = minimal_logger(__name__)
 
 ## NOTE because setup_analysis_directory_structure uses Charon to determine the library prep,
 ##      this fails unless you go and modify that code to catch the exception and do something else with it
 ##      Uppsala keeps their library prep id in their SampleSheet.csv, I don't think Sthlm does but we could start?
 @with_ngi_config
-def main(demux_fcid_dirs, restrict_to_projects=None, restrict_to_samples=None, force_update=False, workflow="NGI", config=None, config_file_path=None):
+def main(demux_fcid_dirs, restrict_to_projects=None, restrict_to_samples=None,
+         force_update=False, workflow="NGI", already_parsed=False,
+         config=None, config_file_path=None):
     if force_update: force_update = validate_force_update()
     if not restrict_to_projects: restrict_to_projects = []
     if not restrict_to_samples: restrict_to_samples = []
     demux_fcid_dirs_set = set(demux_fcid_dirs)
     # Sort/copy each raw demux FC into project/sample/fcid format -- "analysis-ready"
     projects_to_analyze = dict()
-    for demux_fcid_dir in demux_fcid_dirs_set:
-        # These will be a bunch of Project objects each containing Samples, FCIDs, lists of fastq files
-        projects_to_analyze = setup_analysis_directory_structure(demux_fcid_dir,
-                                                                 projects_to_analyze,
-                                                                 restrict_to_projects,
-                                                                 restrict_to_samples,
-                                                                 create_files=False,
-                                                                 config=config)
+
+    if already_parsed: # Starting from Project/Sample/Libprep/Seqrun tree format
+        for demux_fcid_dir in demux_fcid_dirs_set:
+            p = recreate_project_from_filesystem(demux_fcid_dir)
+            projects_to_analyze[p.name] = p
+    else: # Raw illumina flowcell
+        for demux_fcid_dir in demux_fcid_dirs_set:
+            # These will be a bunch of Project objects each containing Samples, FCIDs, lists of fastq files
+            projects_to_analyze = setup_analysis_directory_structure(demux_fcid_dir,
+                                                                     projects_to_analyze,
+                                                                     restrict_to_projects,
+                                                                     restrict_to_samples,
+                                                                     create_files=False,
+                                                                     config=config)
     if not projects_to_analyze:
         LOG.warn('NOTE to populate a new project, you must manually create the '
                  'project-level object in Charon and give it a project ID')
@@ -63,6 +75,7 @@ def validate_force_update():
 if __name__=="__main__":
     parser = argparse.ArgumentParser("Populate a Charon project with data gleaned from the filesystem.")
     parser.add_argument("demux_fcid_dirs", nargs="*", help="The path to the fcid containing the project of interest.")
+    parser.add_argument("-a", "--already-parsed", action="store_true", help="Set this flag if the input path is an already-parsed Project/Sample/Libprep/Seqrun tree, as opposed to a raw flowcell.")
     parser.add_argument("-p", "--project", dest="restrict_to_projects", action="append", help="Restrict processing to these projects. Use flag multiple times for multiple projects.")
     parser.add_argument("-s", "--sample", dest="restrict_to_samples", action="append", help="Restrict processing to these samples. Use flag multiple times for multiple samples.")
     parser.add_argument("-w", "--workflow", default="NGI", help="The workflow to run for this project.")

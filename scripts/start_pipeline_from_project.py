@@ -3,7 +3,7 @@ Use this script to launch the pipeline from a project that has already been
 organized into Project/Sample/Libprep/Seqrun (as opposed to starting from
 a delivered Illumina flowcell).
 Note that this does not create entries in the Charon database; use
-create_charon_project_from_flowcell.py for that with the "-a" flag.
+create_charon_project_from_filesystem.py for that with the "-a" flag.
 """
 import argparse
 from ngi_pipeline.utils.filesystem import recreate_project_from_filesystem
