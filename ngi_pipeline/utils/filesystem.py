@@ -213,7 +213,7 @@ def recreate_project_from_filesystem(project_dir,
                              project_id=project_id,
                              base_path=base_path)
 
-    samples_pattern = os.path.join(project_dir, "Sample_*")
+    samples_pattern = os.path.join(project_dir, "*")
     samples = filter(os.path.isdir, glob.glob(samples_pattern))
     if not samples:
         LOG.warn('No samples found for project "{}"'.format(project_obj))
