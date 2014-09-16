@@ -23,7 +23,7 @@ def get_project_id_from_name(project_name):
         if e.status_code == 404:
             raise ValueError('Project "{}" missing from database: {}'.format(project_name, e))
         else:
-            raise RuntimeError(e)
+            raise
     try:
         return project_id['projectid']
     except KeyError:

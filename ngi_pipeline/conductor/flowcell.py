@@ -10,12 +10,12 @@ import sys
 
 from ngi_pipeline.conductor.classes import NGIProject
 from ngi_pipeline.conductor.launchers import launch_analysis_for_flowcells
+from ngi_pipeline.database.classes import CharonError
 from ngi_pipeline.database.communicate import get_project_id_from_name
 from ngi_pipeline.log.loggers import minimal_logger
 from ngi_pipeline.utils.classes import with_ngi_config
 from ngi_pipeline.utils.filesystem import do_rsync, safe_makedir
-from ngi_pipeline.utils.parsers import FlowcellRunMetricsParser, \
-                                       determine_library_prep_from_fcid
+from ngi_pipeline.utils.parsers import determine_library_prep_from_fcid
 
 LOG = minimal_logger(__name__)
 
@@ -150,7 +150,7 @@ def setup_analysis_directory_structure(fc_dir, projects_to_analyze,
         try:
             # This requires Charon access -- maps e.g. "Y.Mom_14_01" to "P123"
             project_id = get_project_id_from_name(project_name)
-        except (RuntimeError, ValueError) as e:
+        except (CharonError, RuntimeError, ValueError) as e:
             error_msg = ('Cannot proceed with project "{}" due to '
                          'Charon-related error: {}'.format(project_name, e))
             LOG.error(error_msg)
@@ -161,7 +161,7 @@ def setup_analysis_directory_structure(fc_dir, projects_to_analyze,
         project_dir = os.path.join(analysis_top_dir, "DATA", project_name)
         if create_files:
             safe_makedir(project_dir, 0770)
-            safe_makedir(os.path.join(project_dir, "log"), 0770)
+            #safe_makedir(os.path.join(project_dir, "logs"), 0770)
         try:
             project_obj = projects_to_analyze[project_dir]
         except KeyError:
@@ -193,6 +193,7 @@ def setup_analysis_directory_structure(fc_dir, projects_to_analyze,
             for fq_file in fastq_files:
                 # Requires Charon access
                 try:
+                    ## TODO this would be better done through the SampleSheet or something
                     libprep_name = determine_library_prep_from_fcid(project_id, sample_name, fc_full_id)
                 except ValueError:
                     # This flowcell has not got library prep information in Charon and
@@ -278,22 +279,22 @@ def parse_casava_directory(fc_dir):
     :rtype: dict
 
     :raises RuntimeError: If the fc_dir does not exist or cannot be accessed,
-                          or if Flowcell RunMetrics could not be parsed properly.
     """
     projects = []
     fc_dir = os.path.abspath(fc_dir)
     LOG.info("Parsing flowcell directory \"{}\"...".format(fc_dir))
-    parser = FlowcellRunMetricsParser(fc_dir)
-    run_info = parser.parseRunInfo()
+    #parser = FlowcellRunMetricsParser(fc_dir)
+    #run_info = parser.parseRunInfo()
     #runparams = parser.parseRunParameters()
-    try:
-        #fc_name    = run_info['Flowcell']
-        #fc_date    = run_info['Date']
-        #fc_pos     = runparams['FCPosition']
-        fc_full_id = run_info['Id']
-    except KeyError as e:
-        raise RuntimeError("Could not parse flowcell information {} "
-                           "from Flowcell RunMetrics in flowcell {}".format(e, fc_dir))
+    #try:
+    #    #fc_name    = run_info['Flowcell']
+    #    #fc_date    = run_info['Date']
+    #    #fc_pos     = runparams['FCPosition']
+    #    fc_full_id = run_info['Id']
+    #except KeyError as e:
+    #    raise RuntimeError("Could not parse flowcell information {} "
+    #                       "from Flowcell RunMetrics in flowcell {}".format(e, fc_dir))
+    fc_full_id = os.path.basename(fc_dir)
     # "Unaligned*" because SciLifeLab dirs are called "Unaligned_Xbp"
     # (where "X" is the index length) and there is also an "Unaligned" folder
     unaligned_dir_pattern = os.path.join(fc_dir,"Unaligned*")

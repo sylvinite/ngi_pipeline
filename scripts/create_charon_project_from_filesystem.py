@@ -29,15 +29,19 @@ def main(demux_fcid_dirs, restrict_to_projects=None, restrict_to_samples=None, f
                                                                  create_files=False,
                                                                  config=config)
     if not projects_to_analyze:
-        error_message = ("No projects found to process in flowcells {}"
-                         "or there was an error gathering required "
-                         "information.".format(",".join(demux_fcid_dirs_set)))
-        sys.exit("Quitting: " + error_message)
+        LOG.warn('NOTE to populate a new project, you must manually create the '
+                 'project-level object in Charon and give it a project ID')
+        sys.exit("Quitting: no projects found to process in flowcells {}"
+                 "or there was an error gathering required "
+                 "information.".format(",".join(demux_fcid_dirs_set)))
     else:
         # Don't need the dict functionality anymore; revert to list
         projects_to_analyze = projects_to_analyze.values()
         for project in projects_to_analyze:
-            create_charon_entries_from_project(project, workflow=workflow, force_overwrite=force_update)
+            try:
+                create_charon_entries_from_project(project, workflow=workflow, force_overwrite=force_update)
+            except Exception as e:
+                print(e, file=sys.stderr)
 
 def validate_force_update():
     print("DANGER WILL ROBINSON you have told this script to OVERWRITE EXISTING DATA in CHARON. Do you in fact want do to this??", file=sys.stderr)
@@ -57,7 +61,7 @@ def validate_force_update():
             return False
 
 if __name__=="__main__":
-    parser = argparse.ArgumentParser()
+    parser = argparse.ArgumentParser("Populate a Charon project with data gleaned from the filesystem.")
     parser.add_argument("demux_fcid_dirs", nargs="*", help="The path to the fcid containing the project of interest.")
     parser.add_argument("-p", "--project", dest="restrict_to_projects", action="append", help="Restrict processing to these projects. Use flag multiple times for multiple projects.")
     parser.add_argument("-s", "--sample", dest="restrict_to_samples", action="append", help="Restrict processing to these samples. Use flag multiple times for multiple samples.")

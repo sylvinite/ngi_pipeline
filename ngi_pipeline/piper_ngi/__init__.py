@@ -200,6 +200,8 @@ def build_piper_cl(project, workflow_name, exit_code_path, config):
                                           setup_xml_path=setup_xml_path,
                                           global_config_path=piper_global_config_path,
                                           output_dir=project.analysis_dir)
+    # Blank out the file if it already exists
+    open(exit_code_path, 'w').close()
     return add_exit_code_recording(cl, exit_code_path)
 
 
@@ -236,8 +238,8 @@ def build_setup_xml(project, config, sample=None, libprep_id=None, seqrun_id=Non
 
     project_top_level_dir = os.path.join(project.base_path, "DATA", project.dirname)
     analysis_dir = os.path.join(project.base_path, "ANALYSIS", project.dirname)
-    if not os.path.exists(analysis_dir):
-        safe_makedir(analysis_dir, 0770)
+    safe_makedir(analysis_dir, 0770)
+    safe_makedir(os.path.join(analysis_dir, "logs"))
     cl_args = {'project': project.name}
     # Load needed data from database
     try:
