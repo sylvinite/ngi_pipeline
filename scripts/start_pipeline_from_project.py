@@ -11,11 +11,11 @@ from ngi_pipeline.conductor.launchers import launch_analysis_for_flowcells
 
 def main(demux_fcid_dir, restrict_to_projects=None, restrict_to_samples=None):
     project = recreate_project_from_filesystem(demux_fcid_dir)
-    launch_analysis_for_flowcells(project)
+    launch_analysis_for_flowcells([project])
 
 
 if __name__ == '__main__':
-    parser = argparse.ArgumentParser("Quick launcher for testing purposes.")
+    parser = argparse.ArgumentParser()
     parser.add_argument("-p", "--project", dest="restrict_to_projects", action="append",
             help=("Restrict processing to these projects. "
                   "Use flag multiple times for multiple projects."))
