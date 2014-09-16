@@ -10,7 +10,9 @@ from ngi_pipeline.utils.filesystem import recreate_project_from_filesystem
 from ngi_pipeline.conductor.launchers import launch_analysis_for_flowcells
 
 def main(demux_fcid_dir, restrict_to_projects=None, restrict_to_samples=None):
-    project = recreate_project_from_filesystem(demux_fcid_dir)
+    project = recreate_project_from_filesystem(demux_fcid_dir,
+                                               restrict_to_projects,
+                                               restrict_to_samples)
     launch_analysis_for_flowcells([project])
 
 
