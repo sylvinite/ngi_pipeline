@@ -35,10 +35,10 @@ Set up your Piper paths appropriately in your `.bashrc`:
 ```
 # PIPER
 module load java/sun_jdk1.7.0_25
-PIPER_BASE_PATH=/proj/a2010002/nobackup/NGI
-export PIPER_GLOB_CONF_XML=$PIPER_BASE_PATH/Bin/Piper/workflows/uppmax_global_config.xml
-export PATH=$PATH:$PIPER_BASE_PATH/Bin/Piper/bin
-export PATH=$PATH:$PIPER_BASE_PATH/Bin/Piper/workflows/
+PIPER_BASE_PATH=/proj/a2010002/nobackup/NGI/software
+export PIPER_GLOB_CONF_XML=$PIPER_BASE_PATH/workflows/uppmax_global_config.xml
+export PATH=$PATH:$PIPER_BASE_PATH/bin
+export PATH=$PATH:$PIPER_BASE_PATH/workflows/
 export LD_LIBRARY_PATH=/sw/apps/build/slurm-drmaa/default/lib/:$LD_LIBRARY_PATH
 ```
 
