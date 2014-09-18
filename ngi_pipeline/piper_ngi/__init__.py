@@ -105,10 +105,6 @@ def analyze_sample(project, sample, config=None, config_file_path=None):
     :param NGISample sample: the sample to analyzed
     :param dict config: The parsed configuration file (optional)
     :param str config_file_path: The path to the configuration file (optional)
-
-    :returns: The subprocess.Popen object for the process or None if job is finished
-    :rtype: subprocess.Popen or None
-    :raises RuntimeError: If the process cannot be started
     """
     LOG.info('Determining if we can start sample-level analysis for project "{}" / sample "{}"...'.format(project, sample))
     modules_to_load = ["java/sun_jdk1.7.0_25", "R/2.15.0"]
