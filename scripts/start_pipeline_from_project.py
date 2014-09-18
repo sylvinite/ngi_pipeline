@@ -9,7 +9,7 @@ import argparse
 import os
 
 from ngi_pipeline.utils.filesystem import recreate_project_from_filesystem
-from ngi_pipeline.conductor.launchers import launch_analysis_for_flowcells
+from ngi_pipeline.conductor.launchers import launch_analysis_for_seqruns
 
 def main(demux_fcid_dir, restrict_to_projects=None, restrict_to_samples=None):
     project = recreate_project_from_filesystem(demux_fcid_dir,
@@ -18,7 +18,7 @@ def main(demux_fcid_dir, restrict_to_projects=None, restrict_to_samples=None):
     # Haaaaaack hack hack hack hack
     if os.path.split(project.base_path)[1] == "DATA":
         project.base_path = os.path.split(project.base_path)[0]
-    launch_analysis_for_flowcells([project])
+    launch_analysis_for_seqruns([project])
 
 
 if __name__ == '__main__':

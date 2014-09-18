@@ -23,9 +23,10 @@ LOG = minimal_logger(__name__)
 # independently).
 @with_ngi_config
 ## TODO change name to trigger_seqrun_analysis or something
-def launch_analysis_for_flowcells(projects_to_analyze, restart_failed_jobs=False,
-                                  config=None, config_file_path=None):
-    """Launch the appropriate flowcell-level analysis for each fastq file in the project.
+def launch_analysis_for_seqruns(projects_to_analyze, restart_failed_jobs=False,
+                                config=None, config_file_path=None):
+    """Launch the appropriate seqrun (flowcell-level) analysis for each fastq
+    file in the project.
 
     :param list projects_to_analyze: The list of projects (Project objects) to analyze
     :param dict config: The parsed NGI configuration file; optional/has default.

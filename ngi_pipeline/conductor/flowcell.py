@@ -9,7 +9,7 @@ import re
 import sys
 
 from ngi_pipeline.conductor.classes import NGIProject
-from ngi_pipeline.conductor.launchers import launch_analysis_for_flowcells
+from ngi_pipeline.conductor.launchers import launch_analysis_for_seqruns
 from ngi_pipeline.database.classes import CharonError
 from ngi_pipeline.database.communicate import get_project_id_from_name
 from ngi_pipeline.log.loggers import minimal_logger
@@ -94,7 +94,7 @@ def process_demultiplexed_flowcells(demux_fcid_dirs, restrict_to_projects=None,
     # only at the flowcell level. Another intermittent check determines if
     # conditions are met for sample-level analysis to proceed and launches
     # that if so.
-    launch_analysis_for_flowcells(projects_to_analyze)
+    launch_analysis_for_seqruns(projects_to_analyze)
 
 
 ### FIXME rework so that the creation of the NGIObjects and the actual creation of files are different functions?
