@@ -98,7 +98,7 @@ def analyze_seqrun(project, sample, libprep, seqrun, config=None, config_file_pa
 
 
 @with_ngi_config
-def analyze_sample_run(project, sample, config=None, config_file_path=None):
+def analyze_sample(project, sample, config=None, config_file_path=None):
     """The main method for sample-level analysis.
 
     :param NGIProject project: the project to analyze
