@@ -2,7 +2,7 @@ import psutil
 
 from ngi_pipeline.database.classes import CharonSession, CharonError
 from ngi_pipeline.log.loggers import minimal_logger
-from ngi_pipeline.piper_ngi.database import get_db_session, SeqrunAnalysis, SampleAnalysis
+from ngi_pipeline.piper_ngi.database import SeqrunAnalysis, SampleAnalysis
 from ngi_pipeline.piper_ngi.utils import create_exit_code_file_path
 from ngi_pipeline.utils.parsers import parse_qualimap_results, \
                                        STHLM_UUSNP_SEQRUN_RE, \
@@ -13,6 +13,8 @@ LOG = minimal_logger(__name__)
 
 
 def update_charon_with_local_jobs_status():
+    """Check the status of all locally-tracked jobs and update Charon accordingly.
+    """
     session = get_db_session()
     charon_session = CharonSession()
 
@@ -233,7 +235,8 @@ def update_seq_run_for_lane(seqrun_dict, lane_alignment_metrics):
     seqrun_dict["mean_autosomal_coverage"] = seqrun_dict.get("mean_autosomal_coverage", 0) + lane_alignment_metrics["mean_autosomal_coverage"]
 
 
-def record_process_seqrun(project, sample, libprep, seqrun, workflow_name,
+## TODO This can be moved to a more generic local_process_tracking submodule
+def record_process_seqrun(project, sample, libprep, seqrun, workflow_subtask,
                           analysis_module_name, analysis_dir, pid):
     LOG.info('Recording process id "{}" for project "{}", sample "{}", libprep "{}", '
              'seqrun "{}", workflow "{}"'.format(pid, project, sample, libprep,
@@ -261,36 +264,33 @@ def record_process_seqrun(project, sample, libprep, seqrun, workflow_name,
                                                                workflow_name))
 
 
-def record_process_sample(project, sample, workflow_name, analysis_module_name,
-                          analysis_dir, pid, config=None):
-    LOG.info('Recording process id "{}" for project "{}", sample "{}", '
-             'workflow "{}"'.format(pid, project, sample, workflow_name))
-    session = get_db_session()
-    seqrun_db_obj = SampleAnalysis(project_id=project.project_id,
-                                   project_name=project.name,
-                                   project_base_path=project.base_path,
-                                   sample_id=sample.name,
-                                   engine=analysis_module_name,
-                                   workflow=workflow_name,
-                                   analysis_dir=analysis_dir,
-                                   process_id=pid)
-    ## FIXME We must make sure that an entry for this doesn't already exist!
-    session.add(seqrun_db_obj)
-    session.commit()
-    LOG.info('Successfully recorded process id "{}" for project "{}", sample "{}", '
-             'workflow "{}"'.format(pid, project, sample, libprep, seqrun, workflow_name))
-
+## TODO This can be moved to a more generic local_process_tracking submodule
+# FIXME change to use strings maybe
+#def record_process_sample(project, sample, workflow_subtask, analysis_module_name,
+#                          analysis_dir, pid, config=None):
+#    LOG.info('Recording process id "{}" for project "{}", sample "{}", '
+#             'workflow "{}"'.format(pid, project, sample, workflow_name))
+#    session = get_db_session()
+#    seqrun_db_obj = SampleAnalysis(project_id=project.project_id,
+#                                   project_name=project.name,
+#                                   project_base_path=project.base_path,
+#                                   sample_id=sample.name,
+#                                   engine=analysis_module_name,
+#                                   workflow=workflow_name,
+#                                   analysis_dir=analysis_dir,
+#                                   process_id=pid)
+#    ## FIXME We must make sure that an entry for this doesn't already exist!
+#    session.add(seqrun_db_obj)
+#    session.commit()
+#    LOG.info('Successfully recorded process id "{}" for project "{}", sample "{}", '
+#             'workflow "{}"'.format(pid, project, sample, libprep, seqrun, workflow_name))
+#
 
 # Do we need this function?
-def is_seqrun_analysis_running_local(workflow, project, sample, libprep, seqrun):
+def is_seqrun_analysis_running_local(workflow_subtask, project_id, sample_id,
+                                     libprep_id, seqrun_id):
     """Determine if a flowcell is currently being analyzed by accessing the local
     process tracking database.
-
-    :param str workflow: The workflow name
-    :param NGIProject project: The NGIProject object
-    :param NGISample sample: The NGISample object
-    :param NGILibraryPrep libprep: The NGILibraryPrep object
-    :param NGISeqRun seqrun: The NGISeqRun object
 
     :returns: True if under analysis, False otherwise
     """
@@ -311,7 +311,7 @@ def is_seqrun_analysis_running_local(workflow, project, sample, libprep, seqrun)
         return False
 
 # Do we need this function?
-def is_sample_analysis_running_local(workflow, project, sample):
+def is_sample_analysis_running_local(workflow_subtask, project_id, sample_id):
     """Determine if a sample is currently being analyzed by accessing the local
     process tracking database."""
     sample_run_name = "{}/{}".format(project.project_id, sample)

@@ -8,14 +8,7 @@ import os
 from ngi_pipeline.conductor.classes import NGIProject
 from ngi_pipeline.database.classes import CharonSession, CharonError
 from ngi_pipeline.database.filesystem import recreate_project_from_db
-from ngi_pipeline.database.communicate import get_workflow_for_project
-## YOU'RE NEXT
-#from ngi_pipeline.database.local_process_tracking import check_update_jobs_status
 from ngi_pipeline.piper_ngi.local_process_tracking import update_charon_with_local_jobs_status
-from ngi_pipeline.piper_ngi.local_process_tracking import is_seqrun_analysis_running_local, \
-                                                          is_sample_analysis_running_local, \
-                                                          record_process_seqrun, \
-                                                          record_process_sample
 from ngi_pipeline.log.loggers import minimal_logger
 from ngi_pipeline.utils.classes import with_ngi_config
 
@@ -23,26 +16,32 @@ from ngi_pipeline.utils.classes import with_ngi_config
 LOG = minimal_logger(__name__)
 
 
-# This flowcell-level analysis function is called automatically after newly-delivered flowcells are reorganized
-# into projects. It runs only at the highest "flowcell" or "sequencing run" level, e.g. individual fastq files
-# with none of their relationships considered (i.e. two fastq files from the same sample are analyzed independently).
+# This flowcell-level analysis function is called automatically after newly-delivered
+# flowcells are reorganized into projects. It runs only at the highest "flowcell" 
+# or "sequencing run" level, e.g. individual fastq files with none of their
+# relationships considered (i.e. two fastq files from the same sample are analyzed
+# independently).
 @with_ngi_config
 ## TODO change name to trigger_seqrun_analysis or something
-def launch_analysis_for_flowcells(projects_to_analyze, config=None, config_file_path=None):
+def launch_analysis_for_flowcells(projects_to_analyze, restart_failed_jobs=False,
+                                  config=None, config_file_path=None):
     """Launch the appropriate flowcell-level analysis for each fastq file in the project.
 
     :param list projects_to_analyze: The list of projects (Project objects) to analyze
     :param dict config: The parsed NGI configuration file; optional/has default.
     :param str config_file_path: The path to the NGI configuration file; optional/has default.
     """
-    # Update all jobs status first
+    # Update Charon with the local state of all the jobs we're running
     update_charon_with_local_jobs_status()
+    charon_session = CharonSession()
     for project in projects_to_analyze:
         # Get information from Charon regarding which workflows to run
         try:
-            workflow = get_workflow_for_project(project.project_id)
-        except (ValueError, CharonError) as e:
-            LOG.error("Skipping project {} because of error: {}".format(project, e))
+            # E.g. "NGI" for NGI DNA Samples
+            workflow = charon_session.project_get(project.project_id)["pipeline"]
+        except (KeyError, CharonError) as e:
+            # Workflow missing from Charon?
+            LOG.error('Skipping project "{}" because of error: {}'.format(project, e))
             continue
         try:
             analysis_engine_module_name = config["analysis"]["workflows"][workflow]["analysis_engine"]
@@ -56,120 +55,48 @@ def launch_analysis_for_flowcells(projects_to_analyze, config=None, config_file_
         try:
             analysis_module = importlib.import_module(analysis_engine_module_name)
         except ImportError as e:
-            error_msg = ("Couldn't import module {} for workflow {} "
-                         "in project {}: \"{}\". Skipping.".format(analysis_engine_module_name,
-                                                                   workflow, project, e))
+            error_msg = ('Skipping project "{}" workflow "{}": couldn\'t import '
+                         'module "{}": {}'.format(project, workflow, analysis_engine_module_name, e))
             LOG.error(error_msg)
             # Next project
             continue
 
-        charon_session = CharonSession()
+        # Get all the sequencing runs for this project from Charon
         for sample in project:
             for libprep in sample:
                 for seqrun in libprep:
                     # Check Charon to ensure this hasn't already been processed
-                    charon_reported_status = charon_session.seqrun_get(project.project_id, sample, libprep, seqrun).get('alignment_status')
-                    ## FIXME
-                    ## THIS IS BROKEN, the project-level analysis is generally "NGI" but we're
-                    ## recording it as "dna_alignonly" via a hard-coded line in piper_ngi/__init_.py
-                    workflow = "dna_alignonly"  #must be taken from somewhere, either config file or Charon
-                    if charon_reported_status and charon_reported_status in ("RUNNING", "DONE"):
-                        # If charon_reported_status is  RUNNING or DONE skip processing but check that logic is respected (spok roks!!!)
-                        if charon_reported_status == "RUNNING":
-                            if not is_seqrun_analysis_running_local(workflow=workflow,
-                                                                    project=project,
-                                                                    sample=sample,
-                                                                    libprep=libprep,
-                                                                    seqrun=seqrun):
-                                error_msg = ('Charon and local db incongruency: project "{}" / sample "{}" / library "{}" / flowcell "{}": '
-                                             'Charon reports it as running but not trace of it in local DB'.format(project, sample, libprep, seqrun))
-                                LOG.error(error_msg)
-                        else: #otherwise I am DONE
-                            if is_seqrun_analysis_running_local(workflow=workflow,
-                                                                project=project,
-                                                                sample=sample,
-                                                                libprep=libprep,
-                                                                seqrun=seqrun):
-                                error_msg = ('Charon and local db incongruency:  Project "{}", Sample "{}", Library "{}", flowcell "{}": '
-                                             'Charon reports it is DONE but local db says it is RUNNING'.format(project, sample, libprep, seqrun))
-                                LOG.error(error_msg)
-
-                        ## FIXME removing this while testing
-                        #continue
-                    # if i am here the charon_reported_status on charon is either None, NEW, or FAILED
-                    # Check the local jobs database to determine if this flowcell is already being analyzed
-                    set_new_seqrun_status = None
-                    if charon_reported_status and charon_reported_status == "FAILED":
-                        error_msg = ('FAILED:  Project "{}" / sample "{}" / library "{}" / flowcell "{}": '
-                                     'Charon reports FAILURE, manual investigation needed!'.format(project, sample, libprep, seqrun))
-                        ## TODO send an email or something, but that should be a Charon-related process, not done here
-                        LOG.error(error_msg)
-                        ### FIXME these next two line are a temp fix because Nestor is misbehaving and we just want to retry the analysis
-                        ##        note that here it would be nice to differentiate between DATA_FAILURE and COMPUTE_FAILURE!!
-                        LOG.warn("Continuing with project anyway (remove me later)")
-                        #continue
-                    # at this point the status is only None or NEW, I need only to check that the analysis is already running (which would be strange)
-                    if not is_seqrun_analysis_running_local(workflow=workflow,
-                                                            project=project,
-                                                            sample=sample,
-                                                            libprep=libprep,
-                                                            seqrun=seqrun):
-                        try:
-                            # This workflow thing will be handled on the engine side. Here we'll just call like "piper_ngi.flowcell_level_analysis"
-                            # or something and it will handle which workflows to execute (qc, alignment, ...)
-                            workflow_name = "dna_alignonly"  #must be taken from somewhere, either config file or Charon
-
-                            # Here we are not specifying any kind of output directory as I believe this will be pulled from
-                            # the config file; however, we may have to adapt this as we add more engines.
-
-                            ## TODO I think we need to detach these sessions or something as they will die
-                            ##      when the main Python thread dies; however, this means ctrl-c will not kill them.
-                            ##      This is probably alright as this will generally be run automatically.
-                            LOG.info('Attempting to launch flowcell analysis for project "{}" / sample "{}" / '
-                                     'libprep "{}" / seqrun "{}", workflow "{}"'.format(project, sample, libprep, seqrun, workflow))
-                            p_handle = analysis_module.analyze_flowcell_run(project=project,
-                                                                            sample=sample,
-                                                                            libprep=libprep,
-                                                                            seqrun=seqrun,
-                                                                            workflow_name=workflow_name)
-
-                            ## NOTE what happens when the process fails? we still get a Popen object I think?
-                            if p_handle:
-                                LOG.info("...success! Attempting to record job in local jobs database. Hope this works!")
-                                record_process_seqrun(project=project,
-                                                      sample=sample,
-                                                      libprep=libprep,
-                                                      seqrun=seqrun,
-                                                      workflow_name=workflow_name,
-                                                      analysis_module_name=analysis_module.__name__,
-                                                      analysis_dir=project.analysis_dir,
-                                                      pid=p_handle.pid)
-                                LOG.info("...success!")
-                                set_new_seqrun_status = "RUNNING"
-                            else:
-                                LOG.error("...failed! Retry again later or something")
-                        # TODO which exceptions can we expect to be raised here?
-                        except Exception as e:
-                            LOG.error('Cannot process project "{}" / sample "{}" / libprep "{}" / '
-                                      'seqrun "{}": {}'.format(project, sample, libprep, seqrun, e))
-                            set_new_seqrun_status = "FAILED"
-                            continue
-                    else:
-                        error_msg = ('Charon and local db incongruency: Skipping analysis of project "{}" / '
-                                     'sample "{}" / library "{}" / seqrun "{}": Charon reports it is "{}" '
-                                     'but local db says it is running'.format(project, sample, libprep, seqrun, charon_reported_status))
-                        LOG.error(error_msg)
+                    charon_reported_status = charon_session.seqrun_get(project.project_id,
+                                                                       sample, libprep,
+                                                                       seqrun)['alignment_status']
+                    if charon_reported_status in ("RUNNING", "DONE"):
+                        #LOG.info("<already running>")
                         continue
-                    if set_new_seqrun_status:
-                        try:
-                           LOG.info('Updating Charon entry for project "{}" / sample "{}" / libprep "{}" / '
-                                    'seqrun "{}" to "{}"...'.format(project, sample, libprep, seqrun, set_new_seqrun_status))
-                           charon_session.seqrun_update(projectid=project.project_id, sampleid=sample,
-                                                        libprepid=libprep, seqrunid=seqrun,
-                                                        alignment_status=set_new_seqrun_status)
-                           LOG.info("...success.")
-                        except CharonError as e:
-                           LOG.error("...could not update Charon!: {}".format(e))
+                    elif charon_reported_status == "FAILED":
+                        if not restart_failed_jobs:
+                            LOG.error('FAILED:  Project "{}" / sample "{}" / library "{}" '
+                                      '/ flowcell "{}": Charon reports FAILURE, manual '
+                                      'investigation needed!'.format(project, sample, libprep, seqrun))
+                            continue
+                    try:
+                        # The engines themselves know which sub-workflows
+                        # they need to execute for a given level. For example,
+                        # with DNA Variant Calling on the sequencing run
+                        # level, we need to execute basic alignment and QC.
+                        LOG.info('Attempting to launch seqrun analysis for project "{}" / sample "{}" / '
+                                 'libprep "{}" / seqrun "{}", workflow "{}"'.format(project, sample, libprep, seqrun, workflow))
+                        analysis_module.analyze_seqrun(project=project,
+                                                       sample=sample,
+                                                       libprep=libprep,
+                                                       seqrun=seqrun)
+
+                    except Exception as e:
+                        LOG.error('Cannot process project "{}" / sample "{}" / '
+                                  'libprep "{}" / seqrun "{}" / workflow '
+                                  '"{}" : {}'.format(project, sample, libprep,
+                                                     seqrun, workflow, e))
+                        set_new_seqrun_status = "FAILED"
+                        continue
 
 
 @with_ngi_config

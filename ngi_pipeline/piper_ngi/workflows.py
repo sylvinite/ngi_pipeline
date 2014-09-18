@@ -47,7 +47,7 @@ def workflow_dna_alignonly(*args, **kwargs):
     return workflow_dna_variantcalling(*args, **kwargs) + " --alignment_and_qc"
 
 
-def workflow_merge_process_variantCall(*args, **kwargs):
+def workflow_merge_process_variantcall(*args, **kwargs):
     """Return the command line for best practice analysis: merging, procesing and variant calling.
 
     :param strs qscripts_dir_path: The path to the Piper qscripts directory.
@@ -107,6 +107,3 @@ def workflow_dna_variantcalling(qscripts_dir_path, setup_xml_path, global_config
             "--job_walltime {job_walltime} " \
             "--output_directory {output_dir} " \
             "-run".format(**locals())
-
-
-

@@ -13,6 +13,10 @@ from ngi_pipeline.piper_ngi import workflows
 from ngi_pipeline.piper_ngi.utils import create_log_file_path, create_exit_code_file_path
 from ngi_pipeline.database.classes import CharonSession, CharonError
 from ngi_pipeline.log.loggers import log_process_non_blocking, minimal_logger
+from ngi_pipeline.piper_ngi.local_process_tracking import is_seqrun_analysis_running_local, \
+                                                          is_sample_analysis_running_local, \
+                                                          record_process_seqrun, \
+                                                          record_process_sample
 from ngi_pipeline.utils.filesystem import load_modules, execute_command_line, rotate_log, safe_makedir
 from ngi_pipeline.utils.classes import with_ngi_config
 from ngi_pipeline.utils.parsers import parse_lane_from_filename, find_fastq_read_pairs_from_dir, \
@@ -21,50 +25,76 @@ from ngi_pipeline.utils.parsers import parse_lane_from_filename, find_fastq_read
 LOG = minimal_logger(__name__)
 
 
+def get_subtasks_for_level(level):
+    """For a given level (e.g. "seqrun" or "sample"), get all the associated
+    subtasks that should be run (e.g. "qc", "dna_alignonly")
+
+    :param str level: The level ("seqrun", "sample")
+    :returns: The names (strings) of the workflows that should be run at that level
+    :rtype: tuple
+    """
+    if level == "seqrun":
+        return ("qc", "dna_alignonly")
+    elif level == "sample":
+        return ("merge_process_variantcall")
+    else:
+        raise NotImplementedError('The level "{}" has no associated subtasks.')
+
+
 @with_ngi_config
-def analyze_flowcell_run(project, sample, libprep, seqrun, workflow_name, config=None, config_file_path=None):
-    """The main method for analyze flowcells (Run Level).
+def analyze_seqrun(project, sample, libprep, seqrun, config=None, config_file_path=None):
+    """Analyze data at the sequencing run (individual fastq) level.
 
     :param NGIProject project: the project to analyze
     :param NGISample sample: the sample to analyzed
     :param NGILibraryPrep libprep: The library prep to analyzed
     :seqrun NGISeqrun seqrun: The sequencing run to analyzed
-    :param str workflow_name: The workflow (e.g. alignment) to execute
     :param dict config: The parsed configuration file (optional)
     :param str config_file_path: The path to the configuration file (optional)
-
-    :returns: The subprocess.Popen object for the process
-    :rtype: subprocess.Popen
     """
     modules_to_load = ["java/sun_jdk1.7.0_25", "R/2.15.0"]
     load_modules(modules_to_load)
-    try:
-        workflow_name = "dna_alignonly"
-        ## Temporarily logging to a file until we get ELK set up
-        log_file_path = create_log_file_path(workflow_name=workflow_name,
-                                             project_base_path=project.base_path,
-                                             project_name=project.name,
-                                             sample_id=sample.name,
-                                             libprep_id=libprep.name,
-                                             seqrun_id=seqrun.name)
-        rotate_log(log_file_path)
-        # Store the exit code of detached processes
-        exit_code_path = create_exit_code_file_path(workflow_name=workflow_name,
-                                                    project_base_path=project.base_path,
-                                                    project_name=project.name,
-                                                    sample_id=sample.name,
-                                                    libprep_id=libprep.name,
-                                                    seqrun_id=seqrun.name)
-        build_setup_xml(project, config, sample , libprep.name, seqrun.name)
-        ## Need to pull workflow name from db or something
-        command_line = build_piper_cl(project, workflow_name, exit_code_path, config)
-        return launch_piper_job(command_line, project, log_file_path)
-    except RuntimeError as e:
-        error_msg = ('Processing project "{}" / sample "{}" / libprep "{}" / '
-                     'seqrun "{}" failed: {}'.format(project, sample, libprep, seqrun,
-                                                   e.__repr__()))
-        LOG.error(error_msg)
-        raise
+    for workflow_subtask in get_subtasks_for_level(level="seqrun"):
+        if not is_seqrun_analysis_running_local(workflow_subtask=workflow_subtask,
+                                                project=project.project_id,
+                                                sample=sample.name,
+                                                libprep=libprep.name,
+                                                seqrun=seqrun.name):
+            try:
+                ## Temporarily logging to a file until we get ELK set up
+                log_file_path = create_log_file_path(workflow_subtask=workflow_subtask,
+                                                     project_base_path=project.base_path,
+                                                     project_name=project.name,
+                                                     sample_id=sample.name,
+                                                     libprep_id=libprep.name,
+                                                     seqrun_id=seqrun.name)
+                rotate_log(log_file_path)
+                # Store the exit code of detached processes
+                exit_code_path = create_exit_code_file_path(workflow_subtask=workflow_subtask,
+                                                            project_base_path=project.base_path,
+                                                            project_name=project.name,
+                                                            sample_id=sample.name,
+                                                            libprep_id=libprep.name,
+                                                            seqrun_id=seqrun.name)
+                build_setup_xml(project, config, sample , libprep.name, seqrun.name)
+                ## Need to pull workflow name from db or something
+                command_line = build_piper_cl(project, workflow_name, exit_code_path, config)
+                p_handle = launch_piper_job(command_line, project, log_file_path)
+                try:
+                    record_process_seqrun(project=project, sample=sample, libprep=libprep,
+                                          seqrun=seqrun, workflow_subtask=workflow_subtask,
+                                          analysis_module_name="piper_ngi",
+                                          analysis_dir=project.analysis_dir,
+                                          pid=p_handle.pid)
+                except CharonError as e:
+                    LOG.error("<Could not record ...>")
+                    continue
+            except RuntimeError as e:
+                error_msg = ('Processing project "{}" / sample "{}" / libprep "{}" / '
+                             'seqrun "{}" failed: {}'.format(project, sample, libprep, seqrun,
+                                                           e.__repr__()))
+                LOG.error(error_msg)
+                raise
 
 
 @with_ngi_config
