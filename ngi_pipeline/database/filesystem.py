@@ -37,7 +37,8 @@ def create_charon_entries_from_project(project, workflow="NGI", force_overwrite=
                                           status=status,
                                           pipeline=workflow)
         else:
-            raise
+            LOG.warn('Project "{}" already exists; moving to samples...'.format(project))
+
     for sample in project:
         try:
             LOG.info('Creating sample "{}"'.format(sample))
@@ -52,7 +53,9 @@ def create_charon_entries_from_project(project, workflow="NGI", force_overwrite=
                                              sampleid=sample.name,
                                              status="NEW")
             else:
-                raise
+                LOG.warn('Project "{}" / sample "{}" already exists; moving '
+                         'to libpreps'.format(project, sample))
+
         for libprep in sample:
             try:
                 LOG.info('Creating libprep "{}"'.format(libprep))
@@ -70,7 +73,9 @@ def create_charon_entries_from_project(project, workflow="NGI", force_overwrite=
                                                   libprepid=libprep.name,
                                                   status="NEW")
                 else:
-                    raise
+                    LOG.warn('Project "{}" / sample "{}" / libprep "{}" already '
+                             'exists; moving to libpreps'.format(project, sample, libprep))
+
             for seqrun in libprep:
                 try:
                     LOG.info('Creating seqrun "{}"'.format(seqrun))
@@ -94,7 +99,9 @@ def create_charon_entries_from_project(project, workflow="NGI", force_overwrite=
                                                      seqrunid=seqrun.name,
                                                      status="NEW")
                     else:
-                        raise
+                        LOG.warn('Project "{}" / sample "{}" / libprep "{}" / '
+                                 'seqrun "{}" already exists; next...'.format(project, sample,
+                                                                              libprep, seqrun))
 
 
 def recreate_project_from_db(analysis_top_dir, project_name, project_id):
