@@ -160,7 +160,6 @@ def launch_analysis(level, projects_to_analyze, restart_failed_jobs=False,
                                                    sample=sample)
 
             except Exception as e:
-                raise
                 LOG.error('Cannot process project "{}" / sample "{}" / '
                           'libprep "{}" / seqrun "{}" / workflow '
                           '"{}" : {}'.format(project, sample, libprep,
