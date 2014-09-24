@@ -123,8 +123,10 @@ def launch_analysis(level, projects_to_analyze, restart_failed_jobs=False,
                                                                    sample)['alignment_status']
             # Check Charon to ensure this hasn't already been processed
             if charon_reported_status in ("RUNNING", "DONE"):
-                ## TODO make a real log message
-                LOG.info("project {} seqrun analysis already running".format(project))
+                LOG.info('Charon reports seqrun analysis for project "{}" / sample "{}" '
+                         '/ libprep "{}" / seqrun "{}" does not need processing '
+                         ' (already "{}")'.format(project, sample, libprep, seqrun,
+                                                  charon_reported_status))
                 continue
             elif charon_reported_status == "FAILED":
                 if not restart_failed_jobs:
@@ -158,6 +160,7 @@ def launch_analysis(level, projects_to_analyze, restart_failed_jobs=False,
                                                    sample=sample)
 
             except Exception as e:
+                raise
                 LOG.error('Cannot process project "{}" / sample "{}" / '
                           'libprep "{}" / seqrun "{}" / workflow '
                           '"{}" : {}'.format(project, sample, libprep,

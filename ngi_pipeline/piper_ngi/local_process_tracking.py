@@ -1,8 +1,11 @@
+import glob
+import os
 import psutil
+import re
 
 from ngi_pipeline.database.classes import CharonSession, CharonError
 from ngi_pipeline.log.loggers import minimal_logger
-from ngi_pipeline.piper_ngi.database import SeqrunAnalysis, SampleAnalysis
+from ngi_pipeline.piper_ngi.database import SeqrunAnalysis, SampleAnalysis, get_db_session
 from ngi_pipeline.piper_ngi.utils import create_exit_code_file_path
 from ngi_pipeline.utils.parsers import parse_qualimap_results, \
                                        STHLM_UUSNP_SEQRUN_RE, \
@@ -44,19 +47,17 @@ def update_charon_with_local_jobs_status():
         try:
             if exit_code == 0:
                 # 0 -> Job finished successfully
-                ## Need to somehow casecade status levels down from seqrun->libprep->sample->project
                 LOG.info('Workflow "{}" for {} finished succesfully. '
-                         'finished successfully. Recording status "DONE" '
-                         ' in Charon'.format(workflow, label))
+                         'Recording status "DONE" in Charon'.format(workflow, label))
                 set_alignment_status = "DONE"
                 try:
-                    write_to_charon_alignment_results(workflow=workflow,
-                                                      base_path=project_base_path,
+                    write_to_charon_alignment_results(base_path=project_base_path,
+                                                      project_name=project_name,
                                                       project_id=project_id,
-                                                      sample_name=sample_name,
+                                                      sample_id=sample_id,
                                                       libprep_id=libprep_id,
                                                       seqrun_id=seqrun_id)
-                except RuntimeError as e:
+                except (RuntimeError, ValueError) as e:
                     LOG.error(e)
                     set_alignment_status = "FAILED"
                 charon_session.seqrun_update(projectid=project_id,
@@ -68,7 +69,7 @@ def update_charon_with_local_jobs_status():
                 session.delete(seqrun_entry)
             elif exit_code == 1 or not psutil.pid_exists(pid):
                 if not psutil.pid_exists(pid):
-                    # Job failed without writing an exit code
+                    #/ Job failed without writing an exit code
                     LOG.error('ERROR: No exit code found for process {} '
                               'but it does not appear to be running '
                               '(pid {} does not exist). Setting status to '
@@ -94,13 +95,13 @@ def update_charon_with_local_jobs_status():
                     LOG.warn('Tracking inconsistency for {}: Charon status is "{}" but '
                              'local process tracking database indicates it is running. '
                              'Setting value in Charon to RUNNING.'.format(label, charon_status))
-                    charon_session.seqrun_update(project_id=project_id,
-                                                 sample_id=sample_id,
-                                                 libprep_id=libprep_id,
-                                                 seqrun_id=seqrun_id,
+                    charon_session.seqrun_update(projectid=project_id,
+                                                 sampleid=sample_id,
+                                                 libprepid=libprep_id,
+                                                 seqrunid=seqrun_id,
                                                  alignment_status="RUNNING")
         except CharonError as e:
-            LOG.error("Unable to update Charon status for {}: {}".format(label, e))
+            LOG.error('Unable to update Charon status for "{}": {}'.format(label, e))
 
     #FIXME UPDATE THIS
     #for sample_entry in session.query(SampleAnalysis).all():
@@ -149,12 +150,14 @@ def update_charon_with_local_jobs_status():
     #                                         status="RUNNING")
 
 
-def write_to_charon_alignment_results(base_path, project_id, sample_id, libprep_id, seqrun_id):
+def write_to_charon_alignment_results(base_path, project_name, project_id, sample_id, libprep_id, seqrun_id):
     """Update the status of a sequencing run after alignment.
 
-    :param NGIProject project_id: The name of the project, sample, lib prep, flowcell id
-    :param int return_code: The return code of the workflow process
-    :param string run_dir: the directory where results are stored (I know that I am running piper)
+    :param str project_name: The name of the project (e.g. T.Durden_14_01)
+    :param str project_id: The id of the project (e.g. P1171)
+    :param str sample_id: ...
+    :param str libprep_id: ...
+    :param str seqrun_id: ...
 
     :raises RuntimeError: If the Charon database could not be updated
     :raises ValueError: If the output data could not be parsed.
@@ -165,14 +168,14 @@ def write_to_charon_alignment_results(base_path, project_id, sample_id, libprep_
     except CharonError as e:
         raise CharonError('Error accessing database for project "{}", sample {}; '
                            'could not update Charon while performing best practice: '
-                           '{}'.format(project_id, sample_id,  e))
+                           '{}'.format(project_name, sample_id,  e))
     piper_run_id = seqrun_id.split("_")[3]
     seqrun_dict["lanes"] = 0
     if seqrun_dict.get("alignment_status") == "DONE":
         LOG.warn("Sequencing run \"{}\" marked as DONE but writing new alignment results; "
                  "this will overwrite the previous results.".format(seqrun_id))
     # Find all the appropriate files
-    piper_result_dir = os.path.join(run_dir, "02_preliminary_alignment_qc")
+    piper_result_dir = os.path.join(base_path, "ANALYSIS", project_name, "02_preliminary_alignment_qc")
     try:
         os.path.isdir(piper_result_dir) and os.listdir(piper_result_dir)
     except OSError as e:
@@ -200,7 +203,7 @@ def write_to_charon_alignment_results(base_path, project_id, sample_id, libprep_
     except CharonError as e:
         error_msg = ('Failed to update run alignment status for run "{}" in project {} '
                      'sample {}, library prep {} to  Charon database: {}'.format(seqrun_id,
-                      project_id, sample_id, libprep_id, e))
+                      project_name, sample_id, libprep_id, e))
         raise CharonError(error_msg)
 
 
@@ -240,7 +243,7 @@ def record_process_seqrun(project, sample, libprep, seqrun, workflow_subtask,
                           analysis_module_name, analysis_dir, pid):
     LOG.info('Recording process id "{}" for project "{}", sample "{}", libprep "{}", '
              'seqrun "{}", workflow "{}"'.format(pid, project, sample, libprep,
-                                                 seqrun, workflow_name))
+                                                 seqrun, workflow_subtask))
     session = get_db_session()
     seqrun_db_obj = SeqrunAnalysis(project_id=project.project_id,
                                    project_name=project.name,
@@ -249,7 +252,7 @@ def record_process_seqrun(project, sample, libprep, seqrun, workflow_subtask,
                                    libprep_id=libprep.name,
                                    seqrun_id=seqrun.name,
                                    engine=analysis_module_name,
-                                   workflow=workflow_name,
+                                   workflow=workflow_subtask,
                                    analysis_dir=analysis_dir,
                                    process_id=pid)
     ## FIXME We must make sure that an entry for this doesn't already exist!
@@ -261,7 +264,7 @@ def record_process_seqrun(project, sample, libprep, seqrun, workflow_subtask,
                                                                sample,
                                                                libprep,
                                                                seqrun,
-                                                               workflow_name))
+                                                               workflow_subtask))
 
 
 ## TODO This can be moved to a more generic local_process_tracking submodule
@@ -269,7 +272,7 @@ def record_process_seqrun(project, sample, libprep, seqrun, workflow_subtask,
 def record_process_sample(project, sample, workflow_subtask, analysis_module_name,
                           analysis_dir, pid, config=None):
     LOG.info('Recording process id "{}" for project "{}", sample "{}", '
-             'workflow "{}"'.format(pid, project, sample, workflow_name))
+             'workflow "{}"'.format(pid, project, sample, workflow_subtask))
     raise NotImplementedError
     session = get_db_session()
     seqrun_db_obj = SampleAnalysis(project_id=project.project_id,
@@ -277,14 +280,14 @@ def record_process_sample(project, sample, workflow_subtask, analysis_module_nam
                                    project_base_path=project.base_path,
                                    sample_id=sample.name,
                                    engine=analysis_module_name,
-                                   workflow=workflow_name,
+                                   workflow=workflow_subtask,
                                    analysis_dir=analysis_dir,
                                    process_id=pid)
     ## FIXME We must make sure that an entry for this doesn't already exist!
     session.add(seqrun_db_obj)
     session.commit()
     LOG.info('Successfully recorded process id "{}" for project "{}", sample "{}", '
-             'workflow "{}"'.format(pid, project, sample, libprep, seqrun, workflow_name))
+             'workflow "{}"'.format(pid, project, sample, libprep, seqrun, workflow_subtask))
 
 
 # Do we need this function?
@@ -295,15 +298,16 @@ def is_seqrun_analysis_running_local(workflow_subtask, project_id, sample_id,
 
     :returns: True if under analysis, False otherwise
     """
-    sequencing_run = "{}/{}/{}/{}".format(project.project_id, sample, libprep, seqrun)
+    sequencing_run = "{}/{}/{}/{}".format(project_id, sample_id, libprep_id, seqrun_id)
     LOG.info('Checking if sequencing run "{}" is currently '
-             'being analyzed...'.format(sequencing_run))
+             'being analyzed (workflow "{}")...'.format(sequencing_run,
+                                                        workflow_subtask))
     session = get_db_session()
-    db_q = session.query(SeqrunAnalysis).filter_by(workflow=workflow,
-                                                   project_id=project.project_id,
-                                                   sample_id=sample.name,
-                                                   libprep_id=libprep.name,
-                                                   seqrun_id=seqrun.name)
+    db_q = session.query(SeqrunAnalysis).filter_by(workflow=workflow_subtask,
+                                                   project_id=project_id,
+                                                   sample_id=sample_id,
+                                                   libprep_id=libprep_id,
+                                                   seqrun_id=seqrun_id)
     if session.query(db_q.exists()).scalar():
         LOG.info('...sequencing run "{}" is currently being analyzed.'.format(sequencing_run))
         return True
@@ -315,20 +319,19 @@ def is_seqrun_analysis_running_local(workflow_subtask, project_id, sample_id,
 def is_sample_analysis_running_local(workflow_subtask, project_id, sample_id):
     """Determine if a sample is currently being analyzed by accessing the local
     process tracking database."""
-    sample_run_name = "{}/{}".format(project.project_id, sample)
-    LOG.info('Checking if sample run "{}" is currently '
-             'being analyzed...'.format(sample_run_name))
+    sample_run_name = "{}/{}".format(project_id, sample_id)
+    LOG.info('Checking if sample run "{}" is currently being analyzed '
+             '(workflow "{}")...'.format(sample_run_name, workflow_subtask))
     session = get_db_session()
-    db_q = session.query(SampleAnalysis).filter_by(workflow=workflow,
-                                                   project_id=project.project_id,
-                                                   sample_id=sample.name)
+    db_q = session.query(SampleAnalysis).filter_by(workflow=workflow_subtask,
+                                                   project_id=project_id,
+                                                   sample_id=sample_id)
     if session.query(db_q.exists()).scalar():
         LOG.info('...sample run "{}" is currently being analyzed.'.format(sample_run_name))
         return True
     else:
         LOG.info('...sample run "{}" is not currently under analysis.'.format(sample_run_name))
         return False
-
 
 
 def get_exit_code(workflow_name, project_base_path, project_name,

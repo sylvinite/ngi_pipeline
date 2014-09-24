@@ -11,15 +11,6 @@ import os
 from ngi_pipeline.utils.filesystem import recreate_project_from_filesystem
 from ngi_pipeline.conductor.launchers import launch_analysis_for_seqruns
 
-def main(demux_fcid_dir, restrict_to_projects=None, restrict_to_samples=None):
-    project = recreate_project_from_filesystem(demux_fcid_dir,
-                                               restrict_to_projects,
-                                               restrict_to_samples)
-    # Haaaaaack hack hack hack hack
-    if os.path.split(project.base_path)[1] == "DATA":
-        project.base_path = os.path.split(project.base_path)[0]
-    launch_analysis_for_seqruns([project])
-
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
@@ -29,7 +20,21 @@ if __name__ == '__main__':
     parser.add_argument("-s", "--sample", dest= "restrict_to_samples", action="append",
             help=("Restrict processing to these samples. "
                   "Use flag multiple times for multiple samples."))
-    parser.add_argument("demux_fcid_dir", nargs="?", action="store",
+    parser.add_argument("project_dir", nargs="?", action="store",
             help=("The path to the project to be processed."))
+    g = parser.add_mutually_exclusive_group()
+    g.add_argument("--seqrun_only", action="store_true",
+            help=("Only process at the seqrun level."))
+    g.add_argument("--sample_only", action="store_true",
+            help=("Only process at the sample level."))
+
     args_dict = vars(parser.parse_args())
-    main(**args_dict)
+    project = recreate_project_from_filesystem(args_dict['project_dir'],
+                                               args_dict['restrict_to_projects'],
+                                               args_dict['restrict_to_samples'])
+    if os.path.split(project.base_path)[1] == "DATA":
+        project.base_path = os.path.split(project.base_path)[0]
+    if not args_dict['sample_only']:
+        launch_analysis_for_seqruns([project])
+    if not args_dict['seqrun_only']:
+        launch_analysis_for_samples([project])

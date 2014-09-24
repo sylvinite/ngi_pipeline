@@ -56,10 +56,10 @@ def analyze_seqrun(project, sample, libprep, seqrun, config=None, config_file_pa
     load_modules(modules_to_load)
     for workflow_subtask in get_subtasks_for_level(level="seqrun"):
         if not is_seqrun_analysis_running_local(workflow_subtask=workflow_subtask,
-                                                project=project.project_id,
-                                                sample=sample.name,
-                                                libprep=libprep.name,
-                                                seqrun=seqrun.name):
+                                                project_id=project.project_id,
+                                                sample_id=sample.name,
+                                                libprep_id=libprep.name,
+                                                seqrun_id=seqrun.name):
             try:
                 ## Temporarily logging to a file until we get ELK set up
                 log_file_path = create_log_file_path(workflow_subtask=workflow_subtask,
@@ -98,7 +98,6 @@ def analyze_seqrun(project, sample, libprep, seqrun, config=None, config_file_pa
                              'seqrun "{}" failed: {}'.format(project, sample, libprep, seqrun,
                                                            e.__repr__()))
                 LOG.error(error_msg)
-                raise
 
 @with_ngi_config
 def analyze_sample(project, sample, config=None, config_file_path=None):
@@ -121,8 +120,8 @@ def analyze_sample(project, sample, config=None, config_file_path=None):
         LOG.info('Sample "{}" in project "{}" is ready for processing.'.format(sample))
         for workflow_subtask in get_subtasks_for_level(level="sample"):
             if not is_sample_analysis_running_local(workflow_subtask=workflow_subtask,
-                                                    project=project.project_id,
-                                                    sample=sample.name):
+                                                    project_id=project.project_id,
+                                                    sample_id=sample.name):
                 try:
                     ## Temporarily logging to a file until we get ELK set up
                     log_file_path = create_log_file_path(workflow_subtask=workflow_subtask,
@@ -139,8 +138,8 @@ def analyze_sample(project, sample, config=None, config_file_path=None):
                     command_line = build_piper_cl(project, workflow_subtask, exit_code_path, config)
                     p_handle = launch_piper_job(command_line, project, log_file_path)
                     try:
-                        record_process_seqrun(project=project, sample=sample, libprep=libprep,
-                                              seqrun=seqrun, workflow_subtask=workflow_subtask,
+                        record_process_sample(project=project, sample=sample,
+                                              workflow_subtask=workflow_subtask,
                                               analysis_module_name="piper_ngi",
                                               analysis_dir=project.analysis_dir,
                                               pid=p_handle.pid)
