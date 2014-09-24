@@ -103,51 +103,74 @@ def update_charon_with_local_jobs_status():
         except CharonError as e:
             LOG.error('Unable to update Charon status for "{}": {}'.format(label, e))
 
-    #FIXME UPDATE THIS
-    #for sample_entry in session.query(SampleAnalysis).all():
 
-    #    # Local names
-    #    workflow = sample_entry.workflow
-    #    project_name = sample_entry.project_name
-    #    project_id = sample_entry.project_id
-    #    project_base_path = sample_entry.project_base_path
-    #    sample_id = sample_entry.sample_id
+    for sample_entry in session.query(SampleAnalysis).all():
 
-    #    exit_code = get_exit_code(workflow_name=workflow,
-    #                              project_base_path=project_base_path,
-    #                              project_name=project_name,
-    #                              sample_id=sample_id)
-    #    if exit_code == 0:
-    #        # 0 -> Job finished successfully
-    #        ## Need to somehow casecade status levels down from seqrun->libprep->sample->project
-    #        charon_session.sample_update(projectid=project_id,
-    #                                     sampleid=sample_id,
-    #                                     status="DONE")
-    #        ## TODO implement
-    #        #write_workflow_results_to_charon(workflow=workflow,
-    #        #                                 base_path=project_base_path,
-    #        #                                 project_id=project_id,
-    #        #                                 sample_name=sample_name)
-    #    elif exit_code == 1:
-    #        # 1 -> Job failed (DATA_FAILURE / COMPUTATION_FAILURE ?)
-    #        charon_session.sample_update(projectid=project_id,
-    #                                     sampleid=sample_id,
-    #                                     status="FAILED")
-    #        session.delete(sample_entry)
-    #    else:
-    #        # None -> Job still running
-    #        charon_status = charon_session.sample_get(projectid=project_id,
-    #                                                  sampleid=sample_id)['status']
-    #        if not charon_status == "RUNNING":
-    #            LOG.warn('Tracking inconsistency for project "{}" / sample "{}": '
-    #                     'Charon status is "{}" but local process tracking '
-    #                     'database indicates it is running. '
-    #                     'Setting value in Charon to RUNNING.'.format(project_name,
-    #                                                                  sample_id,
-    #                                                                  charon_status))
-    #            charon_session.seqrun_update(projectid=project_id,
-    #                                         sampleid=sample_id,
-    #                                         status="RUNNING")
+        # Local names
+        workflow = sample_entry.workflow
+        project_name = sample_entry.project_name
+        project_id = sample_entry.project_id
+        project_base_path = sample_entry.project_base_path
+        sample_id = sample_entry.sample_id
+        pid = sample_entry.process_id
+
+        exit_code = get_exit_code(workflow_name=workflow,
+                                  project_base_path=project_base_path,
+                                  project_name=project_name,
+                                  sample_id=sample_id)
+        label = "project/sample/libprep/seqrun {}/{}".format(project_name,
+                                                                   sample_id)
+        try:
+            if exit_code == 0:
+                # 0 -> Job finished successfully
+                LOG.info('Workflow "{}" for {} finished succesfully. '
+                         'Recording status "DONE" in Charon'.format(workflow, label))
+                set_status = "DONE"
+                ## TODO implement sample-level analysis results parsing / reporting to Charon?
+                #try:
+                #    write_to_charon_alignment_results(base_path=project_base_path,
+                #                                      project_name=project_name,
+                #                                      project_id=project_id,
+                #                                      sample_id=sample_id,
+                #                                      libprep_id=libprep_id,
+                #                                      seqrun_id=seqrun_id)
+                #except (RuntimeError, ValueError) as e:
+                #    LOG.error(e)
+                #    set_alignment_status = "FAILED"
+                charon_session.sample_update(projectid=project_id,
+                                             sampleid=sample_id,
+                                             status=set_status)
+                # Job is only deleted if the Charon update succeeds
+                session.delete(sample_entry)
+            elif exit_code == 1 or not psutil.pid_exists(pid):
+                if not psutil.pid_exists(pid):
+                    #/ Job failed without writing an exit code
+                    LOG.error('ERROR: No exit code found for process {} '
+                              'but it does not appear to be running '
+                              '(pid {} does not exist). Setting status to '
+                              '"FAILED", inspect manually'.format(label, pid))
+                else:
+                    # 1 -> Job failed (DATA_FAILURE / COMPUTATION_FAILURE ?)
+                    LOG.info('Workflow "{}" for {} failed. Recording status '
+                             '"FAILED" in Charon.'.format(workflow, label))
+                charon_session.sample_update(projectid=project_id,
+                                             sampleid=sample_id,
+                                             status="FAILED")
+                # Job is only deleted if the Charon update succeeds
+                session.delete(sample_entry)
+            else:
+                # None -> Job still running
+                charon_status = charon_session.sample_get(projectid=project_id,
+                                                          sampleid=sample_id)['status']
+                if not charon_status == "RUNNING":
+                    LOG.warn('Tracking inconsistency for {}: Charon status is "{}" but '
+                             'local process tracking database indicates it is running. '
+                             'Setting value in Charon to RUNNING.'.format(label, charon_status))
+                    charon_session.sample_update(projectid=project_id,
+                                                 sampleid=sample_id,
+                                                 status="RUNNING")
+        except CharonError as e:
+            LOG.error('Unable to update Charon status for "{}": {}'.format(label, e))
 
 
 def write_to_charon_alignment_results(base_path, project_name, project_id, sample_id, libprep_id, seqrun_id):
