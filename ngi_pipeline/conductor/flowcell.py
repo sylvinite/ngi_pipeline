@@ -1,5 +1,6 @@
 #!/usr/bin/env python
 
+
 from __future__ import print_function
 
 import glob
@@ -34,12 +35,13 @@ def process_demultiplexed_flowcell(demux_fcid_dir_path, restrict_to_projects=Non
                                      restricted to these. Optional.
     :param str config_file_path: The path to the NGI configuration file; optional.
     """
+    ## FIXME
     ## Why is it that we need to restrict this to a single flowcell?
     ## Does it break otherwise?
     if type(demux_fcid_dir_path) is not str:
         error_message = ("The path to a single demultiplexed flowcell should be "
                          "passed to this function as a string.")
-        sys.exit("Quitting: " + error_message)
+        raise ValueError(error_message)
     process_demultiplexed_flowcells([demux_fcid_dir_path], restrict_to_projects,
                                     restrict_to_samples, config_file_path)
 
@@ -69,7 +71,8 @@ def process_demultiplexed_flowcells(demux_fcid_dirs, restrict_to_projects=None,
                                                                  projects_to_analyze,
                                                                  restrict_to_projects,
                                                                  restrict_to_samples,
-                                                                 config)
+                                                                 create_files=True,
+                                                                 config=config)
     if not projects_to_analyze:
         if restrict_to_projects:
             error_message = ("No projects found to process; the specified flowcells "
@@ -87,14 +90,18 @@ def process_demultiplexed_flowcells(demux_fcid_dirs, restrict_to_projects=None,
     else:
         # Don't need the dict functionality anymore; revert to list
         projects_to_analyze = projects_to_analyze.values()
-    ##project to analyse contained only in the current flowcell(s),
-    ##I am ready to analyse the projects at flowcell level only
+    # The automatic analysis that occurs after flowcells are delivered is
+    # only at the flowcell level. Another intermittent check determines if
+    # conditions are met for sample-level analysis to proceed and launches
+    # that if so.
     launch_analysis_for_flowcells(projects_to_analyze)
 
 
+### FIXME rework so that the creation of the NGIObjects and the actual creation of files are different functions?
 @with_ngi_config
 def setup_analysis_directory_structure(fc_dir, projects_to_analyze,
                                        restrict_to_projects=None, restrict_to_samples=None,
+                                       create_files=True,
                                        config=None, config_file_path=None):
     """
     Copy and sort files from their CASAVA-demultiplexed flowcell structure
@@ -130,12 +137,7 @@ def setup_analysis_directory_structure(fc_dir, projects_to_analyze,
     except RuntimeError as e:
         LOG.error("Error when processing flowcell dir \"{}\": {}".format(fc_dir, e))
         return []
-    # From RunInfo.xml
-    fc_date = fc_dir_structure['fc_date']
-    # From RunInfo.xml (name) & runParameters.xml (position)
-    fcid = fc_dir_structure['fc_name']
-    fc_short_run_id = "{}_{}".format(fc_date, fcid)
-    fc_full_id      = fc_dir_structure['fc_full_id']
+    fc_full_id = fc_dir_structure['fc_full_id']
     if not fc_dir_structure.get('projects'):
         LOG.warn("No projects found in specified flowcell directory \"{}\"".format(fc_dir))
     # Iterate over the projects in the flowcell directory
@@ -145,11 +147,8 @@ def setup_analysis_directory_structure(fc_dir, projects_to_analyze,
         if restrict_to_projects and project_name not in restrict_to_projects:
             LOG.debug("Skipping project {}".format(project_name))
             continue
-        #now check if this project can be parsed via Charon
         try:
-            ## NOTE NOTE NOTE that this means we have to be able to access Charon
-            ##                to process things. I dislike this but I have no
-            ##                other way to get the Project ID
+            # This requires Charon access -- maps e.g. "Y.Mom_14_01" to "P123"
             project_id = get_project_id_from_name(project_name)
         except (RuntimeError, ValueError) as e:
             error_msg = ('Cannot proceed with project "{}" due to '
@@ -160,7 +159,9 @@ def setup_analysis_directory_structure(fc_dir, projects_to_analyze,
         # Create a project directory if it doesn't already exist, including
         # intervening "DATA" directory
         project_dir = os.path.join(analysis_top_dir, "DATA", project_name)
-        if not os.path.exists(project_dir): safe_makedir(project_dir, 0770)
+        if create_files:
+            safe_makedir(project_dir, 0770)
+            safe_makedir(os.path.join(project_dir, "log"), 0770)
         try:
             project_obj = projects_to_analyze[project_dir]
         except KeyError:
@@ -170,49 +171,73 @@ def setup_analysis_directory_structure(fc_dir, projects_to_analyze,
             projects_to_analyze[project_dir] = project_obj
         # Iterate over the samples in the project
         for sample in project.get('samples', []):
-            # Our SampleSheet.csv names are like Y__Mom_14_01 for some reason
+            # Stockholm names are like Y__Mom_14_01 for some reason
             sample_name = sample['sample_name'].replace('__','.')
             # If specific samples are specified, skip those that do not match
             if restrict_to_samples and sample_name not in restrict_to_samples:
-                LOG.debug("Skipping sample {}".format(sample_name))
+                LOG.debug("Skipping sample {}: not in specified samples {}".format(sample_name, ", ".join(restrict_to_samples)))
                 continue
             LOG.info("Setting up sample {}".format(sample_name))
             # Create a directory for the sample if it doesn't already exist
             sample_dir = os.path.join(project_dir, sample_name)
-            if not os.path.exists(sample_dir): safe_makedir(sample_dir, 0770)
+            if create_files: safe_makedir(sample_dir, 0770)
             # This will only create a new sample object if it doesn't already exist in the project
             sample_obj = project_obj.add_sample(name=sample_name, dirname=sample_name)
             # Get the Library Prep ID for each file
             pattern = re.compile(".*\.(fastq|fq)(\.gz|\.gzip|\.bz2)?$")
             fastq_files = filter(pattern.match, sample.get('files', []))
-            seqrun_dir = None
-
+            # For each fastq file, create the libprep and seqrun objects
+            # and add the fastq file to the seqprep object
+            # Note again that these objects only get created if they don't yet exist;
+            # if they do exist, the existing object is returned
             for fq_file in fastq_files:
-                libprep_name = determine_library_prep_from_fcid(project_id, sample_name, fc_full_id)
+                # Requires Charon access
+                try:
+                    libprep_name = determine_library_prep_from_fcid(project_id, sample_name, fc_full_id)
+                except ValueError:
+                    # This flowcell has not got library prep information in Charon and
+                    # is probably an Uppsala project; if so, we can parse the libprep name
+                    # from the SampleSheet.csv
+                    ## FIXME Need to get the SampleSheet location from the earlier parse_casava_dir fn
+                    #libprep_name = determine_library_prep_from_samplesheet()
+                    libprep_name = "A"
                 libprep_object = sample_obj.add_libprep(name=libprep_name,
                                                         dirname=libprep_name)
                 libprep_dir = os.path.join(sample_dir, libprep_name)
-                if not os.path.exists(libprep_dir): safe_makedir(libprep_dir, 0770)
+                if create_files: safe_makedir(libprep_dir, 0770)
                 seqrun_object = libprep_object.add_seqrun(name=fc_full_id,
                                                           dirname=fc_full_id)
                 seqrun_dir = os.path.join(libprep_dir, fc_full_id)
-                if not os.path.exists(seqrun_dir): safe_makedir(seqrun_dir, 0770)
+                if create_files: safe_makedir(seqrun_dir, 0770)
                 seqrun_object.add_fastq_files(fq_file)
-            # rsync the source files to the sample directory
-            #    src: flowcell/data/project/sample
-            #    dst: project/sample/flowcell_run
-            src_sample_dir = os.path.join(fc_dir_structure['fc_dir'],
-                                          project['data_dir'],
-                                          project['project_dir'],
-                                          sample['sample_dir'])
-            for libprep in sample_obj:
-            #this function works at run_level, so I have to process a single run
-            #it might happen that in a run we have multiple lib preps for the same sample
-                #for seqrun in libprep:
-                src_fastq_files = [ os.path.join(src_sample_dir, fastq_file)
-                                    for fastq_file in seqrun_object.fastq_files ] ##MARIO: check this
-                LOG.info("Copying fastq files from {} to {}...".format(sample_dir, seqrun_dir))
-                do_rsync(src_fastq_files, seqrun_dir)
+            if fastq_files and create_files:
+                # rsync the source files to the sample directory
+                #    src: flowcell/data/project/sample
+                #    dst: project/sample/libprep/flowcell_run
+                src_sample_dir = os.path.join(fc_dir_structure['fc_dir'],
+                                              project['data_dir'],
+                                              project['project_dir'],
+                                              sample['sample_dir'])
+                for libprep_obj in sample_obj:
+                #this function works at run_level, so I have to process a single run
+                #it might happen that in a run we have multiple lib preps for the same sample
+                    for seqrun_obj in libprep_obj:
+                        src_fastq_files = [os.path.join(src_sample_dir, fastq_file) for
+                                           fastq_file in seqrun_obj.fastq_files]
+                        seqrun_dst_dir = os.path.join(project_obj.base_path, project_obj.dirname,
+                                                      sample_obj.dirname, libprep_obj.dirname,
+                                                      seqrun_obj.dirname)
+                        LOG.info("Copying fastq files from {} to {}...".format(src_sample_dir, seqrun_dir))
+                        #try:
+                        ## FIXME this exception should be handled somehow when rsync fails
+                        do_rsync(src_fastq_files, seqrun_dir)
+                        #except subprocess.CalledProcessError as e:
+                        #    ## TODO Here the rsync has failed
+                        #    ##      should we delete this libprep from the sample object in this case?
+                        #    ##      this could be an issue downstream if e.g. Piper expects these files
+                        #    ##      and they are missing
+                        #    LOG.warn('Error when performing rsync for "{}/{}/{}": '
+                        #              '{}'.format(project, sample, libprep, e,))
     return projects_to_analyze
 
 
@@ -260,11 +285,11 @@ def parse_casava_directory(fc_dir):
     LOG.info("Parsing flowcell directory \"{}\"...".format(fc_dir))
     parser = FlowcellRunMetricsParser(fc_dir)
     run_info = parser.parseRunInfo()
-    runparams = parser.parseRunParameters()
+    #runparams = parser.parseRunParameters()
     try:
-        fc_name    = run_info['Flowcell']
-        fc_date    = run_info['Date']
-        fc_pos     = runparams['FCPosition']
+        #fc_name    = run_info['Flowcell']
+        #fc_date    = run_info['Date']
+        #fc_pos     = runparams['FCPosition']
         fc_full_id = run_info['Id']
     except KeyError as e:
         raise RuntimeError("Could not parse flowcell information {} "
@@ -272,8 +297,6 @@ def parse_casava_directory(fc_dir):
     # "Unaligned*" because SciLifeLab dirs are called "Unaligned_Xbp"
     # (where "X" is the index length) and there is also an "Unaligned" folder
     unaligned_dir_pattern = os.path.join(fc_dir,"Unaligned*")
-    basecall_stats_dir_pattern = os.path.join(unaligned_dir_pattern,"Basecall_Stats_*")
-    basecall_stats_dir = [os.path.relpath(d,fc_dir) for d in glob.glob(basecall_stats_dir_pattern)]
     # e.g. 131030_SN7001362_0103_BC2PUYACXX/Unaligned_16bp/Project_J__Bjorkegren_13_02/
     project_dir_pattern = os.path.join(unaligned_dir_pattern,"Project_*")
     for project_dir in glob.glob(project_dir_pattern):
@@ -284,19 +307,11 @@ def parse_casava_directory(fc_dir):
         for sample_dir in glob.glob(sample_dir_pattern):
             LOG.info("Parsing samples directory \"{}\"...".format(sample_dir.split(os.path.split(fc_dir)[0] + "/")[1]))
             fastq_file_pattern = os.path.join(sample_dir,"*.fastq.gz")
-            samplesheet_pattern = os.path.join(sample_dir,"*.csv")
             fastq_files = [os.path.basename(file) for file in glob.glob(fastq_file_pattern)]
-            ## NOTE that we don't wind up using this SampleSheet for anything so far as I know
-            ## TODO consider removing; however, some analysis engines that
-            ##      we want to include in the future may need them.
-            #samplesheet = glob.glob(samplesheet_pattern)
-            #assert len(samplesheet) == 1, \
-            #        "Error: could not unambiguously locate samplesheet in {}".format(sample_dir)
             sample_name = os.path.basename(sample_dir).replace("Sample_","").replace('__','.')
             project_samples.append({'sample_dir': os.path.basename(sample_dir),
                                     'sample_name': sample_name,
                                     'files': fastq_files,
-            #                        'samplesheet': os.path.basename(samplesheet[0])})
                                    })
         project_name = os.path.basename(project_dir).replace("Project_","").replace('__','.')
         projects.append({'data_dir': os.path.relpath(os.path.dirname(project_dir),fc_dir),
@@ -304,8 +319,5 @@ def parse_casava_directory(fc_dir):
                          'project_name': project_name,
                          'samples': project_samples})
     return {'fc_dir'    : fc_dir,
-            'fc_name'   : '{}{}'.format(fc_pos, fc_name),
-            'fc_date'   : fc_date,
             'fc_full_id': fc_full_id,
-            'basecall_stats_dir': basecall_stats_dir,
             'projects': projects}

@@ -5,6 +5,7 @@ sbatch:
 
 database:
     record_tracking_db_path: /$HOME/.ngipipeline/record_tracking_database
+    #record_tracking_db_path: /proj/a2010002/nobackup/NGI/database/record_tracking_database
 
 environment:
     project_id: a2010002
@@ -38,6 +39,6 @@ analysis:
             analysis_engine: ngi_pipeline.de_novo_pipeline
         RNA:
             analysis_engine: ngi_pipeline.bcbio_ngi
-    top_dir: /proj/a2010002/nobackup/mario/analysis_ready
+    top_dir: /proj/a2010002/nobackup/NGI/analysis_ready
     #log: /proj/a2010002/data/log
     #store_dir: /proj/a2010002/archive

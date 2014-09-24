@@ -3,9 +3,8 @@ import shelve
 import tempfile
 import unittest
 
-from ngi_pipeline.database.process_tracking import get_all_tracked_processes, \
-                                                   get_shelve_database, \
-                                                   remove_record_from_local_tracking
+from ngi_pipeline.database.local_process_tracking import get_shelve_database, \
+                                                         remove_record_from_local_tracking
 
 class TestProcessTracking(unittest.TestCase):
 
@@ -19,9 +18,9 @@ class TestProcessTracking(unittest.TestCase):
         self.fake_db.update(self.fake_job_dict)
         self.fake_db.close()
 
-    def test_get_all_tracked_processes(self):
-        self.assertEqual(self.fake_job_dict,
-                         get_all_tracked_processes(config=self.config))
+#    def test_get_all_tracked_processes(self):
+#        self.assertEqual(self.fake_job_dict,
+#                         get_all_tracked_processes(config=self.config))
 
     def test_get_shelve_database(self):
         with get_shelve_database(config=self.config) as db:

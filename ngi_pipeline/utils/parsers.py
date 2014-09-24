@@ -5,11 +5,17 @@ import re
 import xml.etree.cElementTree as ET
 import xml.parsers.expat
 
-from ngi_pipeline.database.classes import CharonSession
+from ngi_pipeline.database.classes import CharonSession, CharonError
 from ngi_pipeline.log.loggers import minimal_logger
 from ngi_pipeline.utils.classes import memoized
 
 LOG = minimal_logger(__name__)
+
+## e.g. A.Wedell_13_03_P567_102_A_140528_D00415_0049_BC423WACXX                         <-- sthlm
+##  or  ND-0522_NA10860_PCR-free_SX398_NA10860_PCR-free_140821_D00458_0029_AC45JGANXX   <-- uusnp
+STHLM_UUSNP_SEQRUN_RE = re.compile(r'(?P<project_name>\w\.\w+_\d+_\d+|\w{2}-\d+)_(?P<sample_id>[\w-]+)_(?P<libprep_id>\w|\w{2}\d{3}_\2)_(?P<seqrun_id>\d{6}_\w+_\d{4}_.{10})')
+STHLM_UUSNP_SAMPLE_RE = re.compile(r'(?P<project_name>\w\.\w+_\d+_\d+|\w{2}-\d+)_(?P<sample_id>[\w-]+)')
+
 
 
 def determine_library_prep_from_fcid(project_id, sample_name, fcid):
@@ -23,34 +29,35 @@ def determine_library_prep_from_fcid(project_id, sample_name, fcid):
     :returns: The library prep (e.g. "A")
     :rtype str
     :raises ValueError: If no match was found.
-    :raises RuntimeError: If the database could not be reached (?)
     """
-    
     charon_session = CharonSession()
-    url = charon_session.construct_charon_url("libpreps", project_id, sample_name)
-    # Should return all library preps for this sample in this project
-    libpreps_response = charon_session.get(url)
-    if libpreps_response.status_code != 200:
-        raise RuntimeError("Error when accessing Charon DB: "
-                           "{}: {}".format(libpreps_response.status_code,
-                                           libpreps_response.reason))
-    for libprep in libpreps_response.json()['libpreps']:
-        # Get the sequencing runs and see if they match the FCID we have
-        url = charon_session.construct_charon_url("seqruns",
-                                                  project_id,
-                                                  sample_name,
-                                                  libprep['libprepid'])
-        all_seqruns_response = charon_session.get(url)
-        if all_seqruns_response.status_code != 200:
-            raise RuntimeError("Error when accessing Charon DB: "
-                               "{}: {}".format(all_seqruns_response.status_code,
-                                               all_seqruns_response.reason))
-        for seqrun in all_seqruns_response.json()['seqruns']:
-            seqrun_runid = seqrun["seqrunid"]
-            if seqrun_runid == fcid:
-                return libprep['libprepid']
-    raise ValueError('No library prep found for project "{}" / sample "{}" '
-                     '/ fcid "{}"'.format(project_id, sample_name, fcid))
+    try:
+        libpreps = charon_session.sample_get_libpreps(project_id, sample_name)['libpreps']
+        if libpreps:
+            for libprep in libpreps:
+                # Get the sequencing runs and see if they match the FCID we have
+                seqruns = charon_session.libprep_get_seqruns(project_id,
+                                                             sample_name,
+                                                             libprep['libprepid'])['seqruns']
+                if seqruns:
+                    for seqrun in seqruns:
+                        seqrun_runid = seqrun["seqrunid"]
+                        if seqrun_runid == fcid:
+                            return libprep['libprepid']
+                else:
+                    ## HACK HACK FIXME HACK
+                    ## need more careful though / implementation
+                    raise CharonError("No seqruns found!", 404)
+        else:
+            ## HACK HACK FIXME HACK
+            ## it's 17:36
+            raise CharonError("No libpreps found!", 404)
+    except CharonError as e:
+        if e.status_code == 404:
+            raise ValueError('No library prep found for project "{}" / sample "{}" '
+                             '/ fcid "{}"'.format(project_id, sample_name, fcid))
+        else:
+            raise
 
 
 def find_fastq_read_pairs_from_dir(directory):
@@ -419,17 +426,17 @@ class FlowcellRunMetricsParser(RunMetricsParser):
             data = parser.parse(f)
         return data
 
+## TODO Pythonify this up a bit
+def parse_qualimap_results(qualimap_results_path):
+    """Parse the genome_results.txt file created by Piper (qualimap).
 
-def parse_genome_results(filename):
-    """Parse the genome_results.txt file created by piper (qualimap)
-       and stores all information into a dictionaty.
+    :param str qualimap_results_path: The path to the Qualimap results file to be parsed.
+    
+    :returns: A dictionary of metrics of interest
+    :rtype: dict
+    :raises IOError: If the qualimap_results_path file cannot be opened for reading.
     """
-    try:
-        fh=open(filename, 'r')
-    except IOError:
-        print "No such file"
-        raise IOError
-    else:
+    with open(qualimap_results_path, 'r') as fh:
         current_flag=None
         data={}
         cfp=re.compile('>>>>>>> ([^\n]+)')
@@ -492,5 +499,3 @@ def parse_genome_results(filename):
 #mean autosome coverage"
 #number of duplicates
         return data
-
-

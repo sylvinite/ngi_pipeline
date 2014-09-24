@@ -2,6 +2,7 @@ from __future__ import print_function
 
 import collections
 import contextlib
+import datetime
 import functools
 import os
 import shlex
@@ -46,10 +47,11 @@ def load_modules(modules_list):
         raise RuntimeError("".join(error_msgs))
 
 
-def execute_command_line(cl, stdout=None, stderr=None, cwd=None):
+def execute_command_line(cl, stdout=None, shell=False, stderr=None, cwd=None):
     """Execute a command line and return the subprocess.Popen object.
 
-    :param cl: Can be either a list or a string, if string, gets shlex.splitted
+    :param cl: Can be either a list or a string; if string, gets shlex.splitted
+    :param bool shell: value of shell to pass to subprocess
     :param file stdout: The filehandle destination for STDOUT (can be None)
     :param file stderr: The filehandle destination for STDERR (can be None)
     :param str cwd: The directory to be used as CWD for the process launched
@@ -62,14 +64,19 @@ def execute_command_line(cl, stdout=None, stderr=None, cwd=None):
     if cwd and not os.path.isdir(cwd):
         LOG.warn("CWD specified, \"{}\", is not a valid directory for "
                  "command \"{}\". Setting to None.".format(cwd, cl))
+        ## FIXME Better to just raise an exception
         cwd = None
-    if type(cl) is str:
+    if type(cl) is str and shell == False:
+        LOG.info("Executing command line: {}".format(cl))
         cl = shlex.split(cl)
-    LOG.info("Executing command line: {}".format(" ".join(cl)))
+    if type(cl) is list and shell == True:
+        cl = " ".join(cl)
+        LOG.info("Executing command line: {}".format(cl))
     try:
-        p_handle = subprocess.Popen(cl, stdout = stdout,
-                                        stderr = stderr,
-                                        cwd = cwd)
+        p_handle = subprocess.Popen(cl, stdout=stdout,
+                                        stderr=stderr,
+                                        cwd=cwd,
+                                        shell=shell)
         error_msg = None
     except OSError:
         error_msg = ("Cannot execute command; missing executable on the path? "
@@ -96,6 +103,7 @@ def do_rsync(src_files, dst_dir):
     #for f in src_files:
     #    open(os.path.join(dst_dir,os.path.basename(f)),"w").close()
     subprocess.check_call(cl)
+    #execute_command_line(cl)
     return [ os.path.join(dst_dir,os.path.basename(f)) for f in src_files ]
 
 
@@ -113,6 +121,31 @@ def safe_makedir(dname, mode=0777):
                 raise
     return dname
 
+def rotate_log(log_file_path, new_subdirectory="rotated_logs"):
+    if os.path.exists(log_file_path) and os.path.isfile(log_file_path):
+        file_name, extension = os.path.splitext(log_file_path)
+        current_datetime = datetime.datetime.now().strftime("%Y-%m-%d_%H:%M:%S:%f")
+        if new_subdirectory:
+            rotated_file_basepath = os.path.join(os.path.dirname(log_file_path),
+                                                 new_subdirectory)
+            safe_makedir(rotated_file_basepath)
+        else:
+            rotated_file_basepath = os.path.dirname(log_file_path)
+        rotate_file_path = os.path.join(rotated_file_basepath,
+                                        "{}-{}.rotated{}".format(file_name,
+                                                                 current_datetime,
+                                                                 extension))
+        ## TODO what exceptions can we get here? OSError, else?
+        try:
+            LOG.info('Attempting to rotate log file "{}" to '
+                     '"{}"...'.format(log_file_path, rotate_file_path))
+            ## FIXME check if the log file is currently open!!
+            ## This whole thing is a temporary fix anyway so I guess it's not important.
+            ## we won't be using files as logs in any event once we get ELK working.
+            shutil.move(log_file_path, rotate_file_path)
+        except OSError as e:
+            raise OSError('Could not rotate log file "{}" to "{}": '
+                          '{}'.format(log_file_path, rotate_file_path, e))
 
 @contextlib.contextmanager
 def curdir_tmpdir(remove=True):

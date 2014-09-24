@@ -167,7 +167,7 @@ def main(args):
         seqrun_url = charon_session.construct_charon_url("seqrun", rndProject["project_id"], "{}_{}".format(rndProject["project_id"], rndSample), "A")
         seqrun_dict = {'seqrunid': rnd_fc_name  ,
                'sequencing_status':'DONE' ,
-               'mean_autosomal_coverage' : 0
+#               'mean_autosomal_coverage' : 0
                 }
         charon_session.post(seqrun_url, json.dumps(seqrun_dict))
 

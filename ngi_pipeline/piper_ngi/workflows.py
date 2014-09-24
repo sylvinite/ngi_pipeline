@@ -8,7 +8,7 @@ from ngi_pipeline.log.loggers import minimal_logger
 
 LOG = minimal_logger(__name__)
 
-def return_cl_for_workflow(workflow_name, qscripts_dir_path, setup_xml_path, global_config_path, output_dir= None):
+def return_cl_for_workflow(workflow_name, qscripts_dir_path, setup_xml_path, global_config_path, output_dir=None):
     """Return an executable-ready Piper command line.
 
     :param str workflow_name: The name of the Piper workflow to be run.
@@ -29,7 +29,7 @@ def return_cl_for_workflow(workflow_name, qscripts_dir_path, setup_xml_path, glo
         LOG.error(error_msg)
         raise NotImplementedError(error_msg)
    ## TODO need tmp, logging directory
-    LOG.info("Building command line for workflow {}".format(workflow_name))
+    LOG.info('Building command line for workflow "{}"'.format(workflow_name))
     return workflow_function(qscripts_dir_path, setup_xml_path, global_config_path, output_dir)
 
 
@@ -58,7 +58,7 @@ def workflow_merge_process_variantCall(*args, **kwargs):
     :rtype: str
     """
     # Same command line but with one additional option
-    return workflow_dna_variantcalling(*args, **kwargs) +  " --merge_alignments --data_processing --variant_calling --analyze_separatly "
+    return workflow_dna_variantcalling(*args, **kwargs) +  " --merge_alignments --data_processing --variant_calling --analyze_separately "
 
 
 def workflow_dna_variantcalling(qscripts_dir_path, setup_xml_path, global_config_path, output_dir=None):
