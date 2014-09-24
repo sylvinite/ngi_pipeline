@@ -199,9 +199,15 @@ def setup_analysis_directory_structure(fc_dir, projects_to_analyze,
                     # This flowcell has not got library prep information in Charon and
                     # is probably an Uppsala project; if so, we can parse the libprep name
                     # from the SampleSheet.csv
-                    ## FIXME Need to get the SampleSheet location from the earlier parse_casava_dir fn
-                    #libprep_name = determine_library_prep_from_samplesheet()
-                    libprep_name = "A"
+                    if fc_dir_structure['samplesheet_path']:
+                        ## FIXME this is tricky -- need lane information for this
+                        libprep_name = determine_libprep_from_uppsala_samplesheet(
+                                            fc_dir_structure['samplesheet_path'])
+                    else:
+                        LOG.error('Project "{}" / sample "{}" has no libprep '
+                                  'information in Charon and it could not be '
+                                  'determined from the SampleSheet.csv. '
+                                  'Skipping project.'.format(project, sample))
                 libprep_object = sample_obj.add_libprep(name=libprep_name,
                                                         dirname=libprep_name)
                 libprep_dir = os.path.join(sample_dir, libprep_name)
@@ -283,17 +289,6 @@ def parse_casava_directory(fc_dir):
     projects = []
     fc_dir = os.path.abspath(fc_dir)
     LOG.info("Parsing flowcell directory \"{}\"...".format(fc_dir))
-    #parser = FlowcellRunMetricsParser(fc_dir)
-    #run_info = parser.parseRunInfo()
-    #runparams = parser.parseRunParameters()
-    #try:
-    #    #fc_name    = run_info['Flowcell']
-    #    #fc_date    = run_info['Date']
-    #    #fc_pos     = runparams['FCPosition']
-    #    fc_full_id = run_info['Id']
-    #except KeyError as e:
-    #    raise RuntimeError("Could not parse flowcell information {} "
-    #                       "from Flowcell RunMetrics in flowcell {}".format(e, fc_dir))
     fc_full_id = os.path.basename(fc_dir)
     # "Unaligned*" because SciLifeLab dirs are called "Unaligned_Xbp"
     # (where "X" is the index length) and there is also an "Unaligned" folder
@@ -303,6 +298,10 @@ def parse_casava_directory(fc_dir):
     for project_dir in glob.glob(project_dir_pattern):
         LOG.info("Parsing project directory \"{}\"...".format(project_dir.split(os.path.split(fc_dir)[0] + "/")[1]))
         project_samples = []
+        try:
+            samplesheet_path = os.path.abspath(glob.glob(os.path.join(project_dir, "SampleSheet.csv"))[0])
+        except IndexError:
+            samplesheet_path = None
         sample_dir_pattern = os.path.join(project_dir,"Sample_*")
         # e.g. <Project_dir>/Sample_P680_356F_dual56/
         for sample_dir in glob.glob(sample_dir_pattern):
@@ -321,4 +320,5 @@ def parse_casava_directory(fc_dir):
                          'samples': project_samples})
     return {'fc_dir'    : fc_dir,
             'fc_full_id': fc_full_id,
-            'projects': projects}
+            'projects': projects,
+            'samplesheet_path': samplesheet_path}
