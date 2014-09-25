@@ -114,13 +114,18 @@ def launch_analysis(level, projects_to_analyze, restart_failed_jobs=False,
             libprep = obj_dict.get("libprep")
             seqrun = obj_dict.get("seqrun")
 
-            if level == "seqrun":
-                charon_reported_status = charon_session.seqrun_get(project.project_id,
-                                                                   sample, libprep,
-                                                                   seqrun)['alignment_status']
-            else: # sample-level
-                charon_reported_status = charon_session.sample_get(project.project_id,
-                                                                   sample)['alignment_status']
+            try:
+                if level == "seqrun":
+                    charon_reported_status = charon_session.seqrun_get(project.project_id,
+                                                                       sample, libprep,
+                                                                       seqrun)['status']
+                else: # sample-level
+                    charon_reported_status = charon_session.sample_get(project.project_id,
+                                                                       sample)['status']
+            except (CharonError, KeyError) as e:
+                LOG.error('Unable to get required information from Charon for '
+                          'sample "{}" / project "{}" -- skipping: {}'.format(sample, project, e))
+                continue
             # Check Charon to ensure this hasn't already been processed
             if charon_reported_status in ("RUNNING", "DONE"):
                 LOG.info('Charon reports seqrun analysis for project "{}" / sample "{}" '
@@ -160,6 +165,7 @@ def launch_analysis(level, projects_to_analyze, restart_failed_jobs=False,
                                                    sample=sample)
 
             except Exception as e:
+                raise
                 LOG.error('Cannot process project "{}" / sample "{}" / '
                           'libprep "{}" / seqrun "{}" / workflow '
                           '"{}" : {}'.format(project, sample, libprep,

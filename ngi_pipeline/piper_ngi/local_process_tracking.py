@@ -296,7 +296,6 @@ def record_process_sample(project, sample, workflow_subtask, analysis_module_nam
                           analysis_dir, pid, config=None):
     LOG.info('Recording process id "{}" for project "{}", sample "{}", '
              'workflow "{}"'.format(pid, project, sample, workflow_subtask))
-    raise NotImplementedError
     session = get_db_session()
     seqrun_db_obj = SampleAnalysis(project_id=project.project_id,
                                    project_name=project.name,
@@ -310,7 +309,7 @@ def record_process_sample(project, sample, workflow_subtask, analysis_module_nam
     session.add(seqrun_db_obj)
     session.commit()
     LOG.info('Successfully recorded process id "{}" for project "{}", sample "{}", '
-             'workflow "{}"'.format(pid, project, sample, libprep, seqrun, workflow_subtask))
+             'workflow "{}"'.format(pid, project, sample, workflow_subtask))
 
 
 # Do we need this function?

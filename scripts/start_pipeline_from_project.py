@@ -9,7 +9,8 @@ import argparse
 import os
 
 from ngi_pipeline.utils.filesystem import recreate_project_from_filesystem
-from ngi_pipeline.conductor.launchers import launch_analysis_for_seqruns
+from ngi_pipeline.conductor.launchers import launch_analysis_for_seqruns, \
+                                             launch_analysis_for_samples
 
 
 if __name__ == '__main__':

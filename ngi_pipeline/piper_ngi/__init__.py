@@ -36,7 +36,7 @@ def get_subtasks_for_level(level):
     if level == "seqrun":
         return ("qc", "dna_alignonly")
     elif level == "sample":
-        return ("merge_process_variantcall")
+        return ("merge_process_variantcall",)
     else:
         raise NotImplementedError('The level "{}" has no associated subtasks.')
 
@@ -93,7 +93,7 @@ def analyze_seqrun(project, sample, libprep, seqrun, config=None, config_file_pa
                     ## FIXME fix this
                     LOG.error("<Could not record ...>")
                     continue
-            except RuntimeError as e:
+            except (NotImplementedError, RuntimeError) as e:
                 error_msg = ('Processing project "{}" / sample "{}" / libprep "{}" / '
                              'seqrun "{}" failed: {}'.format(project, sample, libprep, seqrun,
                                                            e.__repr__()))
@@ -117,7 +117,7 @@ def analyze_sample(project, sample, config=None, config_file_path=None):
     sample_total_autosomal_coverage = charon_session.sample_get(project.project_id,
                                      sample.name).get('total_autosomal_coverage')
     if sample_total_autosomal_coverage > 20.0:
-        LOG.info('Sample "{}" in project "{}" is ready for processing.'.format(sample))
+        LOG.info('Sample "{}" in project "{}" is ready for processing.'.format(sample, project))
         for workflow_subtask in get_subtasks_for_level(level="sample"):
             if not is_sample_analysis_running_local(workflow_subtask=workflow_subtask,
                                                     project_id=project.project_id,
@@ -146,13 +146,13 @@ def analyze_sample(project, sample, config=None, config_file_path=None):
                     except CharonError as e:
                         LOG.error("<Could not record ...>")
                         continue
-                except RuntimeError as e:
-                    error_msg = ('Processing project "{}" / sample "{}" / libprep "{}" / '
-                                 'seqrun "{}" failed: {}'.format(project, sample, libprep, seqrun,
-                                                               e.__repr__()))
+                except (NotImplementedError, RuntimeError) as e:
+                    error_msg = ('Processing project "{}" / sample "{}" failed: '
+                                 '{}'.format(project, sample, e.__repr__()))
                     LOG.error(error_msg)
     else:
-        LOG.info('Sample "{}" in project "{}" is not yet ready for processing.'.format(sample))
+        LOG.info('Sample "{}" in project "{}" is not yet ready for '
+                 'processing.'.format(sample, project))
 
 
 def launch_piper_job(command_line, project, log_file_path=None):
