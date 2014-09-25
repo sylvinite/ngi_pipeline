@@ -17,7 +17,6 @@ STHLM_UUSNP_SEQRUN_RE = re.compile(r'(?P<project_name>\w\.\w+_\d+_\d+|\w{2}-\d+)
 STHLM_UUSNP_SAMPLE_RE = re.compile(r'(?P<project_name>\w\.\w+_\d+_\d+|\w{2}-\d+)_(?P<sample_id>[\w-]+)')
 
 
-
 def determine_library_prep_from_fcid(project_id, sample_name, fcid):
     """Use the information in the database to get the library prep id
     from the project name, sample name, and flowcell id.
@@ -58,6 +57,22 @@ def determine_library_prep_from_fcid(project_id, sample_name, fcid):
                              '/ fcid "{}"'.format(project_id, sample_name, fcid))
         else:
             raise
+
+
+def determine_libprep_from_uppsala_samplesheet(samplesheet_path):
+    samplesheet = parse_samplesheet(samplesheet_path)
+    # Need to figure out which line represents this particular sample
+    ## FIXME
+    return "A"
+
+
+
+@memoized
+def parse_samplesheet(samplesheet_path):
+    """Parses an Illumina SampleSheet.csv and returns a list of dicts
+    """
+    with open(samplesheet_path, 'rU') as f:
+        return [ row for row in csv.DictReader(f, dialect="excel") ]
 
 
 def find_fastq_read_pairs_from_dir(directory):

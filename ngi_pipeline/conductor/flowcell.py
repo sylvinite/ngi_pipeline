@@ -9,13 +9,13 @@ import re
 import sys
 
 from ngi_pipeline.conductor.classes import NGIProject
-from ngi_pipeline.conductor.launchers import launch_analysis_for_flowcells
+from ngi_pipeline.conductor.launchers import launch_analysis_for_seqruns
+from ngi_pipeline.database.classes import CharonError
 from ngi_pipeline.database.communicate import get_project_id_from_name
 from ngi_pipeline.log.loggers import minimal_logger
 from ngi_pipeline.utils.classes import with_ngi_config
 from ngi_pipeline.utils.filesystem import do_rsync, safe_makedir
-from ngi_pipeline.utils.parsers import FlowcellRunMetricsParser, \
-                                       determine_library_prep_from_fcid
+from ngi_pipeline.utils.parsers import determine_library_prep_from_fcid
 
 LOG = minimal_logger(__name__)
 
@@ -94,7 +94,7 @@ def process_demultiplexed_flowcells(demux_fcid_dirs, restrict_to_projects=None,
     # only at the flowcell level. Another intermittent check determines if
     # conditions are met for sample-level analysis to proceed and launches
     # that if so.
-    launch_analysis_for_flowcells(projects_to_analyze)
+    launch_analysis_for_seqruns(projects_to_analyze)
 
 
 ### FIXME rework so that the creation of the NGIObjects and the actual creation of files are different functions?
@@ -150,7 +150,7 @@ def setup_analysis_directory_structure(fc_dir, projects_to_analyze,
         try:
             # This requires Charon access -- maps e.g. "Y.Mom_14_01" to "P123"
             project_id = get_project_id_from_name(project_name)
-        except (RuntimeError, ValueError) as e:
+        except (CharonError, RuntimeError, ValueError) as e:
             error_msg = ('Cannot proceed with project "{}" due to '
                          'Charon-related error: {}'.format(project_name, e))
             LOG.error(error_msg)
@@ -161,7 +161,7 @@ def setup_analysis_directory_structure(fc_dir, projects_to_analyze,
         project_dir = os.path.join(analysis_top_dir, "DATA", project_name)
         if create_files:
             safe_makedir(project_dir, 0770)
-            safe_makedir(os.path.join(project_dir, "log"), 0770)
+            #safe_makedir(os.path.join(project_dir, "logs"), 0770)
         try:
             project_obj = projects_to_analyze[project_dir]
         except KeyError:
@@ -193,14 +193,21 @@ def setup_analysis_directory_structure(fc_dir, projects_to_analyze,
             for fq_file in fastq_files:
                 # Requires Charon access
                 try:
+                    ## TODO this would be better done through the SampleSheet or something
                     libprep_name = determine_library_prep_from_fcid(project_id, sample_name, fc_full_id)
                 except ValueError:
                     # This flowcell has not got library prep information in Charon and
                     # is probably an Uppsala project; if so, we can parse the libprep name
                     # from the SampleSheet.csv
-                    ## FIXME Need to get the SampleSheet location from the earlier parse_casava_dir fn
-                    #libprep_name = determine_library_prep_from_samplesheet()
-                    libprep_name = "A"
+                    if fc_dir_structure['samplesheet_path']:
+                        ## FIXME this is tricky -- need lane information for this
+                        libprep_name = determine_libprep_from_uppsala_samplesheet(
+                                            fc_dir_structure['samplesheet_path'])
+                    else:
+                        LOG.error('Project "{}" / sample "{}" has no libprep '
+                                  'information in Charon and it could not be '
+                                  'determined from the SampleSheet.csv. '
+                                  'Skipping project.'.format(project, sample))
                 libprep_object = sample_obj.add_libprep(name=libprep_name,
                                                         dirname=libprep_name)
                 libprep_dir = os.path.join(sample_dir, libprep_name)
@@ -278,22 +285,11 @@ def parse_casava_directory(fc_dir):
     :rtype: dict
 
     :raises RuntimeError: If the fc_dir does not exist or cannot be accessed,
-                          or if Flowcell RunMetrics could not be parsed properly.
     """
     projects = []
     fc_dir = os.path.abspath(fc_dir)
     LOG.info("Parsing flowcell directory \"{}\"...".format(fc_dir))
-    parser = FlowcellRunMetricsParser(fc_dir)
-    run_info = parser.parseRunInfo()
-    #runparams = parser.parseRunParameters()
-    try:
-        #fc_name    = run_info['Flowcell']
-        #fc_date    = run_info['Date']
-        #fc_pos     = runparams['FCPosition']
-        fc_full_id = run_info['Id']
-    except KeyError as e:
-        raise RuntimeError("Could not parse flowcell information {} "
-                           "from Flowcell RunMetrics in flowcell {}".format(e, fc_dir))
+    fc_full_id = os.path.basename(fc_dir)
     # "Unaligned*" because SciLifeLab dirs are called "Unaligned_Xbp"
     # (where "X" is the index length) and there is also an "Unaligned" folder
     unaligned_dir_pattern = os.path.join(fc_dir,"Unaligned*")
@@ -302,6 +298,10 @@ def parse_casava_directory(fc_dir):
     for project_dir in glob.glob(project_dir_pattern):
         LOG.info("Parsing project directory \"{}\"...".format(project_dir.split(os.path.split(fc_dir)[0] + "/")[1]))
         project_samples = []
+        try:
+            samplesheet_path = os.path.abspath(glob.glob(os.path.join(project_dir, "SampleSheet.csv"))[0])
+        except IndexError:
+            samplesheet_path = None
         sample_dir_pattern = os.path.join(project_dir,"Sample_*")
         # e.g. <Project_dir>/Sample_P680_356F_dual56/
         for sample_dir in glob.glob(sample_dir_pattern):
@@ -320,4 +320,5 @@ def parse_casava_directory(fc_dir):
                          'samples': project_samples})
     return {'fc_dir'    : fc_dir,
             'fc_full_id': fc_full_id,
-            'projects': projects}
+            'projects': projects,
+            'samplesheet_path': samplesheet_path}

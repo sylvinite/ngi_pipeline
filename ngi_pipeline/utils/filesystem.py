@@ -4,14 +4,20 @@ import collections
 import contextlib
 import datetime
 import functools
+import glob
 import os
+import re
 import shlex
 import shutil
 import stat
 import subprocess
 import tempfile
 
+from ngi_pipeline.conductor.classes import NGIProject
+from ngi_pipeline.database.classes import CharonError
+from ngi_pipeline.database.communicate import get_project_id_from_name
 from ngi_pipeline.log.loggers import minimal_logger
+from requests.exceptions import Timeout
 
 LOG = minimal_logger(__name__)
 
@@ -123,14 +129,16 @@ def safe_makedir(dname, mode=0777):
 
 def rotate_log(log_file_path, new_subdirectory="rotated_logs"):
     if os.path.exists(log_file_path) and os.path.isfile(log_file_path):
-        file_name, extension = os.path.splitext(log_file_path)
+        file_path, extension = os.path.splitext(log_file_path)
+        file_name = os.path.basename(file_path)
         current_datetime = datetime.datetime.now().strftime("%Y-%m-%d_%H:%M:%S:%f")
         if new_subdirectory:
             rotated_file_basepath = os.path.join(os.path.dirname(log_file_path),
                                                  new_subdirectory)
-            safe_makedir(rotated_file_basepath)
         else:
             rotated_file_basepath = os.path.dirname(log_file_path)
+        safe_makedir(rotated_file_basepath)
+
         rotate_file_path = os.path.join(rotated_file_basepath,
                                         "{}-{}.rotated{}".format(file_name,
                                                                  current_datetime,
@@ -176,3 +184,78 @@ def chdir(new_dir):
         yield
     finally:
         os.chdir(cur_dir)
+
+def recreate_project_from_filesystem(project_dir,
+                                     restrict_to_samples=None,
+                                     restrict_to_libpreps=None,
+                                     restrict_to_seqruns=None):
+    """Recreates the full project/sample/libprep/seqrun set of
+    NGIObjects using the directory tree structure."""
+
+    if not restrict_to_samples: restrict_to_samples = []
+    if not restrict_to_libpreps: restrict_to_libpreps = []
+    if not restrict_to_seqruns: restrict_to_seqruns = []
+
+    base_path, project_name = os.path.split(project_dir)
+    if not project_name:
+        base_path, project_name = os.path.split(base_path)
+    LOG.info('Setting up project "{}"'.format(project_name))
+    try:
+        # This requires Charon access -- maps e.g. "Y.Mom_14_01" to "P123"
+        project_id = get_project_id_from_name(project_name)
+    # Should handle requests.exceptions.Timeout in Charon classes
+    except (CharonError, ValueError, Timeout) as e:
+        error_msg = ('Cannot proceed with project "{}" due to '
+                     'Charon-related error: {}'.format(project_name, e))
+        raise CharonError(error_msg)
+    project_obj = NGIProject(name=project_name,
+                             dirname=project_name,
+                             project_id=project_id,
+                             base_path=base_path)
+
+    samples_pattern = os.path.join(project_dir, "*")
+    samples = filter(os.path.isdir, glob.glob(samples_pattern))
+    if not samples:
+        LOG.warn('No samples found for project "{}"'.format(project_obj))
+    for sample_dir in samples:
+        sample_name = os.path.basename(sample_dir)
+        if restrict_to_samples and sample_name not in restrict_to_samples:
+            LOG.debug('Skipping sample "{}": not in specified samples "{}"'.format(sample_name, ', '.join(restrict_to_samples)))
+            continue
+        LOG.info('Setting up sample "{}"'.format(sample_name))
+        sample_obj = project_obj.add_sample(name=sample_name, dirname=sample_name)
+
+        libpreps_pattern = os.path.join(sample_dir, "*")
+        libpreps = filter(os.path.isdir, glob.glob(libpreps_pattern))
+        if not libpreps:
+            LOG.warn('No libpreps found for sample "{}"'.format(sample_obj))
+        for libprep_dir in libpreps:
+            libprep_name = os.path.basename(libprep_dir)
+            if restrict_to_libpreps and libprep_name not in restrict_to_libpreps:
+                LOG.debug('Skipping libprep "{}": not in specified libpreps "{}"'.format(libprep_name, ', '.join(restrict_to_libpreps)))
+                continue
+            LOG.info('Setting up libprep "{}"'.format(libprep_name))
+            libprep_obj = sample_obj.add_libprep(name=libprep_name,
+                                                    dirname=libprep_name)
+
+            seqruns_pattern = os.path.join(libprep_dir, "*_*_*_*")
+            seqruns = filter(os.path.isdir, glob.glob(seqruns_pattern))
+            if not seqruns:
+                LOG.warn('No seqruns found for libprep "{}"'.format(libprep_obj))
+            for seqrun_dir in seqruns:
+                seqrun_name = os.path.basename(seqrun_dir)
+                if restrict_to_seqruns and seqrun_name not in restrict_to_seqruns:
+                    LOG.debug('Skipping seqrun "{}": not in specified seqruns "{}"'.format(seqrun_name, ', '.join(restrict_to_seqruns)))
+                    continue
+                LOG.info('Setting up seqrun "{}"'.format(seqrun_name))
+                seqrun_obj = libprep_obj.add_seqrun(name=seqrun_name,
+                                                          dirname=seqrun_name)
+                pattern = re.compile(".*\.(fastq|fq)(\.gz|\.gzip|\.bz2)?$")
+                all_files = glob.glob(os.path.join(seqrun_dir, "*"))
+                ## TODO check this
+                fastq_files = filter(os.path.isfile, filter(pattern.match, all_files))
+                for fq_file in fastq_files:
+                    fq_name = os.path.basename(fq_file)
+                    LOG.info('Adding fastq file "{}" to seqrun "{}"'.format(fq_name, seqrun_obj))
+                    seqrun_obj.add_fastq_files(fq_name)
+    return project_obj

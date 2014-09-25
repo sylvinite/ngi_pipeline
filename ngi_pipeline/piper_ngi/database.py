@@ -76,13 +76,12 @@ class SeqrunAnalysis(Base):
     sample_id = Column(String(50))
     libprep_id = Column(String(50))
     seqrun_id = Column(String(100))
+    ## TODO re-enable the lane part
     # I suppose one day we might have 16 lanes
     #lane_num = Column(Integer)
     workflow = Column(String(50))
     engine = Column(String(50))
     analysis_dir = Column(String(100))
-    # We can't use the process id because some processes will not be tracked this way.
-    # --> Let's say this is just for Piper at the moment.
     process_id = Column(Integer, primary_key=True, unique=True)
 
 
@@ -104,8 +103,11 @@ class SampleAnalysis(Base):
 
     project_id = Column(String(50))
     project_name = Column(String(50))
+    project_base_path = Column(String(100))
     sample_id = Column(String(50), primary_key=True)
+    workflow=Column(String(50))
     engine = Column(String(50))
+    analysis_dir = Column(String(100))
     process_id = Column(Integer, unique=True)
     ## Could introduce a ForeignKey to seqrun analyses here
     #seqruns = relationship("SeqrunAnalysis", order_by="SeqrunAnalysis.process_id", backref="sampleanalysis")

@@ -1,4 +1,4 @@
-from ngi_pipeline.database.classes import CharonSession
+from ngi_pipeline.database.classes import CharonSession, CharonError
 
 from ngi_pipeline.log.loggers import minimal_logger
 
@@ -20,10 +20,10 @@ def get_project_id_from_name(project_name):
     try:
         project_id = charon_session.project_get(project_name)
     except CharonError as e:
-        if e.return_code == 404:
+        if e.status_code == 404:
             raise ValueError('Project "{}" missing from database: {}'.format(project_name, e))
         else:
-            raise RuntimeError(e)
+            raise
     try:
         return project_id['projectid']
     except KeyError:
@@ -81,28 +81,3 @@ def rebuild_project_obj_from_Charon(analysis_top_dir, project_name, project_id):
                 seqrun_object = libprep_object.add_seqrun(name=fc_short_run_id,
                                                           dirname=fc_short_run_id)
     return project_obj
-
-
-def get_workflow_for_project(project_id):
-    """Get the workflow that should be run for this project from the database.
-
-    :param str project_id: The id_name of the project P\d*
-
-    :returns: The names of the workflow that should be run.
-    :rtype: str
-    :raises ValueError: If the project cannot be found in the database or if the project lacks a pipeline/workflow value
-    :raises CharonError: If there is some other database problem
-    """
-    charon_session = CharonSession()
-    try:
-        project_dict = charon_session.project_get(project_id)
-    except CharonError as e:
-        if e.status_code == 404:
-            raise ValueError('Project "{}" not found: {}'.format(project_id, e))
-        else:
-            error_msg = ('Error accessing database: could not get project {}: {}'.format(project_id, e))
-            raise RuntimeError(error_msg)
-    if "pipeline" not in project_dict:
-        error_msg = ('Project {} has no associated pipeline/workflow to execute'.format(project_id))
-        raise RuntimeError(error_msg)
-    return project_dict["pipeline"]
