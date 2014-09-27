@@ -148,19 +148,19 @@ def find_fastq_read_pairs(file_list):
 
 
 def parse_lane_from_filename(sample_basename):
-    """Project id, sample id, and lane are pulled from the standard filename format,
-     which is:
-       <lane_num>_<date>_<fcid>_<project>_<sample_num>_<read>.fastq[.gz]
-       e.g.
-       1_140220_AH8AMJADXX_P673_101_1.fastq.gz
-       (SciLifeLab Sthlm format)
-    or
+    """Lane number is parsed from the standard filename format,
+     which is one of:
        <sample-name>_<index>_<lane>_<read>_<group>.fastq.gz
        e.g.
        P567_102_AAAAAA_L001_R1_001.fastq.gz
        (Standard Illumina format)
+    or
+       <lane_num>_<date>_<fcid>_<project>_<sample_num>_<read>.fastq[.gz]
+       e.g.
+       1_140220_AH8AMJADXX_P673_101_1.fastq.gz
+       (SciLifeLab Sthlm format, obsolete)
 
-    returns a tuple of (project_id, sample_id, lane) or raises a ValueError if there is no match
+    returns a lane as an int or raises a ValueError if there is no match
     (which shouldn't generally happen and probably indicates a larger issue).
 
     :param str sample_basename: The name of the file from which to pull the project id
@@ -178,14 +178,13 @@ def parse_lane_from_filename(sample_basename):
         #return match.group('project'), match.group('sample'), match.group('lane')
         return int(match.group('lane'))
     else:
-        error_msg = ("Error: filename didn't match conventions, "
-                     "couldn't find lane number for sample "
-                     "\"{}\"".format(sample_basename))
+        error_msg = ('Error: filename didn\'t match conventions, '
+                     'couldn\'t find lane number for sample '
+                     '"{}"'.format(sample_basename))
         LOG.error(error_msg)
         raise ValueError(error_msg)
 
 
-## TODO we can probably remove the 2-dir search soon
 @memoized
 def get_flowcell_id_from_dirtree(path):
     """Given the path to a file, tries to work out the flowcell ID.

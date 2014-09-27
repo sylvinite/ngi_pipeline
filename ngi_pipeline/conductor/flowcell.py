@@ -15,7 +15,8 @@ from ngi_pipeline.database.communicate import get_project_id_from_name
 from ngi_pipeline.log.loggers import minimal_logger
 from ngi_pipeline.utils.classes import with_ngi_config
 from ngi_pipeline.utils.filesystem import do_rsync, safe_makedir
-from ngi_pipeline.utils.parsers import determine_library_prep_from_fcid
+from ngi_pipeline.utils.parsers import determine_library_prep_from_fcid, \
+                                       parse_lane_from_filename
 
 LOG = minimal_logger(__name__)
 
@@ -201,8 +202,10 @@ def setup_analysis_directory_structure(fc_dir, projects_to_analyze,
                     # from the SampleSheet.csv
                     if fc_dir_structure['samplesheet_path']:
                         ## FIXME this is tricky -- need lane information for this
+                        lane_num = parse_lane_from_filename(fq_file)
                         libprep_name = determine_libprep_from_uppsala_samplesheet(
-                                            fc_dir_structure['samplesheet_path'])
+                                            fc_dir_structure['samplesheet_path'],
+                                            lane_num)
                     else:
                         LOG.error('Project "{}" / sample "{}" has no libprep '
                                   'information in Charon and it could not be '
@@ -226,8 +229,6 @@ def setup_analysis_directory_structure(fc_dir, projects_to_analyze,
                                               project['project_dir'],
                                               sample['sample_dir'])
                 for libprep_obj in sample_obj:
-                #this function works at run_level, so I have to process a single run
-                #it might happen that in a run we have multiple lib preps for the same sample
                     for seqrun_obj in libprep_obj:
                         src_fastq_files = [os.path.join(src_sample_dir, fastq_file) for
                                            fastq_file in seqrun_obj.fastq_files]
@@ -284,7 +285,7 @@ def parse_casava_directory(fc_dir):
     :returns: A dict of information about the flowcell, including project/sample info
     :rtype: dict
 
-    :raises RuntimeError: If the fc_dir does not exist or cannot be accessed,
+    :raises RuntimeError: If the fc_dir does not exist or cannot be accessed
     """
     projects = []
     fc_dir = os.path.abspath(fc_dir)
