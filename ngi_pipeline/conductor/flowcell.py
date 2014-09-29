@@ -35,6 +35,7 @@ def process_demultiplexed_flowcell(demux_fcid_dir_path, restrict_to_projects=Non
                                      restricted to these. Optional.
     :param str config_file_path: The path to the NGI configuration file; optional.
     """
+    
     ## FIXME
     ## Why is it that we need to restrict this to a single flowcell?
     ## Does it break otherwise?
