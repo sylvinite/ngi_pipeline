@@ -120,7 +120,7 @@ def launch_analysis(level, projects_to_analyze, restart_failed_jobs=False,
                 if level == "seqrun":
                     charon_reported_status = charon_session.seqrun_get(project.project_id,
                                                                        sample, libprep,
-                                                                       seqrun)['status']
+                                                                       seqrun)['alignment_status']
                 else: # sample-level
                     charon_reported_status = charon_session.sample_get(project.project_id,
                                                                        sample)['status']
