@@ -1,4 +1,5 @@
 import collections
+import csv
 import glob
 import os
 import re
@@ -60,23 +61,32 @@ def determine_library_prep_from_fcid(project_id, sample_name, fcid):
 
 
 def determine_libprep_from_uppsala_samplesheet(samplesheet_path, project_id, sample_id, seqrun_id, lane_num):
-    ## TODO decide which Exceptions to throw
     samplesheet = parse_samplesheet(samplesheet_path)
+    fcid = seqrun_id.split("_")[3][1:]
     for row in samplesheet:
-        ss_project_id = samplesheet["SampleProject"]
-        ss_sample_id = samplesheet["SampleID"]
-        ss_fcid = samplesheet["FCID"]
-        ss_lane_num = samplesheet["Lane"]
+        ss_project_id = row["SampleProject"]
+        ss_sample_id = row["SampleID"]
+        ss_fcid = row["FCID"]
+        ss_lane_num = int(row["Lane"])
 
-        ## TODO check this
-        fcid = seqrun_id.split("_")[3]
-
-        if project_id == ss_sample_id and \
-           sample_id == ss_project_id and \
+        if project_id == ss_project_id and \
+           sample_id == ss_sample_id and \
            fcid == ss_fcid and \
            lane_num == ss_lane_num:
                # Resembles 'LIBRARY_NAME:SX398_NA11993_Nano'
-               return samplesheet["Description"].split(":")[1]
+               try:
+                   return row["Description"].split(":")[1]
+               except IndexError:
+                   error_msg = ('Malformed description in "{}"; cannot get '
+                                'libprep information'.format(samplesheet_path))
+                   LOG.warn(error_msg)
+                   raise ValueError(error_msg)
+    error_msg = ('No match found in "{}" for project "{}" / sample "{}" / '
+                 'seqrun "{}" / lane number "{}"'.format(samplesheet_path,
+                                                         project_id, sample_id,
+                                                         seqrun_id, lane_num))
+    LOG.warn(error_msg)
+    raise ValueErorr(error_msg)
 
 
 @memoized
