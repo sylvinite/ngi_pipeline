@@ -59,12 +59,24 @@ def determine_library_prep_from_fcid(project_id, sample_name, fcid):
             raise
 
 
-def determine_libprep_from_uppsala_samplesheet(samplesheet_path):
+def determine_libprep_from_uppsala_samplesheet(samplesheet_path, project_id, sample_id, seqrun_id, lane_num):
+    ## TODO decide which Exceptions to throw
     samplesheet = parse_samplesheet(samplesheet_path)
-    # Need to figure out which line represents this particular sample
-    ## FIXME
-    return "A"
+    for row in samplesheet:
+        ss_project_id = samplesheet["SampleProject"]
+        ss_sample_id = samplesheet["SampleID"]
+        ss_fcid = samplesheet["FCID"]
+        ss_lane_num = samplesheet["Lane"]
 
+        ## TODO check this
+        fcid = seqrun_id.split("_")[3]
+
+        if project_id == ss_sample_id and \
+           sample_id == ss_project_id and \
+           fcid == ss_fcid and \
+           lane_num == ss_lane_num:
+               # Resembles 'LIBRARY_NAME:SX398_NA11993_Nano'
+               return samplesheet["Description"].split(":")[1]
 
 
 @memoized
