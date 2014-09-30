@@ -14,7 +14,7 @@ from ngi_pipeline.database.classes import CharonError
 from ngi_pipeline.database.communicate import get_project_id_from_name
 from ngi_pipeline.log.loggers import minimal_logger
 from ngi_pipeline.utils.classes import with_ngi_config
-from ngi_pipeline.utils.filesystem import do_rsync, safe_makedir
+from ngi_pipeline.utils.filesystem import do_rsync, do_symlink, safe_makedir
 from ngi_pipeline.utils.parsers import determine_library_prep_from_fcid, \
                                        parse_lane_from_filename
 
@@ -239,7 +239,8 @@ def setup_analysis_directory_structure(fc_dir, projects_to_analyze,
                         LOG.info("Copying fastq files from {} to {}...".format(src_sample_dir, seqrun_dir))
                         #try:
                         ## FIXME this exception should be handled somehow when rsync fails
-                        do_rsync(src_fastq_files, seqrun_dir)
+                        do_symlink(src_fastq_files, seqrun_dir)
+                        #do_rsync(src_fastq_files, seqrun_dir)
                         #except subprocess.CalledProcessError as e:
                         #    ## TODO Here the rsync has failed
                         #    ##      should we delete this libprep from the sample object in this case?

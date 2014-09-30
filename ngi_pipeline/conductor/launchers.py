@@ -108,8 +108,6 @@ def launch_analysis(level, projects_to_analyze, restart_failed_jobs=False,
                                                    "libprep": libprep,
                                                    "seqrun": seqrun})
         # Still weird and not so great
-        import pdb
-        pdb.set_trace()
         for obj_dict in objects_to_process:
             project = obj_dict.get("project")
             sample = obj_dict.get("sample")
@@ -125,9 +123,18 @@ def launch_analysis(level, projects_to_analyze, restart_failed_jobs=False,
                     charon_reported_status = charon_session.sample_get(project.project_id,
                                                                        sample)['status']
             except (CharonError, KeyError) as e:
-                LOG.error('Unable to get required information from Charon for '
-                          'sample "{}" / project "{}" -- skipping: {}'.format(sample, project, e))
-                continue
+                LOG.warn('Unable to get required information from Charon for '
+                          'sample "{}" / project "{}" -- forcing it to new: {}'.format(sample, project, e))
+                if level == "seqrun":
+                    charon_session.seqrun_update(project.project_id, sample.name, libprep.name, seqrun.name, alignment_status="NEW")
+                    charon_reported_status = charon_session.seqrun_get(project.project_id,
+                                                                       sample, libprep,
+                                                                       seqrun)['alignment_status']
+                else:
+                    charon_session.sample_update(project.project_id, sample.name, status="NEW")
+                    charon_reported_status = charon_session.sample_get(project.project_id,
+                                                                       sample)['status']
+            
             # Check Charon to ensure this hasn't already been processed
             if charon_reported_status in ("RUNNING", "DONE"):
                 LOG.info('Charon reports seqrun analysis for project "{}" / sample "{}" '

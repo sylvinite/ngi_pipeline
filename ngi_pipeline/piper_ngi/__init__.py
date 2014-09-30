@@ -34,9 +34,9 @@ def get_subtasks_for_level(level):
     :rtype: tuple
     """
     if level == "seqrun":
-        return ("qc", "dna_alignonly")
+        return ["dna_alignonly"] #"qc",
     elif level == "sample":
-        return ("merge_process_variantcall",)
+        return ["merge_process_variantcall"]
     else:
         raise NotImplementedError('The level "{}" has no associated subtasks.')
 
@@ -52,6 +52,7 @@ def analyze_seqrun(project, sample, libprep, seqrun, config=None, config_file_pa
     :param dict config: The parsed configuration file (optional)
     :param str config_file_path: The path to the configuration file (optional)
     """
+
     modules_to_load = ["java/sun_jdk1.7.0_25", "R/2.15.0"]
     load_modules(modules_to_load)
     for workflow_subtask in get_subtasks_for_level(level="seqrun"):
@@ -116,7 +117,7 @@ def analyze_sample(project, sample, config=None, config_file_path=None):
     # If these conditions become more complex we can create a function for this
     sample_total_autosomal_coverage = charon_session.sample_get(project.project_id,
                                      sample.name).get('total_autosomal_coverage')
-    if sample_total_autosomal_coverage > 20.0:
+    if sample_total_autosomal_coverage > 29.0:
         LOG.info('Sample "{}" in project "{}" is ready for processing.'.format(sample, project))
         for workflow_subtask in get_subtasks_for_level(level="sample"):
             if not is_sample_analysis_running_local(workflow_subtask=workflow_subtask,

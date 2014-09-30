@@ -19,4 +19,3 @@ if __name__ == '__main__':
     process_demultiplexed_flowcell(args_ns.demux_fcid_dir,
                                    args_ns.restrict_to_projects,
                                    args_ns.restrict_to_samples)
-    main(**args_dict)
