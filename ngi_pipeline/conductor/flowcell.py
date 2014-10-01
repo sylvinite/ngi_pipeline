@@ -12,6 +12,7 @@ from ngi_pipeline.conductor.classes import NGIProject
 from ngi_pipeline.conductor.launchers import launch_analysis_for_seqruns
 from ngi_pipeline.database.classes import CharonSession, CharonError
 from ngi_pipeline.database.communicate import get_project_id_from_name
+from ngi_pipeline.database.filesystem import create_charon_entries_from_project
 from ngi_pipeline.log.loggers import minimal_logger
 from ngi_pipeline.utils.classes import with_ngi_config
 from ngi_pipeline.utils.filesystem import do_rsync, safe_makedir
@@ -92,6 +93,9 @@ def process_demultiplexed_flowcells(demux_fcid_dirs, restrict_to_projects=None,
     else:
         # Don't need the dict functionality anymore; revert to list
         projects_to_analyze = projects_to_analyze.values()
+    for project in projects_to_analyze:
+        LOG.info('Creating Charon records for project "{}" if they are missing'.format(project))
+        create_charon_entries_from_project(project)
     # The automatic analysis that occurs after flowcells are delivered is
     # only at the flowcell level. Another intermittent check determines if
     # conditions are met for sample-level analysis to proceed and launches
@@ -151,27 +155,17 @@ def setup_analysis_directory_structure(fc_dir, projects_to_analyze,
             continue
         try:
             # This requires Charon access -- maps e.g. "Y.Mom_14_01" to "P123"
-            project_id = get_project_id_from_name(project_name)
+            project_id = get_project_id_from_same(project_name)
         except (CharonError, RuntimeError, ValueError) as e:
             LOG.warn('Could not retrieve project id from Charon (record missing?). '
-                     'Creating new record in Charon with project id "{}"'.format(project_name))
-
+                     'Using project name ("{}") as project id'.format(project_name))
             project_id = project_name
-            charon_session = CharonSession()
-            ## Later we'll need to pull e.g. pipeline and bpa from somewhere else
-            ## but this will work for the moment
-            charon_session.project_create(projectid=project_name,
-                                          name=project_name,
-                                          status="NEW",
-                                          pipeline="NGI",
-                                          bpa="IGN")
         LOG.info("Setting up project {}".format(project.get("project_name")))
         # Create a project directory if it doesn't already exist, including
         # intervening "DATA" directory
         project_dir = os.path.join(analysis_top_dir, "DATA", project_name)
         if create_files:
             safe_makedir(project_dir, 0770)
-            #safe_makedir(os.path.join(project_dir, "logs"), 0770)
         try:
             project_obj = projects_to_analyze[project_dir]
         except KeyError:
@@ -225,7 +219,8 @@ def setup_analysis_directory_structure(fc_dir, projects_to_analyze,
                                   'has no libprep information in Charon and it '
                                   'could not be determined from the SampleSheet.csv. '
                                   'Skipping.'.format(project_name,
-                                                     sample_name))
+                                                     sample_name,
+                                                     fq_file))
                         continue
                 libprep_object = sample_obj.add_libprep(name=libprep_name,
                                                         dirname=libprep_name)
