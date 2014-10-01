@@ -10,12 +10,15 @@ import sys
 
 from ngi_pipeline.conductor.classes import NGIProject
 from ngi_pipeline.conductor.launchers import launch_analysis_for_seqruns
-from ngi_pipeline.database.classes import CharonError
+from ngi_pipeline.database.classes import CharonSession, CharonError
 from ngi_pipeline.database.communicate import get_project_id_from_name
+from ngi_pipeline.database.filesystem import create_charon_entries_from_project
 from ngi_pipeline.log.loggers import minimal_logger
 from ngi_pipeline.utils.classes import with_ngi_config
 from ngi_pipeline.utils.filesystem import do_rsync, safe_makedir
-from ngi_pipeline.utils.parsers import determine_library_prep_from_fcid
+from ngi_pipeline.utils.parsers import determine_library_prep_from_fcid, \
+                                       determine_libprep_from_uppsala_samplesheet, \
+                                       parse_lane_from_filename
 
 LOG = minimal_logger(__name__)
 
@@ -91,6 +94,9 @@ def process_demultiplexed_flowcells(demux_fcid_dirs, restrict_to_projects=None,
     else:
         # Don't need the dict functionality anymore; revert to list
         projects_to_analyze = projects_to_analyze.values()
+    for project in projects_to_analyze:
+        LOG.info('Creating Charon records for project "{}" if they are missing'.format(project))
+        create_charon_entries_from_project(project)
     # The automatic analysis that occurs after flowcells are delivered is
     # only at the flowcell level. Another intermittent check determines if
     # conditions are met for sample-level analysis to proceed and launches
@@ -152,17 +158,15 @@ def setup_analysis_directory_structure(fc_dir, projects_to_analyze,
             # This requires Charon access -- maps e.g. "Y.Mom_14_01" to "P123"
             project_id = get_project_id_from_name(project_name)
         except (CharonError, RuntimeError, ValueError) as e:
-            error_msg = ('Cannot proceed with project "{}" due to '
-                         'Charon-related error: {}'.format(project_name, e))
-            LOG.error(error_msg)
-            continue
+            LOG.warn('Could not retrieve project id from Charon (record missing?). '
+                     'Using project name ("{}") as project id'.format(project_name))
+            project_id = project_name
         LOG.info("Setting up project {}".format(project.get("project_name")))
         # Create a project directory if it doesn't already exist, including
         # intervening "DATA" directory
         project_dir = os.path.join(analysis_top_dir, "DATA", project_name)
         if create_files:
             safe_makedir(project_dir, 0770)
-            #safe_makedir(os.path.join(project_dir, "logs"), 0770)
         try:
             project_obj = projects_to_analyze[project_dir]
         except KeyError:
@@ -194,21 +198,31 @@ def setup_analysis_directory_structure(fc_dir, projects_to_analyze,
             for fq_file in fastq_files:
                 # Requires Charon access
                 try:
-                    ## TODO this would be better done through the SampleSheet or something
                     libprep_name = determine_library_prep_from_fcid(project_id, sample_name, fc_full_id)
                 except ValueError:
                     # This flowcell has not got library prep information in Charon and
                     # is probably an Uppsala project; if so, we can parse the libprep name
                     # from the SampleSheet.csv
-                    if fc_dir_structure['samplesheet_path']:
-                        ## FIXME this is tricky -- need lane information for this
-                        libprep_name = determine_libprep_from_uppsala_samplesheet(
-                                            fc_dir_structure['samplesheet_path'])
-                    else:
-                        LOG.error('Project "{}" / sample "{}" has no libprep '
-                                  'information in Charon and it could not be '
-                                  'determined from the SampleSheet.csv. '
-                                  'Skipping project.'.format(project, sample))
+                    try:
+                        if fc_dir_structure['samplesheet_path']:
+                            lane_num = parse_lane_from_filename(fq_file)
+                            # This throws a ValueError if it can't find anything
+                            libprep_name = determine_libprep_from_uppsala_samplesheet(
+                                                fc_dir_structure['samplesheet_path'],
+                                                project_id=project_id,
+                                                sample_id=sample_name,
+                                                seqrun_id=fc_full_id,
+                                                lane_num=lane_num)
+                        else:
+                            raise ValueError()
+                    except ValueError:
+                        LOG.error('Project "{}" / sample "{}" / fastq "{}" '
+                                  'has no libprep information in Charon and it '
+                                  'could not be determined from the SampleSheet.csv. '
+                                  'Skipping.'.format(project_name,
+                                                     sample_name,
+                                                     fq_file))
+                        continue
                 libprep_object = sample_obj.add_libprep(name=libprep_name,
                                                         dirname=libprep_name)
                 libprep_dir = os.path.join(sample_dir, libprep_name)
@@ -227,8 +241,6 @@ def setup_analysis_directory_structure(fc_dir, projects_to_analyze,
                                               project['project_dir'],
                                               sample['sample_dir'])
                 for libprep_obj in sample_obj:
-                #this function works at run_level, so I have to process a single run
-                #it might happen that in a run we have multiple lib preps for the same sample
                     for seqrun_obj in libprep_obj:
                         src_fastq_files = [os.path.join(src_sample_dir, fastq_file) for
                                            fastq_file in seqrun_obj.fastq_files]
@@ -285,7 +297,7 @@ def parse_casava_directory(fc_dir):
     :returns: A dict of information about the flowcell, including project/sample info
     :rtype: dict
 
-    :raises RuntimeError: If the fc_dir does not exist or cannot be accessed,
+    :raises RuntimeError: If the fc_dir does not exist or cannot be accessed
     """
     projects = []
     fc_dir = os.path.abspath(fc_dir)
@@ -300,7 +312,7 @@ def parse_casava_directory(fc_dir):
         LOG.info("Parsing project directory \"{}\"...".format(project_dir.split(os.path.split(fc_dir)[0] + "/")[1]))
         project_samples = []
         try:
-            samplesheet_path = os.path.abspath(glob.glob(os.path.join(project_dir, "SampleSheet.csv"))[0])
+            samplesheet_path = os.path.abspath(glob.glob(os.path.join(project_dir, "../../SampleSheet.csv"))[0])
         except IndexError:
             samplesheet_path = None
         sample_dir_pattern = os.path.join(project_dir,"Sample_*")
