@@ -117,7 +117,7 @@ def analyze_sample(project, sample, config=None, config_file_path=None):
     # If these conditions become more complex we can create a function for this
     sample_total_autosomal_coverage = charon_session.sample_get(project.project_id,
                                      sample.name).get('total_autosomal_coverage')
-    if sample_total_autosomal_coverage > 29.0:
+    if sample_total_autosomal_coverage > 28.9:
         LOG.info('Sample "{}" in project "{}" is ready for processing.'.format(sample, project))
         for workflow_subtask in get_subtasks_for_level(level="sample"):
             if not is_sample_analysis_running_local(workflow_subtask=workflow_subtask,
