@@ -155,7 +155,7 @@ def setup_analysis_directory_structure(fc_dir, projects_to_analyze,
             continue
         try:
             # This requires Charon access -- maps e.g. "Y.Mom_14_01" to "P123"
-            project_id = get_project_id_from_same(project_name)
+            project_id = get_project_id_from_name(project_name)
         except (CharonError, RuntimeError, ValueError) as e:
             LOG.warn('Could not retrieve project id from Charon (record missing?). '
                      'Using project name ("{}") as project id'.format(project_name))
