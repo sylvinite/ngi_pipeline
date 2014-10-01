@@ -86,7 +86,7 @@ def determine_libprep_from_uppsala_samplesheet(samplesheet_path, project_id, sam
                                                          project_id, sample_id,
                                                          seqrun_id, lane_num))
     LOG.warn(error_msg)
-    raise ValueErorr(error_msg)
+    raise ValueError(error_msg)
 
 
 @memoized
