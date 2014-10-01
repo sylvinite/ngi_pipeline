@@ -1,3 +1,7 @@
+import argparse
+
+from ngi_pipeline.conductor.flowcell import process_demultiplexed_flowcell
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser("Launch seqrun-level analysis.")
     parser.add_argument("-p", "--project", dest="restrict_to_projects", action="append",
