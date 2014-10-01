@@ -108,6 +108,8 @@ def launch_analysis(level, projects_to_analyze, restart_failed_jobs=False,
                                                    "libprep": libprep,
                                                    "seqrun": seqrun})
         # Still weird and not so great
+        import pdb
+        pdb.set_trace()
         for obj_dict in objects_to_process:
             project = obj_dict.get("project")
             sample = obj_dict.get("sample")

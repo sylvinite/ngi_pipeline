@@ -21,7 +21,7 @@ Activate this environment and install ngi_pipeline:
 
 Copy the relevant configuration file (milou or nestor) to the default location:
 
-`mkdir $HOME/.ngipipeline && cp $HOME/ngi_pipeline/milou_ngi_config.yaml $HOME/.ngipipeline/`
+`mkdir $HOME/.ngipipeline && cp $HOME/ngi_pipeline/[milou|nestor]_ngi_config.yaml $HOME/.ngiconfig/ngi_config.yaml`
 
 Get your API token from Charon (on the charon-dev website click "Users" and then click your username) and export this along with the base URL via your `.bashrc`:
 
