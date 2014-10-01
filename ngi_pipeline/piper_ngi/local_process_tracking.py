@@ -2,6 +2,7 @@ import glob
 import os
 import psutil
 import re
+import time
 
 from ngi_pipeline.database.classes import CharonSession, CharonError
 from ngi_pipeline.log.loggers import minimal_logger
@@ -293,7 +294,7 @@ def record_process_seqrun(project, sample, libprep, seqrun, workflow_subtask,
             break
         except sqlalchemy.exc.OperationalError:
             LOG.warn("Database is locked. Waiting...")
-            wait(15)
+            time.sleep(15)
     else:
         raise RuntimeError('Could not record  process id "{}" for project "{}", sample "{}", '
                            'libprep "{}", seqrun "{}", workflow "{}"'.format(pid,
@@ -329,7 +330,7 @@ def record_process_sample(project, sample, workflow_subtask, analysis_module_nam
             break
         except sqlalchemy.exc.OperationalError:
             LOG.warn("Database locked. Waiting...")
-            wait(15)
+            time.sleep(15)
     else:
         raise RuntimeError('Could not record process id "{}" for project "{}", sample "{}", '
                            'workflow "{}"'.format(pid, project, sample, workflow_subtask))
