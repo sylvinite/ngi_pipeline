@@ -13,9 +13,6 @@ from ngi_pipeline.utils.filesystem import recreate_project_from_filesystem
 
 LOG = minimal_logger(__name__)
 
-## NOTE because setup_analysis_directory_structure uses Charon to determine the library prep,
-##      this fails unless you go and modify that code to catch the exception and do something else with it
-##      Uppsala keeps their library prep id in their SampleSheet.csv, I don't think Sthlm does but we could start?
 @with_ngi_config
 def main(demux_fcid_dirs, restrict_to_projects=None, restrict_to_samples=None,
          force_update=False, workflow="NGI", already_parsed=False,
@@ -41,8 +38,6 @@ def main(demux_fcid_dirs, restrict_to_projects=None, restrict_to_samples=None,
                                                                      create_files=False,
                                                                      config=config)
     if not projects_to_analyze:
-        LOG.warn('NOTE to populate a new project, you must manually create the '
-                 'project-level object in Charon and give it a project ID')
         sys.exit("Quitting: no projects found to process in flowcells {}"
                  "or there was an error gathering required "
                  "information.".format(",".join(demux_fcid_dirs_set)))

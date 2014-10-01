@@ -144,8 +144,8 @@ def analyze_sample(project, sample, config=None, config_file_path=None):
                                               analysis_module_name="piper_ngi",
                                               analysis_dir=project.analysis_dir,
                                               pid=p_handle.pid)
-                    except CharonError as e:
-                        LOG.error("<Could not record ...>")
+                    except RuntimeError as e:
+                        LOG.error(e)
                         continue
                 except (NotImplementedError, RuntimeError) as e:
                     error_msg = ('Processing project "{}" / sample "{}" failed: '

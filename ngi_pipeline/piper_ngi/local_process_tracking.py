@@ -280,14 +280,28 @@ def record_process_seqrun(project, sample, libprep, seqrun, workflow_subtask,
                                    process_id=pid)
     ## FIXME We must make sure that an entry for this doesn't already exist!
     session.add(seqrun_db_obj)
-    session.commit()
-    LOG.info('Successfully recorded process id "{}" for project "{}", sample "{}", '
-             'libprep "{}", seqrun "{}", workflow "{}"'.format(pid,
-                                                               project,
-                                                               sample,
-                                                               libprep,
-                                                               seqrun,
-                                                               workflow_subtask))
+    for attempts in range(3):
+        try:
+            session.commit()
+            LOG.info('Successfully recorded process id "{}" for project "{}", sample "{}", '
+                     'libprep "{}", seqrun "{}", workflow "{}"'.format(pid,
+                                                                       project,
+                                                                       sample,
+                                                                       libprep,
+                                                                       seqrun,
+                                                                       workflow_subtask))
+            break
+        except sqlalchemy.exc.OperationalError:
+            LOG.warn("Database is locked. Waiting...")
+            wait(15)
+    else:
+        raise RuntimeError('Could not record  process id "{}" for project "{}", sample "{}", '
+                           'libprep "{}", seqrun "{}", workflow "{}"'.format(pid,
+                                                                             project,
+                                                                             sample,
+                                                                             libprep,
+                                                                             seqrun,
+                                                                             workflow_subtask))
 
 
 ## TODO This can be moved to a more generic local_process_tracking submodule
@@ -307,9 +321,18 @@ def record_process_sample(project, sample, workflow_subtask, analysis_module_nam
                                    process_id=pid)
     ## FIXME We must make sure that an entry for this doesn't already exist!
     session.add(seqrun_db_obj)
-    session.commit()
-    LOG.info('Successfully recorded process id "{}" for project "{}", sample "{}", '
-             'workflow "{}"'.format(pid, project, sample, workflow_subtask))
+    for attempts in range(3):
+        try:
+            session.commit()
+            LOG.info('Successfully recorded process id "{}" for project "{}", sample "{}", '
+                     'workflow "{}"'.format(pid, project, sample, workflow_subtask))
+            break
+        except sqlalchemy.exc.OperationalError:
+            LOG.warn("Database locked. Waiting...")
+            wait(15)
+    else:
+        raise RuntimeError('Could not record process id "{}" for project "{}", sample "{}", '
+                           'workflow "{}"'.format(pid, project, sample, workflow_subtask))
 
 
 # Do we need this function?
