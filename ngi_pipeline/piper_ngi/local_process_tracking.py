@@ -68,24 +68,24 @@ def update_charon_with_local_jobs_status():
                                                  alignment_status=set_alignment_status)
                     # Job is only deleted if the Charon update succeeds
                     session.delete(seqrun_entry)
-                elif exit_code == 1 or not psutil.pid_exists(pid):
-                    if not psutil.pid_exists(pid):
-                        #/ Job failed without writing an exit code
+                elif exit_code == 1 or (not psutil.pid_exists(pid) and not exit_code):
+                    if exit_code == 1:
+                        # 1 -> Job failed (DATA_FAILURE / COMPUTATION_FAILURE ?)
+                        LOG.info('Workflow "{}" for {} failed. Recording status '
+                                 '"FAILED" in Charon.'.format(workflow, label))
+                    else:
+                        # Job failed without writing an exit code (process no longer running)
                         LOG.error('ERROR: No exit code found for process {} '
                                   'but it does not appear to be running '
                                   '(pid {} does not exist). Setting status to '
                                   '"FAILED", inspect manually'.format(label, pid))
-                    else:
-                        # 1 -> Job failed (DATA_FAILURE / COMPUTATION_FAILURE ?)
-                        LOG.info('Workflow "{}" for {} failed. Recording status '
-                                 '"FAILED" in Charon.'.format(workflow, label))
                     charon_session.seqrun_update(projectid=project_id,
                                                  sampleid=sample_id,
                                                  libprepid=libprep_id,
                                                  seqrunid=seqrun_id,
                                                  alignment_status="FAILED")
                     # Job is only deleted if the Charon update succeeds
-                    LOG.info("Deleting local entry {}".format(seqrun_entry))
+                    LOG.debug("Deleting local entry {}".format(seqrun_entry))
                     session.delete(seqrun_entry)
                 else:
                     # None -> Job still running
@@ -144,17 +144,17 @@ def update_charon_with_local_jobs_status():
                                                  status=set_status)
                     # Job is only deleted if the Charon update succeeds
                     session.delete(sample_entry)
-                elif exit_code == 1 or not psutil.pid_exists(pid):
-                    if not psutil.pid_exists(pid):
-                        #/ Job failed without writing an exit code
+                elif exit_code == 1 or (not psutil.pid_exists(pid) and not exit_code):
+                    if exit_code == 1:
+                        # 1 -> Job failed (DATA_FAILURE / COMPUTATION_FAILURE ?)
+                        LOG.info('Workflow "{}" for {} failed. Recording status '
+                                 '"COMPUTATION_FAILED" in Charon.'.format(workflow, label))
+                    else:
+                        # Job failed without writing an exit code
                         LOG.error('ERROR: No exit code found for process {} '
                                   'but it does not appear to be running '
                                   '(pid {} does not exist). Setting status to '
                                   '"COMPUTATION_FAILED", inspect manually'.format(label, pid))
-                    else:
-                        # 1 -> Job failed (DATA_FAILURE / COMPUTATION_FAILURE ?)
-                        LOG.info('Workflow "{}" for {} failed. Recording status '
-                                 '"COMPUTATION_FAILED" in Charon.'.format(workflow, label))
                     charon_session.sample_update(projectid=project_id,
                                                  sampleid=sample_id,
                                                  status="COMPUTATION_FAILED")
