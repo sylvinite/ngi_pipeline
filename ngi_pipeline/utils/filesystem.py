@@ -97,6 +97,13 @@ def execute_command_line(cl, stdout=None, shell=False, stderr=None, cwd=None):
         raise RuntimeError(error_msg)
     return p_handle
 
+def do_symlink(src_files, dst_dir):
+    for src_file in src_files:
+        base_fastq_file = os.path.basename(src_file)
+        dst_file = os.path.join(dst_dir, base_fastq_file)
+        if not os.path.isfile(dst_file):
+            os.symlink(src_file, dst_file)
+
 
 def do_rsync(src_files, dst_dir):
     ## TODO I changed this -c because it takes for goddamn ever but I'll set it back once in Production

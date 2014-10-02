@@ -1,4 +1,5 @@
 import argparse
+import os
 
 from ngi_pipeline.conductor.flowcell import process_demultiplexed_flowcell
 
