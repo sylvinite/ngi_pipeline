@@ -20,160 +20,163 @@ def update_charon_with_local_jobs_status():
     """Check the status of all locally-tracked jobs and update Charon accordingly.
     """
     session = get_db_session()
-    charon_session = CharonSession()
+    try:
+        charon_session = CharonSession()
 
-    # Sequencing Run Analyses
-    for seqrun_entry in session.query(SeqrunAnalysis).all():
+        # Sequencing Run Analyses
+        for seqrun_entry in session.query(SeqrunAnalysis).all():
 
-        # Local names
-        workflow = seqrun_entry.workflow
-        project_name = seqrun_entry.project_name
-        project_id = seqrun_entry.project_id
-        project_base_path = seqrun_entry.project_base_path
-        sample_id = seqrun_entry.sample_id
-        libprep_id = seqrun_entry.libprep_id
-        seqrun_id = seqrun_entry.seqrun_id
-        pid = seqrun_entry.process_id
+            # Local names
+            workflow = seqrun_entry.workflow
+            project_name = seqrun_entry.project_name
+            project_id = seqrun_entry.project_id
+            project_base_path = seqrun_entry.project_base_path
+            sample_id = seqrun_entry.sample_id
+            libprep_id = seqrun_entry.libprep_id
+            seqrun_id = seqrun_entry.seqrun_id
+            pid = seqrun_entry.process_id
 
-        exit_code = get_exit_code(workflow_name=workflow,
-                                  project_base_path=project_base_path,
-                                  project_name=project_name,
-                                  sample_id=sample_id,
-                                  libprep_id=libprep_id,
-                                  seqrun_id=seqrun_id)
-        label = "project/sample/libprep/seqrun {}/{}/{}/{}".format(project_name,
-                                                                   sample_id,
-                                                                   libprep_id,
-                                                                   seqrun_id)
-        try:
-            if exit_code == 0:
-                # 0 -> Job finished successfully
-                LOG.info('Workflow "{}" for {} finished succesfully. '
-                         'Recording status "DONE" in Charon'.format(workflow, label))
-                set_alignment_status = "DONE"
-                try:
-                    write_to_charon_alignment_results(base_path=project_base_path,
-                                                      project_name=project_name,
-                                                      project_id=project_id,
-                                                      sample_id=sample_id,
-                                                      libprep_id=libprep_id,
-                                                      seqrun_id=seqrun_id)
-                except (RuntimeError, ValueError) as e:
-                    LOG.error(e)
-                    set_alignment_status = "FAILED"
-                charon_session.seqrun_update(projectid=project_id,
-                                             sampleid=sample_id,
-                                             libprepid=libprep_id,
-                                             seqrunid=seqrun_id,
-                                             alignment_status=set_alignment_status)
-                # Job is only deleted if the Charon update succeeds
-                session.delete(seqrun_entry)
-            elif exit_code == 1 or not psutil.pid_exists(pid):
-                if not psutil.pid_exists(pid):
-                    #/ Job failed without writing an exit code
-                    LOG.error('ERROR: No exit code found for process {} '
-                              'but it does not appear to be running '
-                              '(pid {} does not exist). Setting status to '
-                              '"FAILED", inspect manually'.format(label, pid))
-                else:
-                    # 1 -> Job failed (DATA_FAILURE / COMPUTATION_FAILURE ?)
-                    LOG.info('Workflow "{}" for {} failed. Recording status '
-                             '"FAILED" in Charon.'.format(workflow, label))
-                charon_session.seqrun_update(projectid=project_id,
-                                             sampleid=sample_id,
-                                             libprepid=libprep_id,
-                                             seqrunid=seqrun_id,
-                                             alignment_status="FAILED")
-                # Job is only deleted if the Charon update succeeds
-                LOG.info("Deleting local entry {}".format(seqrun_entry))
-                session.delete(seqrun_entry)
-            else:
-                # None -> Job still running
-                charon_status = charon_session.seqrun_get(projectid=project_id,
-                                                          sampleid=sample_id,
-                                                          libprepid=libprep_id,
-                                                          seqrunid=seqrun_id)['alignment_status']
-                if not charon_status == "RUNNING":
-                    LOG.warn('Tracking inconsistency for {}: Charon status is "{}" but '
-                             'local process tracking database indicates it is running. '
-                             'Setting value in Charon to RUNNING.'.format(label, charon_status))
+            exit_code = get_exit_code(workflow_name=workflow,
+                                      project_base_path=project_base_path,
+                                      project_name=project_name,
+                                      sample_id=sample_id,
+                                      libprep_id=libprep_id,
+                                      seqrun_id=seqrun_id)
+            label = "project/sample/libprep/seqrun {}/{}/{}/{}".format(project_name,
+                                                                       sample_id,
+                                                                       libprep_id,
+                                                                       seqrun_id)
+            try:
+                if exit_code == 0:
+                    # 0 -> Job finished successfully
+                    LOG.info('Workflow "{}" for {} finished succesfully. '
+                             'Recording status "DONE" in Charon'.format(workflow, label))
+                    set_alignment_status = "DONE"
+                    try:
+                        write_to_charon_alignment_results(base_path=project_base_path,
+                                                          project_name=project_name,
+                                                          project_id=project_id,
+                                                          sample_id=sample_id,
+                                                          libprep_id=libprep_id,
+                                                          seqrun_id=seqrun_id)
+                    except (RuntimeError, ValueError) as e:
+                        LOG.error(e)
+                        set_alignment_status = "FAILED"
                     charon_session.seqrun_update(projectid=project_id,
                                                  sampleid=sample_id,
                                                  libprepid=libprep_id,
                                                  seqrunid=seqrun_id,
-                                                 alignment_status="RUNNING")
-        except CharonError as e:
-            LOG.error('Unable to update Charon status for "{}": {}'.format(label, e))
-
-
-    for sample_entry in session.query(SampleAnalysis).all():
-
-        # Local names
-        workflow = sample_entry.workflow
-        project_name = sample_entry.project_name
-        project_id = sample_entry.project_id
-        project_base_path = sample_entry.project_base_path
-        sample_id = sample_entry.sample_id
-        pid = sample_entry.process_id
-
-        exit_code = get_exit_code(workflow_name=workflow,
-                                  project_base_path=project_base_path,
-                                  project_name=project_name,
-                                  sample_id=sample_id)
-        label = "project/sample/libprep/seqrun {}/{}".format(project_name,
-                                                                   sample_id)
-        try:
-            if exit_code == 0:
-                # 0 -> Job finished successfully
-                LOG.info('Workflow "{}" for {} finished succesfully. '
-                         'Recording status "DONE" in Charon'.format(workflow, label))
-                set_status = "DONE"
-                ## TODO implement sample-level analysis results parsing / reporting to Charon?
-                #try:
-                #    write_to_charon_alignment_results(base_path=project_base_path,
-                #                                      project_name=project_name,
-                #                                      project_id=project_id,
-                #                                      sample_id=sample_id,
-                #                                      libprep_id=libprep_id,
-                #                                      seqrun_id=seqrun_id)
-                #except (RuntimeError, ValueError) as e:
-                #    LOG.error(e)
-                #    set_alignment_status = "FAILED"
-                charon_session.sample_update(projectid=project_id,
-                                             sampleid=sample_id,
-                                             status=set_status)
-                # Job is only deleted if the Charon update succeeds
-                session.delete(sample_entry)
-            elif exit_code == 1 or not psutil.pid_exists(pid):
-                if not psutil.pid_exists(pid):
-                    #/ Job failed without writing an exit code
-                    LOG.error('ERROR: No exit code found for process {} '
-                              'but it does not appear to be running '
-                              '(pid {} does not exist). Setting status to '
-                              '"COMPUTATION_FAILED", inspect manually'.format(label, pid))
+                                                 alignment_status=set_alignment_status)
+                    # Job is only deleted if the Charon update succeeds
+                    session.delete(seqrun_entry)
+                elif exit_code == 1 or not psutil.pid_exists(pid):
+                    if not psutil.pid_exists(pid):
+                        #/ Job failed without writing an exit code
+                        LOG.error('ERROR: No exit code found for process {} '
+                                  'but it does not appear to be running '
+                                  '(pid {} does not exist). Setting status to '
+                                  '"FAILED", inspect manually'.format(label, pid))
+                    else:
+                        # 1 -> Job failed (DATA_FAILURE / COMPUTATION_FAILURE ?)
+                        LOG.info('Workflow "{}" for {} failed. Recording status '
+                                 '"FAILED" in Charon.'.format(workflow, label))
+                    charon_session.seqrun_update(projectid=project_id,
+                                                 sampleid=sample_id,
+                                                 libprepid=libprep_id,
+                                                 seqrunid=seqrun_id,
+                                                 alignment_status="FAILED")
+                    # Job is only deleted if the Charon update succeeds
+                    LOG.info("Deleting local entry {}".format(seqrun_entry))
+                    session.delete(seqrun_entry)
                 else:
-                    # 1 -> Job failed (DATA_FAILURE / COMPUTATION_FAILURE ?)
-                    LOG.info('Workflow "{}" for {} failed. Recording status '
-                             '"COMPUTATION_FAILED" in Charon.'.format(workflow, label))
-                charon_session.sample_update(projectid=project_id,
-                                             sampleid=sample_id,
-                                             status="COMPUTATION_FAILED")
-                # Job is only deleted if the Charon update succeeds
-                session.delete(sample_entry)
-            else:
-                # None -> Job still running
-                charon_status = charon_session.sample_get(projectid=project_id,
-                                                          sampleid=sample_id)['status']
-                if not charon_status == "RUNNING":
-                    LOG.warn('Tracking inconsistency for {}: Charon status is "{}" but '
-                             'local process tracking database indicates it is running. '
-                             'Setting value in Charon to RUNNING.'.format(label, charon_status))
+                    # None -> Job still running
+                    charon_status = charon_session.seqrun_get(projectid=project_id,
+                                                              sampleid=sample_id,
+                                                              libprepid=libprep_id,
+                                                              seqrunid=seqrun_id)['alignment_status']
+                    if not charon_status == "RUNNING":
+                        LOG.warn('Tracking inconsistency for {}: Charon status is "{}" but '
+                                 'local process tracking database indicates it is running. '
+                                 'Setting value in Charon to RUNNING.'.format(label, charon_status))
+                        charon_session.seqrun_update(projectid=project_id,
+                                                     sampleid=sample_id,
+                                                     libprepid=libprep_id,
+                                                     seqrunid=seqrun_id,
+                                                     alignment_status="RUNNING")
+            except CharonError as e:
+                LOG.error('Unable to update Charon status for "{}": {}'.format(label, e))
+
+
+        for sample_entry in session.query(SampleAnalysis).all():
+
+            # Local names
+            workflow = sample_entry.workflow
+            project_name = sample_entry.project_name
+            project_id = sample_entry.project_id
+            project_base_path = sample_entry.project_base_path
+            sample_id = sample_entry.sample_id
+            pid = sample_entry.process_id
+
+            exit_code = get_exit_code(workflow_name=workflow,
+                                      project_base_path=project_base_path,
+                                      project_name=project_name,
+                                      sample_id=sample_id)
+            label = "project/sample/libprep/seqrun {}/{}".format(project_name,
+                                                                       sample_id)
+            try:
+                if exit_code == 0:
+                    # 0 -> Job finished successfully
+                    LOG.info('Workflow "{}" for {} finished succesfully. '
+                             'Recording status "DONE" in Charon'.format(workflow, label))
+                    set_status = "DONE"
+                    ## TODO implement sample-level analysis results parsing / reporting to Charon?
+                    #try:
+                    #    write_to_charon_alignment_results(base_path=project_base_path,
+                    #                                      project_name=project_name,
+                    #                                      project_id=project_id,
+                    #                                      sample_id=sample_id,
+                    #                                      libprep_id=libprep_id,
+                    #                                      seqrun_id=seqrun_id)
+                    #except (RuntimeError, ValueError) as e:
+                    #    LOG.error(e)
+                    #    set_alignment_status = "FAILED"
                     charon_session.sample_update(projectid=project_id,
                                                  sampleid=sample_id,
-                                                 status="RUNNING")
-            session.commit()
-        except CharonError as e:
-            LOG.error('Unable to update Charon status for "{}": {}'.format(label, e))
+                                                 status=set_status)
+                    # Job is only deleted if the Charon update succeeds
+                    session.delete(sample_entry)
+                elif exit_code == 1 or not psutil.pid_exists(pid):
+                    if not psutil.pid_exists(pid):
+                        #/ Job failed without writing an exit code
+                        LOG.error('ERROR: No exit code found for process {} '
+                                  'but it does not appear to be running '
+                                  '(pid {} does not exist). Setting status to '
+                                  '"COMPUTATION_FAILED", inspect manually'.format(label, pid))
+                    else:
+                        # 1 -> Job failed (DATA_FAILURE / COMPUTATION_FAILURE ?)
+                        LOG.info('Workflow "{}" for {} failed. Recording status '
+                                 '"COMPUTATION_FAILED" in Charon.'.format(workflow, label))
+                    charon_session.sample_update(projectid=project_id,
+                                                 sampleid=sample_id,
+                                                 status="COMPUTATION_FAILED")
+                    # Job is only deleted if the Charon update succeeds
+                    session.delete(sample_entry)
+                else:
+                    # None -> Job still running
+                    charon_status = charon_session.sample_get(projectid=project_id,
+                                                              sampleid=sample_id)['status']
+                    if not charon_status == "RUNNING":
+                        LOG.warn('Tracking inconsistency for {}: Charon status is "{}" but '
+                                 'local process tracking database indicates it is running. '
+                                 'Setting value in Charon to RUNNING.'.format(label, charon_status))
+                        charon_session.sample_update(projectid=project_id,
+                                                     sampleid=sample_id,
+                                                     status="RUNNING")
+                session.commit()
+            except CharonError as e:
+                LOG.error('Unable to update Charon status for "{}": {}'.format(label, e))
+    finally:
+        session.close()
 
 
 def write_to_charon_alignment_results(base_path, project_name, project_id, sample_id, libprep_id, seqrun_id):
@@ -271,40 +274,43 @@ def record_process_seqrun(project, sample, libprep, seqrun, workflow_subtask,
              'seqrun "{}", workflow "{}"'.format(pid, project, sample, libprep,
                                                  seqrun, workflow_subtask))
     session = get_db_session()
-    seqrun_db_obj = SeqrunAnalysis(project_id=project.project_id,
-                                   project_name=project.name,
-                                   project_base_path=project.base_path,
-                                   sample_id=sample.name,
-                                   libprep_id=libprep.name,
-                                   seqrun_id=seqrun.name,
-                                   engine=analysis_module_name,
-                                   workflow=workflow_subtask,
-                                   analysis_dir=analysis_dir,
-                                   process_id=pid)
-    ## FIXME We must make sure that an entry for this doesn't already exist!
-    session.add(seqrun_db_obj)
-    for attempts in range(3):
-        try:
-            session.commit()
-            LOG.info('Successfully recorded process id "{}" for project "{}", sample "{}", '
-                     'libprep "{}", seqrun "{}", workflow "{}"'.format(pid,
-                                                                       project,
-                                                                       sample,
-                                                                       libprep,
-                                                                       seqrun,
-                                                                       workflow_subtask))
-            break
-        except sqlalchemy.exc.OperationalError:
-            LOG.warn("Database is locked. Waiting...")
-            time.sleep(15)
-    else:
-        raise RuntimeError('Could not record  process id "{}" for project "{}", sample "{}", '
-                           'libprep "{}", seqrun "{}", workflow "{}"'.format(pid,
-                                                                             project,
-                                                                             sample,
-                                                                             libprep,
-                                                                             seqrun,
-                                                                             workflow_subtask))
+    try:
+        seqrun_db_obj = SeqrunAnalysis(project_id=project.project_id,
+                                       project_name=project.name,
+                                       project_base_path=project.base_path,
+                                       sample_id=sample.name,
+                                       libprep_id=libprep.name,
+                                       seqrun_id=seqrun.name,
+                                       engine=analysis_module_name,
+                                       workflow=workflow_subtask,
+                                       analysis_dir=analysis_dir,
+                                       process_id=pid)
+        ## FIXME We must make sure that an entry for this doesn't already exist!
+        session.add(seqrun_db_obj)
+        for attempts in range(3):
+            try:
+                session.commit()
+                LOG.info('Successfully recorded process id "{}" for project "{}", sample "{}", '
+                         'libprep "{}", seqrun "{}", workflow "{}"'.format(pid,
+                                                                           project,
+                                                                           sample,
+                                                                           libprep,
+                                                                           seqrun,
+                                                                           workflow_subtask))
+                break
+            except sqlalchemy.exc.OperationalError:
+                LOG.warn("Database is locked. Waiting...")
+                time.sleep(15)
+        else:
+            raise RuntimeError('Could not record  process id "{}" for project "{}", sample "{}", '
+                               'libprep "{}", seqrun "{}", workflow "{}"'.format(pid,
+                                                                                 project,
+                                                                                 sample,
+                                                                                 libprep,
+                                                                                 seqrun,
+                                                                                 workflow_subtask))
+    finally:
+        session.close()
 
 
 ## TODO This can be moved to a more generic local_process_tracking submodule
@@ -314,28 +320,31 @@ def record_process_sample(project, sample, workflow_subtask, analysis_module_nam
     LOG.info('Recording process id "{}" for project "{}", sample "{}", '
              'workflow "{}"'.format(pid, project, sample, workflow_subtask))
     session = get_db_session()
-    seqrun_db_obj = SampleAnalysis(project_id=project.project_id,
-                                   project_name=project.name,
-                                   project_base_path=project.base_path,
-                                   sample_id=sample.name,
-                                   engine=analysis_module_name,
-                                   workflow=workflow_subtask,
-                                   analysis_dir=analysis_dir,
-                                   process_id=pid)
-    ## FIXME We must make sure that an entry for this doesn't already exist!
-    session.add(seqrun_db_obj)
-    for attempts in range(3):
-        try:
-            session.commit()
-            LOG.info('Successfully recorded process id "{}" for project "{}", sample "{}", '
-                     'workflow "{}"'.format(pid, project, sample, workflow_subtask))
-            break
-        except sqlalchemy.exc.OperationalError:
-            LOG.warn("Database locked. Waiting...")
-            time.sleep(15)
-    else:
-        raise RuntimeError('Could not record process id "{}" for project "{}", sample "{}", '
-                           'workflow "{}"'.format(pid, project, sample, workflow_subtask))
+    try:
+        seqrun_db_obj = SampleAnalysis(project_id=project.project_id,
+                                       project_name=project.name,
+                                       project_base_path=project.base_path,
+                                       sample_id=sample.name,
+                                       engine=analysis_module_name,
+                                       workflow=workflow_subtask,
+                                       analysis_dir=analysis_dir,
+                                       process_id=pid)
+        ## FIXME We must make sure that an entry for this doesn't already exist!
+        session.add(seqrun_db_obj)
+        for attempts in range(3):
+            try:
+                session.commit()
+                LOG.info('Successfully recorded process id "{}" for project "{}", sample "{}", '
+                         'workflow "{}"'.format(pid, project, sample, workflow_subtask))
+                break
+            except sqlalchemy.exc.OperationalError:
+                LOG.warn("Database locked. Waiting...")
+                time.sleep(15)
+        else:
+            raise RuntimeError('Could not record process id "{}" for project "{}", sample "{}", '
+                               'workflow "{}"'.format(pid, project, sample, workflow_subtask))
+    finally:
+        session.close()
 
 
 # Do we need this function?
@@ -351,17 +360,20 @@ def is_seqrun_analysis_running_local(workflow_subtask, project_id, sample_id,
              'being analyzed (workflow "{}")...'.format(sequencing_run,
                                                         workflow_subtask))
     session = get_db_session()
-    db_q = session.query(SeqrunAnalysis).filter_by(workflow=workflow_subtask,
-                                                   project_id=project_id,
-                                                   sample_id=sample_id,
-                                                   libprep_id=libprep_id,
-                                                   seqrun_id=seqrun_id)
-    if session.query(db_q.exists()).scalar():
-        LOG.info('...sequencing run "{}" is currently being analyzed.'.format(sequencing_run))
-        return True
-    else:
-        LOG.info('...sequencing run "{}" is not currently under analysis.'.format(sequencing_run))
-        return False
+    try:
+        db_q = session.query(SeqrunAnalysis).filter_by(workflow=workflow_subtask,
+                                                       project_id=project_id,
+                                                       sample_id=sample_id,
+                                                       libprep_id=libprep_id,
+                                                       seqrun_id=seqrun_id)
+        if session.query(db_q.exists()).scalar():
+            LOG.info('...sequencing run "{}" is currently being analyzed.'.format(sequencing_run))
+            return True
+        else:
+            LOG.info('...sequencing run "{}" is not currently under analysis.'.format(sequencing_run))
+            return False
+    finally:
+        session.close()
 
 # Do we need this function?
 def is_sample_analysis_running_local(workflow_subtask, project_id, sample_id):
@@ -371,15 +383,18 @@ def is_sample_analysis_running_local(workflow_subtask, project_id, sample_id):
     LOG.info('Checking if sample run "{}" is currently being analyzed '
              '(workflow "{}")...'.format(sample_run_name, workflow_subtask))
     session = get_db_session()
-    db_q = session.query(SampleAnalysis).filter_by(workflow=workflow_subtask,
-                                                   project_id=project_id,
-                                                   sample_id=sample_id)
-    if session.query(db_q.exists()).scalar():
-        LOG.info('...sample run "{}" is currently being analyzed.'.format(sample_run_name))
-        return True
-    else:
-        LOG.info('...sample run "{}" is not currently under analysis.'.format(sample_run_name))
-        return False
+    try:
+        db_q = session.query(SampleAnalysis).filter_by(workflow=workflow_subtask,
+                                                       project_id=project_id,
+                                                       sample_id=sample_id)
+        if session.query(db_q.exists()).scalar():
+            LOG.info('...sample run "{}" is currently being analyzed.'.format(sample_run_name))
+            return True
+        else:
+            LOG.info('...sample run "{}" is not currently under analysis.'.format(sample_run_name))
+            return False
+    finally:
+        session.close()
 
 
 def get_exit_code(workflow_name, project_base_path, project_name,
