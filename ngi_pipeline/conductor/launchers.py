@@ -134,20 +134,28 @@ def launch_analysis(level, projects_to_analyze, restart_failed_jobs=False,
                     charon_session.sample_update(project.project_id, sample.name, status="NEW")
                     charon_reported_status = charon_session.sample_get(project.project_id,
                                                                        sample)['status']
-            
+
             # Check Charon to ensure this hasn't already been processed
             if charon_reported_status in ("RUNNING", "DONE"):
-                LOG.info('Charon reports seqrun analysis for project "{}" / sample "{}" '
-                         '/ libprep "{}" / seqrun "{}" does not need processing '
-                         ' (already "{}")'.format(project, sample, libprep, seqrun,
-                                                  charon_reported_status))
+                if level == "seqrun":
+                    LOG.info('Charon reports seqrun analysis for project "{}" / sample "{}" '
+                             '/ libprep "{}" / seqrun "{}" does not need processing '
+                             ' (already "{}")'.format(project, sample, libprep, seqrun,
+                                                      charon_reported_status))
+                else: # Sample
+                    LOG.info('Charon reports seqrun analysis for project "{}" / sample "{}" '
+                             'does not need processing '
+                             ' (already "{}")'.format(project, sample, charon_reported_status))
                 continue
             elif charon_reported_status == "FAILED":
                 if not restart_failed_jobs:
-                    ## TODO change log messages
-                    LOG.error('FAILED:  Project "{}" / sample "{}" / library "{}" '
-                              '/ flowcell "{}": Charon reports FAILURE, manual '
-                              'investigation needed!'.format(project, sample, libprep, seqrun))
+                    if level == "seqrun":
+                        LOG.error('FAILED:  Project "{}" / sample "{}" / library "{}" '
+                                  '/ flowcell "{}": Charon reports FAILURE, manual '
+                                  'investigation needed!'.format(project, sample, libprep, seqrun))
+                    else: # Sample
+                        LOG.error('FAILED:  Project "{}" / sample "{}" Charon reports FAILURE, manual '
+                                  'investigation needed!'.format(project, sample, libprep, seqrun))
                     continue
             try:
                 # The engines themselves know which sub-workflows
@@ -168,8 +176,8 @@ def launch_analysis(level, projects_to_analyze, restart_failed_jobs=False,
                                                    seqrun=seqrun)
                 else: # sample level
                     LOG.info('Attempting to launch sample analysis for '
-                             'project "{}" / sample {} / workflow '
-                             '"{}"'.format(project, sample, libprep, seqrun, workflow))
+                             'project "{}" / sample "{}" / workflow '
+                             '"{}"'.format(project, sample, workflow))
                     analysis_module.analyze_sample(project=project,
                                                    sample=sample)
 
