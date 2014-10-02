@@ -19,8 +19,7 @@ LOG = minimal_logger(__name__)
 def update_charon_with_local_jobs_status():
     """Check the status of all locally-tracked jobs and update Charon accordingly.
     """
-    session = get_db_session()
-    try:
+    with get_db_session() as session:
         charon_session = CharonSession()
 
         # Sequencing Run Analyses
@@ -175,8 +174,6 @@ def update_charon_with_local_jobs_status():
                 session.commit()
             except CharonError as e:
                 LOG.error('Unable to update Charon status for "{}": {}'.format(label, e))
-    finally:
-        session.close()
 
 
 def write_to_charon_alignment_results(base_path, project_name, project_id, sample_id, libprep_id, seqrun_id):
@@ -273,8 +270,7 @@ def record_process_seqrun(project, sample, libprep, seqrun, workflow_subtask,
     LOG.info('Recording process id "{}" for project "{}", sample "{}", libprep "{}", '
              'seqrun "{}", workflow "{}"'.format(pid, project, sample, libprep,
                                                  seqrun, workflow_subtask))
-    session = get_db_session()
-    try:
+    with get_db_session() as session:
         seqrun_db_obj = SeqrunAnalysis(project_id=project.project_id,
                                        project_name=project.name,
                                        project_base_path=project.base_path,
@@ -309,8 +305,6 @@ def record_process_seqrun(project, sample, libprep, seqrun, workflow_subtask,
                                                                                  libprep,
                                                                                  seqrun,
                                                                                  workflow_subtask))
-    finally:
-        session.close()
 
 
 ## TODO This can be moved to a more generic local_process_tracking submodule
@@ -319,8 +313,7 @@ def record_process_sample(project, sample, workflow_subtask, analysis_module_nam
                           analysis_dir, pid, config=None):
     LOG.info('Recording process id "{}" for project "{}", sample "{}", '
              'workflow "{}"'.format(pid, project, sample, workflow_subtask))
-    session = get_db_session()
-    try:
+    with get_db_session() as session:
         seqrun_db_obj = SampleAnalysis(project_id=project.project_id,
                                        project_name=project.name,
                                        project_base_path=project.base_path,
@@ -343,8 +336,6 @@ def record_process_sample(project, sample, workflow_subtask, analysis_module_nam
         else:
             raise RuntimeError('Could not record process id "{}" for project "{}", sample "{}", '
                                'workflow "{}"'.format(pid, project, sample, workflow_subtask))
-    finally:
-        session.close()
 
 
 # Do we need this function?
@@ -359,8 +350,7 @@ def is_seqrun_analysis_running_local(workflow_subtask, project_id, sample_id,
     LOG.info('Checking if sequencing run "{}" is currently '
              'being analyzed (workflow "{}")...'.format(sequencing_run,
                                                         workflow_subtask))
-    session = get_db_session()
-    try:
+    with get_db_session() as session:
         db_q = session.query(SeqrunAnalysis).filter_by(workflow=workflow_subtask,
                                                        project_id=project_id,
                                                        sample_id=sample_id,
@@ -372,8 +362,7 @@ def is_seqrun_analysis_running_local(workflow_subtask, project_id, sample_id,
         else:
             LOG.info('...sequencing run "{}" is not currently under analysis.'.format(sequencing_run))
             return False
-    finally:
-        session.close()
+
 
 # Do we need this function?
 def is_sample_analysis_running_local(workflow_subtask, project_id, sample_id):
@@ -382,8 +371,7 @@ def is_sample_analysis_running_local(workflow_subtask, project_id, sample_id):
     sample_run_name = "{}/{}".format(project_id, sample_id)
     LOG.info('Checking if sample run "{}" is currently being analyzed '
              '(workflow "{}")...'.format(sample_run_name, workflow_subtask))
-    session = get_db_session()
-    try:
+    with get_db_session() as session:
         db_q = session.query(SampleAnalysis).filter_by(workflow=workflow_subtask,
                                                        project_id=project_id,
                                                        sample_id=sample_id)
@@ -393,8 +381,6 @@ def is_sample_analysis_running_local(workflow_subtask, project_id, sample_id):
         else:
             LOG.info('...sample run "{}" is not currently under analysis.'.format(sample_run_name))
             return False
-    finally:
-        session.close()
 
 
 def get_exit_code(workflow_name, project_base_path, project_name,
