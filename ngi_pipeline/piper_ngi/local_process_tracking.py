@@ -149,14 +149,14 @@ def update_charon_with_local_jobs_status():
                     LOG.error('ERROR: No exit code found for process {} '
                               'but it does not appear to be running '
                               '(pid {} does not exist). Setting status to '
-                              '"FAILED", inspect manually'.format(label, pid))
+                              '"COMPUTATION_FAILED", inspect manually'.format(label, pid))
                 else:
                     # 1 -> Job failed (DATA_FAILURE / COMPUTATION_FAILURE ?)
                     LOG.info('Workflow "{}" for {} failed. Recording status '
-                             '"FAILED" in Charon.'.format(workflow, label))
+                             '"COMPUTATION_FAILED" in Charon.'.format(workflow, label))
                 charon_session.sample_update(projectid=project_id,
                                              sampleid=sample_id,
-                                             status="FAILED")
+                                             status="COMPUTATION_FAILED")
                 # Job is only deleted if the Charon update succeeds
                 session.delete(sample_entry)
             else:

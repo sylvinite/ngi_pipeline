@@ -27,7 +27,8 @@ LOG = minimal_logger(__name__)
 ## This is called the key function that needs to be called by Celery when  a new flowcell is delivered
 ## from Sthlm or Uppsala
 def process_demultiplexed_flowcell(demux_fcid_dir_path, restrict_to_projects=None,
-                                   restrict_to_samples=None, config_file_path=None):
+                                   restrict_to_samples=None, restart_failed_jobs=False,
+                                   config_file_path=None):
     """Call process_demultiplexed_flowcells, restricting to a single flowcell.
     Essentially a restrictive wrapper.
 
@@ -36,24 +37,23 @@ def process_demultiplexed_flowcell(demux_fcid_dir_path, restrict_to_projects=Non
                                       restricted to these. Optional.
     :param list restrict_to_samples: A list of samples; analysis will be
                                      restricted to these. Optional.
+    :param bool restart_failed_jobs: Restart jobs marked as "FAILED" in Charon.
     :param str config_file_path: The path to the NGI configuration file; optional.
     """
-    
-    ## FIXME
-    ## Why is it that we need to restrict this to a single flowcell?
-    ## Does it break otherwise?
     if type(demux_fcid_dir_path) is not str:
         error_message = ("The path to a single demultiplexed flowcell should be "
                          "passed to this function as a string.")
         raise ValueError(error_message)
     process_demultiplexed_flowcells([demux_fcid_dir_path], restrict_to_projects,
-                                    restrict_to_samples, config_file_path)
+                                    restrict_to_samples, restart_failed_jobs,
+                                    config_file_path=config_file_path)
 
 
 @with_ngi_config
 def process_demultiplexed_flowcells(demux_fcid_dirs, restrict_to_projects=None,
-                                    restrict_to_samples=None, config=None,
-                                    config_file_path=None):
+                                    restrict_to_samples=None,
+                                    restart_failed_jobs=False,
+                                    config=None, config_file_path=None):
     """Sort demultiplexed Illumina flowcells into projects and launch their analysis.
 
     :param list demux_fcid_dirs: The CASAVA-produced demux directory/directories.
@@ -61,6 +61,7 @@ def process_demultiplexed_flowcells(demux_fcid_dirs, restrict_to_projects=None,
                                       restricted to these. Optional.
     :param list restrict_to_samples: A list of samples; analysis will be
                                      restricted to these. Optional.
+    :param bool restart_failed_jobs: Restart jobs marked as "FAILED" in Charon.
     :param dict config: The parsed NGI configuration file; optional.
     :param str config_file_path: The path to the NGI configuration file; optional.
     """
@@ -95,13 +96,14 @@ def process_demultiplexed_flowcells(demux_fcid_dirs, restrict_to_projects=None,
         # Don't need the dict functionality anymore; revert to list
         projects_to_analyze = projects_to_analyze.values()
     for project in projects_to_analyze:
-        LOG.info('Creating Charon records for project "{}" if they are missing'.format(project))
-        create_charon_entries_from_project(project)
+        if re.match(r'\w{2}-\d{4}', project.project_id):
+            LOG.info('Creating Charon records for Uppsala project "{}" if they are missing'.format(project))
+            create_charon_entries_from_project(project)
     # The automatic analysis that occurs after flowcells are delivered is
     # only at the flowcell level. Another intermittent check determines if
     # conditions are met for sample-level analysis to proceed and launches
     # that if so.
-    launch_analysis_for_seqruns(projects_to_analyze)
+    launch_analysis_for_seqruns(projects_to_analyze, restart_failed_jobs)
 
 
 ### FIXME rework so that the creation of the NGIObjects and the actual creation of files are different functions?

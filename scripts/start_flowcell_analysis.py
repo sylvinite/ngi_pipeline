@@ -11,10 +11,13 @@ if __name__ == '__main__':
     parser.add_argument("-s", "--sample", dest= "restrict_to_samples", action="append",
             help=("Restrict processing to these samples. "
                   "Use flag multiple times for multiple samples."))
+    parser.add_arguent("-f", "--restart_failed", dest="restart_failed_jobs", action="store_true",
+            help=("Restart jobs marked as 'FAILED' in Charon"))
     parser.add_argument("demux_fcid_dir", nargs="?", action="store",
             help=("The path to the Illumina demultiplexed fc directories "
                   "to process."))
     args_ns = parser.parse_args()
     process_demultiplexed_flowcell(args_ns.demux_fcid_dir,
                                    args_ns.restrict_to_projects,
-                                   args_ns.restrict_to_samples)
+                                   args_ns.restrict_to_samples,
+                                   args_ns.restart_failed_jobs)
