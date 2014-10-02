@@ -96,8 +96,9 @@ def process_demultiplexed_flowcells(demux_fcid_dirs, restrict_to_projects=None,
         # Don't need the dict functionality anymore; revert to list
         projects_to_analyze = projects_to_analyze.values()
     for project in projects_to_analyze:
-        LOG.info('Creating Charon records for project "{}" if they are missing'.format(project))
-        create_charon_entries_from_project(project)
+        if re.match(r'\w{2}-\d{4}', project.project_id):
+            LOG.info('Creating Charon records for Uppsala project "{}" if they are missing'.format(project))
+            create_charon_entries_from_project(project)
     # The automatic analysis that occurs after flowcells are delivered is
     # only at the flowcell level. Another intermittent check determines if
     # conditions are met for sample-level analysis to proceed and launches
