@@ -85,6 +85,7 @@ def update_charon_with_local_jobs_status():
                                              seqrunid=seqrun_id,
                                              alignment_status="FAILED")
                 # Job is only deleted if the Charon update succeeds
+                LOG.info("Deleting local entry {}".format(seqrun_entry))
                 session.delete(seqrun_entry)
             else:
                 # None -> Job still running
@@ -170,6 +171,7 @@ def update_charon_with_local_jobs_status():
                     charon_session.sample_update(projectid=project_id,
                                                  sampleid=sample_id,
                                                  status="RUNNING")
+            session.commit()
         except CharonError as e:
             LOG.error('Unable to update Charon status for "{}": {}'.format(label, e))
 
