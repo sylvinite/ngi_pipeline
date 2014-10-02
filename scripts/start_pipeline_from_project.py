@@ -23,6 +23,8 @@ if __name__ == '__main__':
                   "Use flag multiple times for multiple samples."))
     parser.add_argument("project_dir", nargs="?", action="store",
             help=("The path to the project to be processed."))
+    parser.add_argument("-f", "--restart-failed", dest="restart_failed_jobs", action="store_true",
+            help=("Restart jobs marked as FAILED in Charon."))
     g = parser.add_mutually_exclusive_group()
     g.add_argument("--seqrun_only", action="store_true",
             help=("Only process at the seqrun level."))
@@ -36,6 +38,6 @@ if __name__ == '__main__':
     if os.path.split(project.base_path)[1] == "DATA":
         project.base_path = os.path.split(project.base_path)[0]
     if not args_dict['sample_only']:
-        launch_analysis_for_seqruns([project])
+        launch_analysis_for_seqruns([project], args_dict["restart_failed_jobs"])
     if not args_dict['seqrun_only']:
-        launch_analysis_for_samples([project])
+        launch_analysis_for_samples([project], args_dict["restart_failed_jobs"])
