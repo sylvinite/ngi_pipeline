@@ -19,6 +19,7 @@ LOG = minimal_logger(__name__)
 def update_charon_with_local_jobs_status():
     """Check the status of all locally-tracked jobs and update Charon accordingly.
     """
+    LOG.info("Updating Charon with the status of all locally-tracked jobs...")
     with get_db_session() as session:
         charon_session = CharonSession()
 
@@ -171,9 +172,9 @@ def update_charon_with_local_jobs_status():
                         charon_session.sample_update(projectid=project_id,
                                                      sampleid=sample_id,
                                                      status="RUNNING")
-                session.commit()
             except CharonError as e:
                 LOG.error('Unable to update Charon status for "{}": {}'.format(label, e))
+        session.commit()
 
 
 def write_to_charon_alignment_results(base_path, project_name, project_id, sample_id, libprep_id, seqrun_id):
