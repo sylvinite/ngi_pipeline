@@ -34,7 +34,7 @@ def create_charon_entries_from_project(project, workflow="NGI", force_overwrite=
                                           status=status,
                                           pipeline=workflow)
         else:
-            LOG.warn('Project "{}" already exists; moving to samples...'.format(project))
+            LOG.info('Project "{}" already exists; moving to samples...'.format(project))
 
     for sample in project:
         try:
@@ -50,7 +50,7 @@ def create_charon_entries_from_project(project, workflow="NGI", force_overwrite=
                                              sampleid=sample.name,
                                              status="NEW")
             else:
-                LOG.warn('Project "{}" / sample "{}" already exists; moving '
+                LOG.info('Project "{}" / sample "{}" already exists; moving '
                          'to libpreps'.format(project, sample))
 
         for libprep in sample:
@@ -70,7 +70,7 @@ def create_charon_entries_from_project(project, workflow="NGI", force_overwrite=
                                                   libprepid=libprep.name,
                                                   status="NEW")
                 else:
-                    LOG.warn('Project "{}" / sample "{}" / libprep "{}" already '
+                    LOG.info('Project "{}" / sample "{}" / libprep "{}" already '
                              'exists; moving to libpreps'.format(project, sample, libprep))
 
             for seqrun in libprep:
@@ -96,7 +96,7 @@ def create_charon_entries_from_project(project, workflow="NGI", force_overwrite=
                                                      seqrunid=seqrun.name,
                                                      status="NEW")
                     else:
-                        LOG.warn('Project "{}" / sample "{}" / libprep "{}" / '
+                        LOG.info('Project "{}" / sample "{}" / libprep "{}" / '
                                  'seqrun "{}" already exists; next...'.format(project, sample,
                                                                               libprep, seqrun))
 
