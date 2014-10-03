@@ -11,7 +11,7 @@ if __name__ == '__main__':
     parser.add_argument("-s", "--sample", dest= "restrict_to_samples", action="append",
             help=("Restrict processing to these samples. "
                   "Use flag multiple times for multiple samples."))
-    parser.add_arguent("-f", "--restart_failed", dest="restart_failed_jobs", action="store_true",
+    parser.add_argument("-f", "--restart-failed", dest="restart_failed_jobs", action="store_true",
             help=("Restart jobs marked as 'FAILED' in Charon"))
     parser.add_argument("demux_fcid_dir", nargs="?", action="store",
             help=("The path to the Illumina demultiplexed fc directories "

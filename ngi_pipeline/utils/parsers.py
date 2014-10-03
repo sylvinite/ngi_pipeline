@@ -44,20 +44,22 @@ def determine_library_prep_from_fcid(project_id, sample_name, fcid):
                         seqrun_runid = seqrun["seqrunid"]
                         if seqrun_runid == fcid:
                             return libprep['libprepid']
+                    else:
+                        raise CharonError("No match", 404)
                 else:
-                    ## HACK HACK FIXME HACK
-                    ## need more careful though / implementation
                     raise CharonError("No seqruns found!", 404)
         else:
-            ## HACK HACK FIXME HACK
-            ## it's 17:36
             raise CharonError("No libpreps found!", 404)
     except CharonError as e:
         if e.status_code == 404:
             raise ValueError('No library prep found for project "{}" / sample "{}" '
                              '/ fcid "{}"'.format(project_id, sample_name, fcid))
         else:
-            raise
+            raise ValueError('Could not determine library prep for project "{}" '
+                             '/ sample "{}" / fcid "{}": {}'.format(project_id,
+                                                                    sample_name,
+                                                                    fcid,
+                                                                    e))
 
 
 def determine_libprep_from_uppsala_samplesheet(samplesheet_path, project_id, sample_id, seqrun_id, lane_num):

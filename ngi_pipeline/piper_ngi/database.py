@@ -1,6 +1,7 @@
 """sqlalchemy interface to a (currently) sqlite database for tracking running processes"""
 
 import os
+import contextlib
 
 from ngi_pipeline.log.loggers import minimal_logger
 from ngi_pipeline.utils.classes import with_ngi_config
@@ -18,6 +19,7 @@ Base = declarative_base()
 Session = sessionmaker()
 
 
+@contextlib.contextmanager
 @with_ngi_config
 def get_db_session(database_path=None, config=None, config_file_path=None):
     """Return a session connection to the database."""
@@ -36,7 +38,11 @@ def get_db_session(database_path=None, config=None, config_file_path=None):
     # Bind the Session to the engine
     Session.configure(bind=engine)
     # Instantiate
-    return Session()
+    session = Session()
+    try:
+        yield session
+    finally:
+        session.close()
 
 
 def _init_engine(database_path):
