@@ -135,6 +135,7 @@ def analyze_sample(project, sample, config=None, config_file_path=None):
                                                                 project_base_path=project.base_path,
                                                                 project_name=project.name,
                                                                 sample_id=sample.name)
+
                     build_setup_xml(project, config, sample)
                     command_line = build_piper_cl(project, workflow_subtask, exit_code_path, config)
                     p_handle = launch_piper_job(command_line, project, log_file_path)

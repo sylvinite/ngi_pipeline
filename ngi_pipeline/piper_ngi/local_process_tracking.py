@@ -163,8 +163,14 @@ def update_charon_with_local_jobs_status():
                     session.delete(sample_entry)
                 else:
                     # None -> Job still running
-                    charon_status = charon_session.sample_get(projectid=project_id,
+                    try:
+                        charon_status = charon_session.sample_get(projectid=project_id,
                                                               sampleid=sample_id)['status']
+                    except (CharonError, KeyError) as e:
+                        LOG.warn('Unable to get required information from Charon for '
+                          'sample "{}" / project "{}" -- forcing it to RUNNING: {}'.format(sample_id, project_id, e))
+                        charon_status = "NEW"
+
                     if not charon_status == "RUNNING":
                         LOG.warn('Tracking inconsistency for {}: Charon status is "{}" but '
                                  'local process tracking database indicates it is running. '
