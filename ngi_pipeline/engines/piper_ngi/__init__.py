@@ -113,7 +113,7 @@ def analyze_sample(project, sample, config=None, config_file_path=None):
     load_modules(modules_to_load)
     charon_session = CharonSession()
     # Determine if we can begin sample-level processing yet.
-    # Conditions are that the coverage is above 20X
+    # Conditions are that the coverage is above 28.9X
     # If these conditions become more complex we can create a function for this
     sample_total_autosomal_coverage = charon_session.sample_get(project.project_id,
                                      sample.name).get('total_autosomal_coverage')

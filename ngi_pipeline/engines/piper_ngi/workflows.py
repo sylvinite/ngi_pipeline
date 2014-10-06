@@ -1,4 +1,3 @@
-#!/bin/env python
 """Piper workflow-specific code."""
 
 import os
@@ -7,6 +6,7 @@ import sys
 from ngi_pipeline.log.loggers import minimal_logger
 
 LOG = minimal_logger(__name__)
+
 
 def return_cl_for_workflow(workflow_name, qscripts_dir_path, setup_xml_path, global_config_path, output_dir=None):
     """Return an executable-ready Piper command line.
@@ -28,7 +28,6 @@ def return_cl_for_workflow(workflow_name, qscripts_dir_path, setup_xml_path, glo
         error_msg = "Workflow \"{}\" has no associated function.".format(workflow_fn_name)
         LOG.error(error_msg)
         raise NotImplementedError(error_msg)
-   ## TODO need tmp, logging directory
     LOG.info('Building command line for workflow "{}"'.format(workflow_name))
     return workflow_function(qscripts_dir_path, setup_xml_path, global_config_path, output_dir)
 
