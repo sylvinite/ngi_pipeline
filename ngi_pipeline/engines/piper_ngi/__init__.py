@@ -9,11 +9,11 @@ import shutil
 import subprocess
 import time
 
-from ngi_pipeline.piper_ngi import workflows
-from ngi_pipeline.piper_ngi.utils import create_log_file_path, create_exit_code_file_path
+from ngi_pipeline.engines.piper_ngi import workflows
+from ngi_pipeline.engines.piper_ngi.utils import create_log_file_path, create_exit_code_file_path
 from ngi_pipeline.database.classes import CharonSession, CharonError
 from ngi_pipeline.log.loggers import log_process_non_blocking, minimal_logger
-from ngi_pipeline.piper_ngi.local_process_tracking import is_seqrun_analysis_running_local, \
+from ngi_pipeline.engines.piper_ngi.local_process_tracking import is_seqrun_analysis_running_local, \
                                                           is_sample_analysis_running_local, \
                                                           record_process_seqrun, \
                                                           record_process_sample
