@@ -8,7 +8,8 @@ import os
 from ngi_pipeline.conductor.classes import NGIProject
 from ngi_pipeline.database.classes import CharonSession, CharonError
 from ngi_pipeline.database.filesystem import recreate_project_from_db
-from ngi_pipeline.piper_ngi.local_process_tracking import update_charon_with_local_jobs_status
+## FIXME this is engine-specific
+from ngi_pipeline.engines.piper_ngi.local_process_tracking import update_charon_with_local_jobs_status
 from ngi_pipeline.log.loggers import minimal_logger
 from ngi_pipeline.utils.classes import with_ngi_config
 
