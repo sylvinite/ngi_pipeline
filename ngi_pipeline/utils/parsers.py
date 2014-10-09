@@ -1,4 +1,5 @@
 import collections
+import csv
 import glob
 import os
 import re
@@ -15,7 +16,6 @@ LOG = minimal_logger(__name__)
 ##  or  ND-0522_NA10860_PCR-free_SX398_NA10860_PCR-free_140821_D00458_0029_AC45JGANXX   <-- uusnp
 STHLM_UUSNP_SEQRUN_RE = re.compile(r'(?P<project_name>\w\.\w+_\d+_\d+|\w{2}-\d+)_(?P<sample_id>[\w-]+)_(?P<libprep_id>\w|\w{2}\d{3}_\2)_(?P<seqrun_id>\d{6}_\w+_\d{4}_.{10})')
 STHLM_UUSNP_SAMPLE_RE = re.compile(r'(?P<project_name>\w\.\w+_\d+_\d+|\w{2}-\d+)_(?P<sample_id>[\w-]+)')
-
 
 
 def determine_library_prep_from_fcid(project_id, sample_name, fcid):
@@ -44,20 +44,59 @@ def determine_library_prep_from_fcid(project_id, sample_name, fcid):
                         seqrun_runid = seqrun["seqrunid"]
                         if seqrun_runid == fcid:
                             return libprep['libprepid']
+                    else:
+                        raise CharonError("No match", 404)
                 else:
-                    ## HACK HACK FIXME HACK
-                    ## need more careful though / implementation
                     raise CharonError("No seqruns found!", 404)
         else:
-            ## HACK HACK FIXME HACK
-            ## it's 17:36
             raise CharonError("No libpreps found!", 404)
     except CharonError as e:
         if e.status_code == 404:
             raise ValueError('No library prep found for project "{}" / sample "{}" '
                              '/ fcid "{}"'.format(project_id, sample_name, fcid))
         else:
-            raise
+            raise ValueError('Could not determine library prep for project "{}" '
+                             '/ sample "{}" / fcid "{}": {}'.format(project_id,
+                                                                    sample_name,
+                                                                    fcid,
+                                                                    e))
+
+
+def determine_libprep_from_uppsala_samplesheet(samplesheet_path, project_id, sample_id, seqrun_id, lane_num):
+    samplesheet = parse_samplesheet(samplesheet_path)
+    fcid = seqrun_id.split("_")[3][1:]
+    for row in samplesheet:
+        ss_project_id = row["SampleProject"]
+        ss_sample_id = row["SampleID"]
+        ss_fcid = row["FCID"]
+        ss_lane_num = int(row["Lane"])
+
+        if project_id == ss_project_id and \
+           sample_id == ss_sample_id and \
+           fcid == ss_fcid and \
+           lane_num == ss_lane_num:
+               # Resembles 'LIBRARY_NAME:SX398_NA11993_Nano'
+               try:
+                   return row["Description"].split(":")[1]
+               except IndexError:
+                   error_msg = ('Malformed description in "{}"; cannot get '
+                                'libprep information'.format(samplesheet_path))
+                   LOG.warn(error_msg)
+                   raise ValueError(error_msg)
+    error_msg = ('No match found in "{}" for project "{}" / sample "{}" / '
+                 'seqrun "{}" / lane number "{}"'.format(samplesheet_path,
+                                                         project_id, sample_id,
+                                                         seqrun_id, lane_num))
+    LOG.warn(error_msg)
+    raise ValueError(error_msg)
+
+
+@memoized
+def parse_samplesheet(samplesheet_path):
+    """Parses an Illumina SampleSheet.csv and returns a list of dicts
+    """
+    with open(samplesheet_path, 'rU') as f:
+        return [ row for row in csv.DictReader(f, dialect="excel") ]
 
 
 def find_fastq_read_pairs_from_dir(directory):
@@ -133,19 +172,19 @@ def find_fastq_read_pairs(file_list):
 
 
 def parse_lane_from_filename(sample_basename):
-    """Project id, sample id, and lane are pulled from the standard filename format,
-     which is:
-       <lane_num>_<date>_<fcid>_<project>_<sample_num>_<read>.fastq[.gz]
-       e.g.
-       1_140220_AH8AMJADXX_P673_101_1.fastq.gz
-       (SciLifeLab Sthlm format)
-    or
+    """Lane number is parsed from the standard filename format,
+     which is one of:
        <sample-name>_<index>_<lane>_<read>_<group>.fastq.gz
        e.g.
        P567_102_AAAAAA_L001_R1_001.fastq.gz
        (Standard Illumina format)
+    or
+       <lane_num>_<date>_<fcid>_<project>_<sample_num>_<read>.fastq[.gz]
+       e.g.
+       1_140220_AH8AMJADXX_P673_101_1.fastq.gz
+       (SciLifeLab Sthlm format, obsolete)
 
-    returns a tuple of (project_id, sample_id, lane) or raises a ValueError if there is no match
+    returns a lane as an int or raises a ValueError if there is no match
     (which shouldn't generally happen and probably indicates a larger issue).
 
     :param str sample_basename: The name of the file from which to pull the project id
@@ -163,14 +202,13 @@ def parse_lane_from_filename(sample_basename):
         #return match.group('project'), match.group('sample'), match.group('lane')
         return int(match.group('lane'))
     else:
-        error_msg = ("Error: filename didn't match conventions, "
-                     "couldn't find lane number for sample "
-                     "\"{}\"".format(sample_basename))
+        error_msg = ('Error: filename didn\'t match conventions, '
+                     'couldn\'t find lane number for sample '
+                     '"{}"'.format(sample_basename))
         LOG.error(error_msg)
         raise ValueError(error_msg)
 
 
-## TODO we can probably remove the 2-dir search soon
 @memoized
 def get_flowcell_id_from_dirtree(path):
     """Given the path to a file, tries to work out the flowcell ID.

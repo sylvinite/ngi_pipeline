@@ -97,6 +97,13 @@ def execute_command_line(cl, stdout=None, shell=False, stderr=None, cwd=None):
         raise RuntimeError(error_msg)
     return p_handle
 
+def do_symlink(src_files, dst_dir):
+    for src_file in src_files:
+        base_fastq_file = os.path.basename(src_file)
+        dst_file = os.path.join(dst_dir, base_fastq_file)
+        if not os.path.isfile(dst_file):
+            os.symlink(src_file, dst_file)
+
 
 def do_rsync(src_files, dst_dir):
     ## TODO I changed this -c because it takes for goddamn ever but I'll set it back once in Production
@@ -196,7 +203,9 @@ def recreate_project_from_filesystem(project_dir,
     if not restrict_to_libpreps: restrict_to_libpreps = []
     if not restrict_to_seqruns: restrict_to_seqruns = []
 
-    base_path, project_name = os.path.split(os.path.split(project_dir)[0])
+    base_path, project_name = os.path.split(project_dir)
+    if not project_name:
+        base_path, project_name = os.path.split(base_path)
     LOG.info('Setting up project "{}"'.format(project_name))
     try:
         # This requires Charon access -- maps e.g. "Y.Mom_14_01" to "P123"
@@ -211,7 +220,7 @@ def recreate_project_from_filesystem(project_dir,
                              project_id=project_id,
                              base_path=base_path)
 
-    samples_pattern = os.path.join(project_dir, "Sample_*")
+    samples_pattern = os.path.join(project_dir, "*")
     samples = filter(os.path.isdir, glob.glob(samples_pattern))
     if not samples:
         LOG.warn('No samples found for project "{}"'.format(project_obj))

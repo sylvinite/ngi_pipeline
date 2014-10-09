@@ -13,6 +13,10 @@ from ngi_pipeline.piper_ngi import workflows
 from ngi_pipeline.piper_ngi.utils import create_log_file_path, create_exit_code_file_path
 from ngi_pipeline.database.classes import CharonSession, CharonError
 from ngi_pipeline.log.loggers import log_process_non_blocking, minimal_logger
+from ngi_pipeline.piper_ngi.local_process_tracking import is_seqrun_analysis_running_local, \
+                                                          is_sample_analysis_running_local, \
+                                                          record_process_seqrun, \
+                                                          record_process_sample
 from ngi_pipeline.utils.filesystem import load_modules, execute_command_line, rotate_log, safe_makedir
 from ngi_pipeline.utils.classes import with_ngi_config
 from ngi_pipeline.utils.parsers import parse_lane_from_filename, find_fastq_read_pairs_from_dir, \
@@ -21,103 +25,136 @@ from ngi_pipeline.utils.parsers import parse_lane_from_filename, find_fastq_read
 LOG = minimal_logger(__name__)
 
 
+def get_subtasks_for_level(level):
+    """For a given level (e.g. "seqrun" or "sample"), get all the associated
+    subtasks that should be run (e.g. "qc", "dna_alignonly")
+
+    :param str level: The level ("seqrun", "sample")
+    :returns: The names (strings) of the workflows that should be run at that level
+    :rtype: tuple
+    """
+    if level == "seqrun":
+        return ["dna_alignonly"] #"qc",
+    elif level == "sample":
+        return ["merge_process_variantcall"]
+    else:
+        raise NotImplementedError('The level "{}" has no associated subtasks.')
+
+
 @with_ngi_config
-def analyze_flowcell_run(project, sample, libprep, seqrun, workflow_name, config=None, config_file_path=None):
-    """The main method for analyze flowcells (Run Level).
+def analyze_seqrun(project, sample, libprep, seqrun, config=None, config_file_path=None):
+    """Analyze data at the sequencing run (individual fastq) level.
 
     :param NGIProject project: the project to analyze
     :param NGISample sample: the sample to analyzed
     :param NGILibraryPrep libprep: The library prep to analyzed
     :seqrun NGISeqrun seqrun: The sequencing run to analyzed
-    :param str workflow_name: The workflow (e.g. alignment) to execute
     :param dict config: The parsed configuration file (optional)
     :param str config_file_path: The path to the configuration file (optional)
-
-    :returns: The subprocess.Popen object for the process
-    :rtype: subprocess.Popen
     """
+
     modules_to_load = ["java/sun_jdk1.7.0_25", "R/2.15.0"]
     load_modules(modules_to_load)
-    try:
-        workflow_name = "dna_alignonly"
-        ## Temporarily logging to a file until we get ELK set up
-        log_file_path = create_log_file_path(workflow_name=workflow_name,
-                                             project_base_path=project.base_path,
-                                             project_name=project.name,
-                                             sample_id=sample.name,
-                                             libprep_id=libprep.name,
-                                             seqrun_id=seqrun.name)
-        rotate_log(log_file_path)
-        # Store the exit code of detached processes
-        exit_code_path = create_exit_code_file_path(workflow_name=workflow_name,
-                                                    project_base_path=project.base_path,
-                                                    project_name=project.name,
-                                                    sample_id=sample.name,
-                                                    libprep_id=libprep.name,
-                                                    seqrun_id=seqrun.name)
-        build_setup_xml(project, config, sample , libprep.name, seqrun.name)
-        ## Need to pull workflow name from db or something
-        command_line = build_piper_cl(project, workflow_name, exit_code_path, config)
-        return launch_piper_job(command_line, project, log_file_path)
-    except RuntimeError as e:
-        error_msg = ('Processing project "{}" / sample "{}" / libprep "{}" / '
-                     'seqrun "{}" failed: {}'.format(project, sample, libprep, seqrun,
-                                                   e.__repr__()))
-        LOG.error(error_msg)
-        raise
-
+    for workflow_subtask in get_subtasks_for_level(level="seqrun"):
+        if not is_seqrun_analysis_running_local(workflow_subtask=workflow_subtask,
+                                                project_id=project.project_id,
+                                                sample_id=sample.name,
+                                                libprep_id=libprep.name,
+                                                seqrun_id=seqrun.name):
+            try:
+                ## Temporarily logging to a file until we get ELK set up
+                log_file_path = create_log_file_path(workflow_subtask=workflow_subtask,
+                                                     project_base_path=project.base_path,
+                                                     project_name=project.name,
+                                                     sample_id=sample.name,
+                                                     libprep_id=libprep.name,
+                                                     seqrun_id=seqrun.name)
+                rotate_log(log_file_path)
+                # Store the exit code of detached processes
+                exit_code_path = create_exit_code_file_path(workflow_subtask=workflow_subtask,
+                                                            project_base_path=project.base_path,
+                                                            project_name=project.name,
+                                                            sample_id=sample.name,
+                                                            libprep_id=libprep.name,
+                                                            seqrun_id=seqrun.name)
+                build_setup_xml(project, config, sample, libprep.name, seqrun.name)
+                command_line = build_piper_cl(project, workflow_subtask, exit_code_path, config)
+                p_handle = launch_piper_job(command_line, project, log_file_path)
+                try:
+                    record_process_seqrun(project=project, sample=sample, libprep=libprep,
+                                          seqrun=seqrun, workflow_subtask=workflow_subtask,
+                                          analysis_module_name="piper_ngi",
+                                          analysis_dir=project.analysis_dir,
+                                          pid=p_handle.pid)
+                except CharonError as e:
+                    ## This is a problem. If the job isn't recorded, we won't
+                    ## ever know that it has been run and its results will be ignored.
+                    ## I think? Or no I guess if it's relaunched then the results will be there.
+                    ## But we will have multiple processes running.
+                    ## FIXME fix this
+                    LOG.error("<Could not record ...>")
+                    continue
+            except (NotImplementedError, RuntimeError) as e:
+                error_msg = ('Processing project "{}" / sample "{}" / libprep "{}" / '
+                             'seqrun "{}" failed: {}'.format(project, sample, libprep, seqrun,
+                                                           e.__repr__()))
+                LOG.error(error_msg)
 
 @with_ngi_config
-def analyze_sample_run(project, sample, config=None, config_file_path=None):
-    """The main method for sample-level analysis.
+def analyze_sample(project, sample, config=None, config_file_path=None):
+    """Analyze data at the sample level.
 
     :param NGIProject project: the project to analyze
     :param NGISample sample: the sample to analyzed
     :param dict config: The parsed configuration file (optional)
     :param str config_file_path: The path to the configuration file (optional)
-
-    :returns: The subprocess.Popen object for the process or None if job is finished
-    :rtype: subprocess.Popen or None
-    :raises RuntimeError: If the process cannot be started
     """
-    LOG.info('Determining if we can start sample-level analysis for project "{}" / sample "{}"...'.format(project, sample))
     modules_to_load = ["java/sun_jdk1.7.0_25", "R/2.15.0"]
     load_modules(modules_to_load)
     charon_session = CharonSession()
-    try:
-        sample_dict = charon_session.sample_get(project.project_id, sample.name)
-    except CharonError as e:
-        raise RuntimeError('Could not fetch information for project "{}" / '
-                           'sample "{}" from Charon database; cannot '
-                           'proceed.'.format(project, sample))
-    # Check if I can run sample level analysis
-    if not sample_dict.get('total_autosomal_coverage'):     # Doesn't exist or is 0
-        LOG.info('...individual sequencing runs from sample "{}" / project "{}" '
-                 'not yet sequenced or not yet analyzed; waiting to proceed '
-                 'with sample-level analysis'.format(sample, project))
-    # If coverage is above 20X we can proceed.
-    ## Use Charon validation for this possibly
-    elif float(sample_dict.get("total_autosomal_coverage")) > 2.0:
-        LOG.info('...sample "{}" from project "{}" ready for sample-level analysis. '
-                 'Proceed with workflow "{}"'.format(project, sample,"merge_process_varaintCall"))
-        try:
-            build_setup_xml(project, config, sample)
-            workflow_name = "merge_process_variantCall"
-            ## Temporarily logging to a file until we get ELK set up
-            log_file_path = create_log_file_path(project, sample, workflow_name=workflow_name)
-            rotate_log(log_file_path)
-            exit_code_path = create_exit_code_file_path(project, sample, workflow_name)
-            # Need to get workflow from config file or somewhere
-            command_line = build_piper_cl(project, workflow_name, exit_code_path, config)
-            LOG.info('Executing command line "{}"...'.format(command_line))
-            return launch_piper_job(command_line, project, log_file_path)
-        ## FIXME define exceptions more narrowly
-        except  Exception as e:
-            error_msg = 'Processing project "{}" / sample "{}" failed: {}'.format(project, sample, e.__repr__())
-            raise
+    # Determine if we can begin sample-level processing yet.
+    # Conditions are that the coverage is above 28.9X
+    # If these conditions become more complex we can create a function for this
+    sample_total_autosomal_coverage = charon_session.sample_get(project.project_id,
+                                     sample.name).get('total_autosomal_coverage')
+    if sample_total_autosomal_coverage > 28.9:
+        LOG.info('Sample "{}" in project "{}" is ready for processing.'.format(sample, project))
+        for workflow_subtask in get_subtasks_for_level(level="sample"):
+            if not is_sample_analysis_running_local(workflow_subtask=workflow_subtask,
+                                                    project_id=project.project_id,
+                                                    sample_id=sample.name):
+                try:
+                    ## Temporarily logging to a file until we get ELK set up
+                    log_file_path = create_log_file_path(workflow_subtask=workflow_subtask,
+                                                         project_base_path=project.base_path,
+                                                         project_name=project.name,
+                                                         sample_id=sample.name)
+                    rotate_log(log_file_path)
+                    # Store the exit code of detached processes
+                    exit_code_path = create_exit_code_file_path(workflow_subtask=workflow_subtask,
+                                                                project_base_path=project.base_path,
+                                                                project_name=project.name,
+                                                                sample_id=sample.name)
+
+                    build_setup_xml(project, config, sample)
+                    command_line = build_piper_cl(project, workflow_subtask, exit_code_path, config)
+                    p_handle = launch_piper_job(command_line, project, log_file_path)
+                    try:
+                        record_process_sample(project=project, sample=sample,
+                                              workflow_subtask=workflow_subtask,
+                                              analysis_module_name="piper_ngi",
+                                              analysis_dir=project.analysis_dir,
+                                              pid=p_handle.pid)
+                    except RuntimeError as e:
+                        LOG.error(e)
+                        continue
+                except (NotImplementedError, RuntimeError) as e:
+                    error_msg = ('Processing project "{}" / sample "{}" failed: '
+                                 '{}'.format(project, sample, e.__repr__()))
+                    LOG.error(error_msg)
     else:
-        LOG.info('Insufficient coverage for sample "{}" to start sample-level analysis: '
-                 'waiting more data.'.format(sample))
+        LOG.info('Sample "{}" in project "{}" is not yet ready for '
+                 'processing.'.format(sample, project))
 
 
 def launch_piper_job(command_line, project, log_file_path=None):
@@ -150,7 +187,7 @@ def launch_piper_job(command_line, project, log_file_path=None):
 def build_piper_cl(project, workflow_name, exit_code_path, config):
     """Determine which workflow to run for a project and build the appropriate command line.
     :param NGIProject project: The project object to analyze.
-    :param str workflow_name: The name of the workflow to execute
+    :param str workflow_name: The name of the workflow to execute (e.g. "dna_alignonly")
     :param str exit_code_path: The path to the file to which the exit code for this cl will be written
     :param dict config: The (parsed) configuration file for this machine/environment.
 

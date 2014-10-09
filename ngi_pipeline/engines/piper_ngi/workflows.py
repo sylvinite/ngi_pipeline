@@ -1,4 +1,3 @@
-#!/bin/env python
 """Piper workflow-specific code."""
 
 import os
@@ -7,6 +6,7 @@ import sys
 from ngi_pipeline.log.loggers import minimal_logger
 
 LOG = minimal_logger(__name__)
+
 
 def return_cl_for_workflow(workflow_name, qscripts_dir_path, setup_xml_path, global_config_path, output_dir=None):
     """Return an executable-ready Piper command line.
@@ -28,7 +28,6 @@ def return_cl_for_workflow(workflow_name, qscripts_dir_path, setup_xml_path, glo
         error_msg = "Workflow \"{}\" has no associated function.".format(workflow_fn_name)
         LOG.error(error_msg)
         raise NotImplementedError(error_msg)
-   ## TODO need tmp, logging directory
     LOG.info('Building command line for workflow "{}"'.format(workflow_name))
     return workflow_function(qscripts_dir_path, setup_xml_path, global_config_path, output_dir)
 
@@ -44,10 +43,10 @@ def workflow_dna_alignonly(*args, **kwargs):
     :rtype: str
     """
     # Same command line but with one additional option
-    return workflow_dna_variantcalling(*args, **kwargs) + " --alignment_and_qc"
+    return workflow_dna_variantcalling(*args, **kwargs) + " --alignment_and_qc" + " --retry_failed 1"
 
 
-def workflow_merge_process_variantCall(*args, **kwargs):
+def workflow_merge_process_variantcall(*args, **kwargs):
     """Return the command line for best practice analysis: merging, procesing and variant calling.
 
     :param strs qscripts_dir_path: The path to the Piper qscripts directory.
@@ -58,7 +57,7 @@ def workflow_merge_process_variantCall(*args, **kwargs):
     :rtype: str
     """
     # Same command line but with one additional option
-    return workflow_dna_variantcalling(*args, **kwargs) +  " --merge_alignments --data_processing --variant_calling --analyze_separately "
+    return workflow_dna_variantcalling(*args, **kwargs) +  " --merge_alignments --data_processing --variant_calling --analyze_separately " + " --retry_failed 1"
 
 
 def workflow_dna_variantcalling(qscripts_dir_path, setup_xml_path, global_config_path, output_dir=None):
@@ -107,6 +106,3 @@ def workflow_dna_variantcalling(qscripts_dir_path, setup_xml_path, global_config
             "--job_walltime {job_walltime} " \
             "--output_directory {output_dir} " \
             "-run".format(**locals())
-
-
-
