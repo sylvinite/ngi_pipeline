@@ -18,6 +18,27 @@ STHLM_UUSNP_SEQRUN_RE = re.compile(r'(?P<project_name>\w\.\w+_\d+_\d+|\w{2}-\d+)
 STHLM_UUSNP_SAMPLE_RE = re.compile(r'(?P<project_name>\w\.\w+_\d+_\d+|\w{2}-\d+)_(?P<sample_id>[\w-]+)')
 
 
+def slurm_time_to_seconds(slurm_time_str):
+    """Convert a time in a normal goddamned format into seconds.
+    Must follow the format:
+        days-hours:minutes:seconds
+    e.g.
+        0-12:34:56
+    or else I will just return 4 days and that's what you get for getting
+    cute about the formatting.
+    """
+    try:
+        days, time = slurm_time_str.split("-")
+        hours, minutes, seconds = map(int, time.split(":"))
+        hours += int(days) * 24
+        minutes += hours * 60
+        seconds += minutes * 60
+    except Exception as e:
+        LOG.error('Couldn\'t parse passed time "{}": {}'.format(slurm_time_str, e))
+        return 345600
+    return seconds
+
+
 def determine_library_prep_from_fcid(project_id, sample_name, fcid):
     """Use the information in the database to get the library prep id
     from the project name, sample name, and flowcell id.
