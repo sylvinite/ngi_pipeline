@@ -10,13 +10,15 @@ import subprocess
 import time
 
 from ngi_pipeline.engines.piper_ngi import workflows
-from ngi_pipeline.engines.piper_ngi.utils import create_log_file_path, create_exit_code_file_path
+from ngi_pipeline.engines.piper_ngi.local_process_tracking import is_seqrun_analysis_running_local, \
+                                                                  is_sample_analysis_running_local, \
+                                                                  record_process_seqrun, \
+                                                                  record_process_sample
+from ngi_pipeline.engines.piper_ngi.utils import create_exit_code_file_path, \
+                                                 create_log_file_path, \
+                                                 create_sbatch_file
 from ngi_pipeline.database.classes import CharonSession, CharonError
 from ngi_pipeline.log.loggers import log_process_non_blocking, minimal_logger
-from ngi_pipeline.engines.piper_ngi.local_process_tracking import is_seqrun_analysis_running_local, \
-                                                          is_sample_analysis_running_local, \
-                                                          record_process_seqrun, \
-                                                          record_process_sample
 from ngi_pipeline.utils.filesystem import load_modules, execute_command_line, rotate_log, safe_makedir
 from ngi_pipeline.utils.classes import with_ngi_config
 from ngi_pipeline.utils.parsers import parse_lane_from_filename, find_fastq_read_pairs_from_dir, \
@@ -42,7 +44,8 @@ def get_subtasks_for_level(level):
 
 
 @with_ngi_config
-def analyze_seqrun(project, sample, libprep, seqrun, config=None, config_file_path=None):
+def analyze_seqrun(project, sample, libprep, seqrun, run_as_sbatch=True,
+                   config=None, config_file_path=None):
     """Analyze data at the sequencing run (individual fastq) level.
 
     :param NGIProject project: the project to analyze
@@ -53,8 +56,11 @@ def analyze_seqrun(project, sample, libprep, seqrun, config=None, config_file_pa
     :param str config_file_path: The path to the configuration file (optional)
     """
 
-    modules_to_load = ["java/sun_jdk1.7.0_25", "R/2.15.0"]
-    load_modules(modules_to_load)
+    # If we run as sbatch it goes into the sbatch file
+    if not run_as_sbatch:
+        ## TODO load these from the config?
+        modules_to_load = ["java/sun_jdk1.7.0_25", "R/2.15.0"]
+        load_modules(modules_to_load)
     for workflow_subtask in get_subtasks_for_level(level="seqrun"):
         if not is_seqrun_analysis_running_local(workflow_subtask=workflow_subtask,
                                                 project_id=project.project_id,
@@ -79,8 +85,15 @@ def analyze_seqrun(project, sample, libprep, seqrun, config=None, config_file_pa
                                                             seqrun_id=seqrun.name)
                 build_setup_xml(project, config, sample, libprep.name, seqrun.name)
                 command_line = build_piper_cl(project, workflow_subtask, exit_code_path, config)
-                p_handle = launch_piper_job(command_line, project, log_file_path)
+                # Not sure about this dichotomy -- might be tricky wrt job tracking / exit codes
+                if run_as_sbatch:
+                    slurm_job_id = sbatch_piper_job(command_line_list, project, log_file_path)
+                else:
+                    p_handle = launch_piper_job(command_line, project, log_file_path)
                 try:
+                    ## FIXME use either pid or slurm_job_id;
+                    ##       will have to adjust code in the local_process_tracking to also
+                    ##       have this dichotomy
                     record_process_seqrun(project=project, sample=sample, libprep=libprep,
                                           seqrun=seqrun, workflow_subtask=workflow_subtask,
                                           analysis_module_name="piper_ngi",
@@ -91,7 +104,7 @@ def analyze_seqrun(project, sample, libprep, seqrun, config=None, config_file_pa
                     ## ever know that it has been run and its results will be ignored.
                     ## I think? Or no I guess if it's relaunched then the results will be there.
                     ## But we will have multiple processes running.
-                    ## FIXME fix this
+                    ## FIXME fix this --> how?
                     LOG.error("<Could not record ...>")
                     continue
             except (NotImplementedError, RuntimeError) as e:
@@ -157,6 +170,12 @@ def analyze_sample(project, sample, config=None, config_file_path=None):
                  'processing.'.format(sample, project))
 
 
+def sbatch_piper_job(command_line_list, project, slurm_queue=None):
+    from ngi_pipeline.engines.piper_ngi.utils import SBATCH_HEADER
+    sbatch_text = SBATCH_HEADER
+    more_text = """more"""
+
+
 def launch_piper_job(command_line, project, log_file_path=None):
     """Launch the Piper command line.
 
@@ -172,12 +191,12 @@ def launch_piper_job(command_line, project, log_file_path=None):
         try:
             file_handle = open(log_file_path, 'w')
         except Exception as e:
-            LOG.error('Could not open log file "{}"; reverting to standard logger (error: {})'.format(log_file_path, e))
+            LOG.error('Could not open log file "{}"; reverting to standard '
+                      'logger (error: {})'.format(log_file_path, e))
             log_file_path = None
     popen_object = execute_command_line(command_line, cwd=cwd, shell=True,
                                         stdout=(file_handle or subprocess.PIPE),
-                                        stderr=(file_handle or subprocess.PIPE)
-                                        )
+                                        stderr=(file_handle or subprocess.PIPE))
     if not log_file_path:
         log_process_non_blocking(popen_object.stdout, LOG.info)
         log_process_non_blocking(popen_object.stderr, LOG.warn)
@@ -244,6 +263,14 @@ def build_piper_cl(project, workflow_name, exit_code_path, config):
 
 def add_exit_code_recording(cl, exit_code_path):
     """Takes a command line and returns it with increased pizzaz"""
+    ## FIXME need to change this to get the SLURM job id return code
+    ##          sacct -n -j <job_id> -o ExitCode
+    ##       (or can use DerivedExitCode, the highest code)
+    ##       this of course can also not just be appended to the end of the cl,
+    ##       as that will now be an sbatch command. We will have to
+    ##       just run this intermittently
+    ##      Can check state with
+    ##          sacct -n -j <job_id> -o State
     record_exit_code = "; echo $? > {}".format(exit_code_path)
     if type(cl) is list:
         # This should work, right? Right
@@ -327,7 +354,6 @@ def build_setup_xml(project, config, sample=None, libprep_id=None, seqrun_id=Non
                            "--sequencing_center {sequencing_center} "
                            "--uppnex_project_id {uppmax_proj} "
                            "--reference {reference_path} ".format(**cl_args))
-    #NOTE: here I am assuming the different dir structure, it would be wiser to change the object type and have an uppsala project
     if not seqrun_id:
         #if seqrun_id is none it means I want to create a sample level setup xml
         for libprep in sample:

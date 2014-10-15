@@ -26,9 +26,9 @@ if __name__ == '__main__':
     parser.add_argument("-f", "--restart-failed", dest="restart_failed_jobs", action="store_true",
             help=("Restart jobs marked as FAILED in Charon."))
     g = parser.add_mutually_exclusive_group()
-    g.add_argument("--seqrun_only", action="store_true",
+    g.add_argument("--seqrun-only", action="store_true",
             help=("Only process at the seqrun level."))
-    g.add_argument("--sample_only", action="store_true",
+    g.add_argument("--sample-only", action="store_true",
             help=("Only process at the sample level."))
 
     args_dict = vars(parser.parse_args())
