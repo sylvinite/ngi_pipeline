@@ -1,7 +1,7 @@
 .. Introductory text to NGI pipeline
 
-NGI pipeline components
-=======================
+Pipeline Components
+===================
 
 **Helper**
 
