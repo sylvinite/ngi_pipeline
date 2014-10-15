@@ -23,14 +23,14 @@ if __name__=="__main__":
     args = parser.parse_args()
     rc = redis.StrictRedis(host='localhost', port=6379, db=0)
 
-    # Smartly build a dictionary of tasks with like name_of_the_taks: task_address
+    # Build a dictionary of available tasks
     tasks_names = [task_name for task_name in dir(tasks)]
     # You may be loading objects and modules together with tasks that are not
     # on your locals()
     tasks_dict = {}
-    for k in tasks_names:
+    for task in tasks_names:
         try:
-            tasks_dict[k] = locals()[k]
+            tasks_dict[task] = locals()[task]
         except KeyError:
             pass
 
