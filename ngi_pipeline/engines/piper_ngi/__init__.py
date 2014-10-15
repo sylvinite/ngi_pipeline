@@ -9,11 +9,11 @@ import shutil
 import subprocess
 import time
 
-from ngi_pipeline.piper_ngi import workflows
-from ngi_pipeline.piper_ngi.utils import create_log_file_path, create_exit_code_file_path
+from ngi_pipeline.engines.piper_ngi import workflows
+from ngi_pipeline.engines.piper_ngi.utils import create_log_file_path, create_exit_code_file_path
 from ngi_pipeline.database.classes import CharonSession, CharonError
 from ngi_pipeline.log.loggers import log_process_non_blocking, minimal_logger
-from ngi_pipeline.piper_ngi.local_process_tracking import is_seqrun_analysis_running_local, \
+from ngi_pipeline.engines.piper_ngi.local_process_tracking import is_seqrun_analysis_running_local, \
                                                           is_sample_analysis_running_local, \
                                                           record_process_seqrun, \
                                                           record_process_sample
@@ -113,7 +113,7 @@ def analyze_sample(project, sample, config=None, config_file_path=None):
     load_modules(modules_to_load)
     charon_session = CharonSession()
     # Determine if we can begin sample-level processing yet.
-    # Conditions are that the coverage is above 20X
+    # Conditions are that the coverage is above 28.9X
     # If these conditions become more complex we can create a function for this
     sample_total_autosomal_coverage = charon_session.sample_get(project.project_id,
                                      sample.name).get('total_autosomal_coverage')
