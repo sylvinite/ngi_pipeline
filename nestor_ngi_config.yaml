@@ -16,6 +16,15 @@ piper:
     # Also can be set as an environmental variable $PIPER_QSCRIPTS_DIR
     path_to_piper_qscripts: /proj/a2010002/software/piper/qscripts
 
+
+qc:
+    fastqc:
+        path: /sw/apps/bioinfo/fastqc/0.11.2/nestor/fastqc
+    fastq_screen:
+        path: /sw/apps/bioinfo/fastq_screen/0.4.3/nestor/bin/fastq_screen
+        path_to_bowtie2: /sw/apps/bioinfo/bowtie2/2.0.2/nestor/bowtie2
+        path_to_config: 
+
 supported_genomes:
     #"GRCh37": "/apus/data/uppnex/reference/Homo_sapiens/GRCh37/concat/Homo_sapiens.GRCh37.57.dna.concat.fa"
     "GRCh37": "/proj/a2009002/piper_references/gatk_bundle/2.8/b37/human_g1k_v37.fasta"
@@ -34,11 +43,11 @@ project:
 analysis:
     workflows:
         NGI:
-            analysis_engine: ngi_pipeline.piper_ngi
-        mate_pair:
-            analysis_engine: ngi_pipeline.de_novo_pipeline
-        RNA:
-            analysis_engine: ngi_pipeline.bcbio_ngi
+            analysis_engine: ngi_pipeline.engines.piper_ngi
+        #mate_pair:
+        #    analysis_engine: ngi_pipeline.engines.de_novo_pipeline
+        #RNA:
+        #    analysis_engine: ngi_pipeline.engines.bcbio_ngi
     top_dir: /proj/a2010002/nobackup/NGI/analysis_ready
     #log: /proj/a2010002/data/log
     #store_dir: /proj/a2010002/archive
