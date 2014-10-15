@@ -22,6 +22,7 @@ from ngi_pipeline.utils.parsers import determine_library_prep_from_fcid, \
 
 LOG = minimal_logger(__name__)
 
+UPPSALA_PROJECT_RE = re.compile(r'\w{2}-\d{4}')
 
 ## NOTE
 ## This is called the key function that needs to be called by Celery when  a new flowcell is delivered
@@ -96,7 +97,7 @@ def process_demultiplexed_flowcells(demux_fcid_dirs, restrict_to_projects=None,
         # Don't need the dict functionality anymore; revert to list
         projects_to_analyze = projects_to_analyze.values()
     for project in projects_to_analyze:
-        if re.match(r'\w{2}-\d{4}', project.project_id):
+        if UPPSALA_PROJECT_RE.match(project.project_id):
             LOG.info('Creating Charon records for Uppsala project "{}" if they are missing'.format(project))
             create_charon_entries_from_project(project)
     # The automatic analysis that occurs after flowcells are delivered is
@@ -111,6 +112,7 @@ def process_demultiplexed_flowcells(demux_fcid_dirs, restrict_to_projects=None,
 def setup_analysis_directory_structure(fc_dir, projects_to_analyze,
                                        restrict_to_projects=None, restrict_to_samples=None,
                                        create_files=True,
+                                       ign_only=True,
                                        config=None, config_file_path=None):
     """
     Copy and sort files from their CASAVA-demultiplexed flowcell structure
@@ -120,6 +122,8 @@ def setup_analysis_directory_structure(fc_dir, projects_to_analyze,
     :param str fc_dir: The directory created by CASAVA for this flowcell.
     :param dict config: The parsed configuration file.
     :param set projects_to_analyze: A dict (of Project objects, or empty)
+    :param bool create_files: Alter the filesystem (as opposed to just parsing flowcells) (default True)
+    :param bool ign_only: Only process IGN projects (default True)
     :param list restrict_to_projects: Specific projects within the flowcell to process exclusively
     :param list restrict_to_samples: Specific samples within the flowcell to process exclusively
 
@@ -132,6 +136,7 @@ def setup_analysis_directory_structure(fc_dir, projects_to_analyze,
     LOG.info("Setting up analysis for demultiplexed data in source folder \"{}\"".format(fc_dir))
     if not restrict_to_projects: restrict_to_projects = []
     if not restrict_to_samples: restrict_to_samples = []
+    if ign_only: charon_session = CharonSession()
     analysis_top_dir = os.path.abspath(config["analysis"]["top_dir"])
     if not os.path.exists(analysis_top_dir):
         error_msg = "Error: Analysis top directory {} does not exist".format(analysis_top_dir)
@@ -153,6 +158,14 @@ def setup_analysis_directory_structure(fc_dir, projects_to_analyze,
     for project in fc_dir_structure.get('projects', []):
         project_name = project['project_name']
         # If specific projects are specified, skip those that do not match
+        if ign_only:
+            if not UPPSALA_PROJECT_RE.match(project_name):
+                # We can't determine if Uppsala projects are IGN as we have no
+                # data for Uppsala projects in Charon; process all of them
+                project_bpa = charon_session.project_get(project_name).get("best_practice_analysis")
+                if not project_bpa == "IGN":
+                    # If this is not an IGN project, skip it
+                    continue
         if restrict_to_projects and project_name not in restrict_to_projects:
             LOG.debug("Skipping project {}".format(project_name))
             continue
@@ -167,8 +180,7 @@ def setup_analysis_directory_structure(fc_dir, projects_to_analyze,
         # Create a project directory if it doesn't already exist, including
         # intervening "DATA" directory
         project_dir = os.path.join(analysis_top_dir, "DATA", project_name)
-        if create_files:
-            safe_makedir(project_dir, 0770)
+        if create_files: safe_makedir(project_dir, 0770)
         try:
             project_obj = projects_to_analyze[project_dir]
         except KeyError:

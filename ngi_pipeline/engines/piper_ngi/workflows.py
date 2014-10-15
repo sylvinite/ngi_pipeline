@@ -4,11 +4,14 @@ import os
 import sys
 
 from ngi_pipeline.log.loggers import minimal_logger
+from ngi_pipeline.utils.classes import with_ngi_config
 
 LOG = minimal_logger(__name__)
 
 
-def return_cl_for_workflow(workflow_name, qscripts_dir_path, setup_xml_path, global_config_path, output_dir=None):
+@with_ngi_config
+def return_cl_for_workflow(workflow_name, qscripts_dir_path, setup_xml_path, global_config_path,
+                           output_dir=None, config=None, config_file_path=None):
     """Return an executable-ready Piper command line.
 
     :param str workflow_name: The name of the Piper workflow to be run.
@@ -29,7 +32,7 @@ def return_cl_for_workflow(workflow_name, qscripts_dir_path, setup_xml_path, glo
         LOG.error(error_msg)
         raise NotImplementedError(error_msg)
     LOG.info('Building command line for workflow "{}"'.format(workflow_name))
-    return workflow_function(qscripts_dir_path, setup_xml_path, global_config_path, output_dir)
+    return workflow_function(qscripts_dir_path, setup_xml_path, global_config_path, config, output_dir)
 
 
 def workflow_dna_alignonly(*args, **kwargs):
@@ -57,10 +60,10 @@ def workflow_merge_process_variantcall(*args, **kwargs):
     :rtype: str
     """
     # Same command line but with one additional option
-    return workflow_dna_variantcalling(*args, **kwargs) +  " --merge_alignments --data_processing --variant_calling --analyze_separately " + " --retry_failed 1"
+    return workflow_dna_variantcalling(*args, **kwargs) +  " --merge_alignments --data_processing --variant_calling --analyze_separately --retry_failed 1"
 
 
-def workflow_dna_variantcalling(qscripts_dir_path, setup_xml_path, global_config_path, output_dir=None):
+def workflow_dna_variantcalling(qscripts_dir_path, setup_xml_path, global_config_path, config, output_dir=None):
     """Return the command line for DNA Variant Calling.
 
     :param strs qscripts_dir_path: The path to the Piper qscripts directory.
@@ -72,9 +75,7 @@ def workflow_dna_variantcalling(qscripts_dir_path, setup_xml_path, global_config
     """
     workflow_qscript_path = os.path.join(qscripts_dir_path, "DNABestPracticeVariantCalling.scala")
 
-    ## Should be able to figure this out dynamically I suppose
-    #job_walltime = str(calculate_job_time(workflow, ...))
-    job_walltime = "345600"
+    job_walltime = slurm_time_to_seconds(config.get("slurm", {}).get("time") or "3-00:00:00")
     # Pull from config file
     num_threads = 16
 

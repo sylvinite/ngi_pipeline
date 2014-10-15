@@ -6,8 +6,8 @@ import time
 
 from ngi_pipeline.database.classes import CharonSession, CharonError
 from ngi_pipeline.log.loggers import minimal_logger
-from ngi_pipeline.piper_ngi.database import SeqrunAnalysis, SampleAnalysis, get_db_session
-from ngi_pipeline.piper_ngi.utils import create_exit_code_file_path
+from ngi_pipeline.engines.piper_ngi.database import SeqrunAnalysis, SampleAnalysis, get_db_session
+from ngi_pipeline.engines.piper_ngi.utils import create_exit_code_file_path
 from ngi_pipeline.utils.parsers import parse_qualimap_results, \
                                        STHLM_UUSNP_SEQRUN_RE, \
                                        STHLM_UUSNP_SAMPLE_RE

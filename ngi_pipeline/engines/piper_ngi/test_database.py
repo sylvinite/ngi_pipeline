@@ -4,7 +4,7 @@ import sqlalchemy
 import tempfile
 import unittest
 
-from ngi_pipeline.piper_ngi import database as sql_db
+from ngi_pipeline.engines.piper_ngi import database as sql_db
 from ngi_pipeline.tests import generate_test_data as gtd
 
 
