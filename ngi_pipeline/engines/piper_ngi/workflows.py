@@ -5,6 +5,7 @@ import sys
 
 from ngi_pipeline.log.loggers import minimal_logger
 from ngi_pipeline.utils.classes import with_ngi_config
+from ngi_pipeline.utils.parsers import slurm_time_to_seconds
 
 LOG = minimal_logger(__name__)
 
