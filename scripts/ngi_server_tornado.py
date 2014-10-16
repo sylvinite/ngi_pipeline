@@ -11,6 +11,8 @@ class ProcessDemultiplexedFlowcellHandler(tornado.web.RequestHandler):
         restrict_to_samples = self.get_argument('restrict_to_samples', None)
         restart_failed_jobs = self.get_argument('restart_failed_jobs', False)
         config_file_path = self.get_argument('config_file_path', None)
+        #flowcell.process_demultiplexed_flowcell(flowcell_id, restrict_to_projects,
+        #        restrict_to_samples, restart_failed_jobs, config_file_path)
         self.write("Flowcell {} started being processed".format(flowcell_id))
 
 application = tornado.web.Application([
