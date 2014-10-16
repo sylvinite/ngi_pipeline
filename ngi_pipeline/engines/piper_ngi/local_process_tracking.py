@@ -7,7 +7,7 @@ import time
 from ngi_pipeline.database.classes import CharonSession, CharonError
 from ngi_pipeline.log.loggers import minimal_logger
 from ngi_pipeline.engines.piper_ngi.database import SeqrunAnalysis, SampleAnalysis, get_db_session
-from ngi_pipeline.engines.piper_ngi.utils import create_exit_code_file_path
+#from ngi_pipeline.engines.piper_ngi.utils import create_exit_code_file_path
 from ngi_pipeline.utils.parsers import parse_qualimap_results, \
                                        STHLM_UUSNP_SEQRUN_RE, \
                                        STHLM_UUSNP_SAMPLE_RE
@@ -34,14 +34,9 @@ def update_charon_with_local_jobs_status():
             sample_id = seqrun_entry.sample_id
             libprep_id = seqrun_entry.libprep_id
             seqrun_id = seqrun_entry.seqrun_id
-            pid = seqrun_entry.process_id
+            slurm_job_id= seqrun_entry.slurm_job_id
 
-            exit_code = get_exit_code(workflow_name=workflow,
-                                      project_base_path=project_base_path,
-                                      project_name=project_name,
-                                      sample_id=sample_id,
-                                      libprep_id=libprep_id,
-                                      seqrun_id=seqrun_id)
+            exit_code = get_slurm_job_exit_status(slurm_job_id)
             label = "project/sample/libprep/seqrun {}/{}/{}/{}".format(project_name,
                                                                        sample_id,
                                                                        libprep_id,

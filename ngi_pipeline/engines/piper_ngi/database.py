@@ -88,8 +88,8 @@ class SeqrunAnalysis(Base):
     workflow = Column(String(50))
     engine = Column(String(50))
     analysis_dir = Column(String(100))
-    process_id = Column(Integer, primary_key=True, unique=True)
-
+    #process_id = Column(Integer, primary_key=True, unique=True)
+    slurm_job_id=Column(Integer, primary_key=True, unique=True)
 
     def __repr__(self):
         # locals() as a dict for str.format: nice-looking and easy but seems a little sneaky. Discuss!

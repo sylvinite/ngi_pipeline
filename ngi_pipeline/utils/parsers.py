@@ -18,6 +18,22 @@ STHLM_UUSNP_SEQRUN_RE = re.compile(r'(?P<project_name>\w\.\w+_\d+_\d+|\w{2}-\d+)
 STHLM_UUSNP_SAMPLE_RE = re.compile(r'(?P<project_name>\w\.\w+_\d+_\d+|\w{2}-\d+)_(?P<sample_id>[\w-]+)')
 
 
+def get_slurm_job_exit_status(slurm_job_id):
+    """Gets the overall exit status of a slurm job. Uses the overall status,
+    which is to say we return the highest exit code of the job.
+
+    :param int slurm_job_id: This can be a string if you really want
+
+    :returns: The highest exit code of the job
+    :rtype: int
+    """
+    exit_status = subprocess.check_output(shlex.split("sacct -n -j 3058477 -o ExitCode"))
+    if not exit_status:
+        return None
+    else:
+        return int(exit_status)
+
+
 def slurm_time_to_seconds(slurm_time_str):
     """Convert a time in a normal goddamned format into seconds.
     Must follow the format:

@@ -36,6 +36,7 @@ def create_sbatch_header(slurm_project_id, slurm_queue, num_cores, slurm_time,
                                 slurm_err_log=slurm_err_log)
 
 
+
 def create_log_file_path(workflow_subtask, project_base_path, project_name,
                          sample_id=None, libprep_id=None, seqrun_id=None):
     file_base_pathname = _create_generic_output_file_path(workflow_subtask,

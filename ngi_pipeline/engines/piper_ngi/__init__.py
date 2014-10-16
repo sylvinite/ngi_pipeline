@@ -44,7 +44,7 @@ def get_subtasks_for_level(level):
 
 
 @with_ngi_config
-def analyze_seqrun(project, sample, libprep, seqrun, run_as_sbatch=True,
+def analyze_seqrun(project, sample, libprep, seqrun,
                    config=None, config_file_path=None):
     """Analyze data at the sequencing run (individual fastq) level.
 
@@ -55,72 +55,60 @@ def analyze_seqrun(project, sample, libprep, seqrun, run_as_sbatch=True,
     :param dict config: The parsed configuration file (optional)
     :param str config_file_path: The path to the configuration file (optional)
     """
-
-    # If we run as sbatch it goes into the sbatch file
-    if not run_as_sbatch:
-        ## TODO load these from the config?
-        modules_to_load = ["java/sun_jdk1.7.0_25", "R/2.15.0"]
-        load_modules(modules_to_load)
+    # We will build the command lines for each workflow separately
+    # but sbatch them all together (in the order that they are passed back from
+    # get_subtasks_for_level()
+    command_lines = []
     for workflow_subtask in get_subtasks_for_level(level="seqrun"):
         if not is_seqrun_analysis_running_local(workflow_subtask=workflow_subtask,
                                                 project_id=project.project_id,
                                                 sample_id=sample.name,
                                                 libprep_id=libprep.name,
                                                 seqrun_id=seqrun.name):
-            try:
-                ## Temporarily logging to a file until we get ELK set up
-                log_file_path = create_log_file_path(workflow_subtask=workflow_subtask,
-                                                     project_base_path=project.base_path,
-                                                     project_name=project.name,
-                                                     sample_id=sample.name,
-                                                     libprep_id=libprep.name,
-                                                     seqrun_id=seqrun.name)
-                rotate_log(log_file_path)
+            ## Temporarily logging to a file until we get ELK set up
+            log_file_path = create_log_file_path(workflow_subtask=workflow_subtask,
+                                                 project_base_path=project.base_path,
+                                                 project_name=project.name,
+                                                 sample_id=sample.name,
+                                                 libprep_id=libprep.name,
+                                                 seqrun_id=seqrun.name)
+            rotate_log(log_file_path)
 
-                # Store the exit code of detached processes
-                ## Exit code does not go to scratch -- keep on /apus
-                exit_code_path = create_exit_code_file_path(workflow_subtask=workflow_subtask,
-                                                            project_base_path=project.base_path,
-                                                            project_name=project.name,
-                                                            sample_id=sample.name,
-                                                            libprep_id=libprep.name,
-                                                            seqrun_id=seqrun.name)
+            # Store the exit code of detached processes
+            ## Exit code does not go to scratch -- keep on /apus
+            exit_code_path = create_exit_code_file_path(workflow_subtask=workflow_subtask,
+                                                        project_base_path=project.base_path,
+                                                        project_name=project.name,
+                                                        sample_id=sample.name,
+                                                        libprep_id=libprep.name,
+                                                        seqrun_id=seqrun.name)
 
-                build_setup_xml(project, config, sample, libprep.name, seqrun.name)
+            build_setup_xml(project, config, sample, libprep.name, seqrun.name)
 
-                command_line = build_piper_cl(project, workflow_subtask, exit_code_path, config)
+            command_lines.append(build_piper_cl(project, workflow_subtask, exit_code_path, config))
 
-# Not sure about this dichotomy -- might be tricky wrt job tracking / exit codes
-                if run_as_sbatch:
-                    slurm_job_id = sbatch_piper_seqrun(seqrun_command_line, project, sample,
-                                                       libprep, seqrun)
-                else:
-                    p_handle = launch_piper_job(command_line, project, log_file_path)
-                try:
-                    ## FIXME use either pid or slurm_job_id;
-                    ##       will have to adjust code in the local_process_tracking to also
-                    ##       have this dichotomy
-                    record_process_seqrun(project=project, sample=sample, libprep=libprep,
-                                          seqrun=seqrun, workflow_subtask=workflow_subtask,
-                                          analysis_module_name="piper_ngi",
-                                          analysis_dir=project.analysis_dir,
-                                          pid=p_handle.pid)
-                except CharonError as e:
-                    ## This is a problem. If the job isn't recorded, we won't
-                    ## ever know that it has been run.
-                    ## I guess if it's relaunched then the results will be there.
-                    ## But we will have multiple processes running.
-                    ## FIXME fix this --> how?
-                    LOG.error('Could not record process for project/sample/libprep/seqrun'
-                              '{}/{}/{}/{}, workflow {}'.format(project, sample,
-                                                                libprep, seqrun,
-                                                                workflow_subtask))
-                    continue
-            except (NotImplementedError, RuntimeError) as e:
-                error_msg = ('Processing project "{}" / sample "{}" / libprep "{}" / '
-                             'seqrun "{}" failed: {}'.format(project, sample, libprep, seqrun,
-                                                           e.__repr__()))
-                LOG.error(error_msg)
+    slurm_job_id = sbatch_piper_seqrun(command_lines, project, sample,libprep, seqrun)
+    try:
+        record_process_seqrun(project=project,
+                              sample=sample,
+                              libprep=libprep,
+                              seqrun=seqrun,
+                              analysis_module_name="piper_ngi",
+                              analysis_dir=project.analysis_dir,
+                              slurm_job_id=slurm_job_id)
+    except CharonError as e:
+        ## This is a problem. If the job isn't recorded, we won't
+        ## ever know that it has been run.
+        ## I guess if it's relaunched then the results will be there.
+        ## But we will have multiple processes running.
+        ## FIXME fix this --> how?
+        LOG.error('Could not record process for project/sample/libprep/seqrun'
+                  '{}/{}/{}/{}'.format(project, sample, libprep, seqrun))
+    except (NotImplementedError, RuntimeError) as e:
+        error_msg = ('Processing project "{}" / sample "{}" / libprep "{}" / '
+                     'seqrun "{}" failed: {}'.format(project, sample, libprep, seqrun,
+                                                   e.__repr__()))
+        LOG.error(error_msg)
 
 @with_ngi_config
 def analyze_sample(project, sample, config=None, config_file_path=None):
