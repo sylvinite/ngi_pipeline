@@ -4,7 +4,7 @@ import os
 SBATCH_HEADER = """
 #!/bin/bash -l
 
-#SBATCH -A {project_id}
+#SBATCH -A {slurm_project_id}
 #SBATCH -p {slurm_queue}
 #SBATCH -n {num_cores}
 #SBATCH -t {slurm_time}
@@ -14,25 +14,27 @@ SBATCH_HEADER = """
 
 """
 
-def create_sbatch_file(project_id, slurm_queue, num_cores, slurm_time,
-                       job_name, slurm_out_log, slurm_err_log,
-                       command_line_list, path_to_sbatch_file):
+def create_sbatch_header(slurm_project_id, slurm_queue, num_cores, slurm_time,
+                         job_name, slurm_out_log, slurm_err_log):
     """
-    Note that the path to the sbatch file must be the full path including
-    the desired filename.
+    :param str slurm_project_id: The project ID to use for accounting (e.g. "b2013064")
+    :param str slurm_queue: "node" or "core"
+    :param int num_cores: How many cores to use (max 16 at the moment)
+    :param str slurm_time: The time for to schedule (e.g. "0-12:34:56")
+    :param str job_name: The name to use for the job (e.g. "Your Mom")
+    :param str slurm_out_log: The path to use for the slurm stdout log
+    :param str slurm_err_log: The path to use for the slurm stderr log
     """
-    sbatch_text = SBATCH_HEADER.format(project_id=project_id,
-                                       slurm_queue=slurm_queue,
-                                       num_cores=num_cores,
-                                       slurm_time=slurm_time,
-                                       job_name=job_name,
-                                       slurm_out_log=slurm_out_log,
-                                       slurm_err_log=slurm_err_log)
-    for command_line in command_line_list:
-        sbatch_text += "\n{}".format(command_line)
-    with open(path_to_sbatch_file, 'w') as f:
-        f.write(sbatch_text)
-        f.write("\n")
+    ## TODO check how many cores are available for a given slurm queue
+    if num_cores > 16: num_cores = 16
+    return SBATCH_HEADER.format(slurm_project_id=project_id,
+                                slurm_queue=slurm_queue,
+                                num_cores=num_cores,
+                                slurm_time=slurm_time,
+                                job_name=job_name,
+                                slurm_out_log=slurm_out_log,
+                                slurm_err_log=slurm_err_log)
+
 
 def create_log_file_path(workflow_subtask, project_base_path, project_name,
                          sample_id=None, libprep_id=None, seqrun_id=None):

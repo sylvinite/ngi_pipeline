@@ -16,7 +16,7 @@ from ngi_pipeline.engines.piper_ngi.local_process_tracking import is_seqrun_anal
                                                                   record_process_sample
 from ngi_pipeline.engines.piper_ngi.utils import create_exit_code_file_path, \
                                                  create_log_file_path, \
-                                                 create_sbatch_file
+                                                 create_sbatch_header
 from ngi_pipeline.database.classes import CharonSession, CharonError
 from ngi_pipeline.log.loggers import log_process_non_blocking, minimal_logger
 from ngi_pipeline.utils.filesystem import load_modules, execute_command_line, rotate_log, safe_makedir
@@ -76,18 +76,24 @@ def analyze_seqrun(project, sample, libprep, seqrun, run_as_sbatch=True,
                                                      libprep_id=libprep.name,
                                                      seqrun_id=seqrun.name)
                 rotate_log(log_file_path)
+
                 # Store the exit code of detached processes
+                ## Exit code does not go to scratch -- keep on /apus
                 exit_code_path = create_exit_code_file_path(workflow_subtask=workflow_subtask,
                                                             project_base_path=project.base_path,
                                                             project_name=project.name,
                                                             sample_id=sample.name,
                                                             libprep_id=libprep.name,
                                                             seqrun_id=seqrun.name)
+
                 build_setup_xml(project, config, sample, libprep.name, seqrun.name)
+
                 command_line = build_piper_cl(project, workflow_subtask, exit_code_path, config)
-                # Not sure about this dichotomy -- might be tricky wrt job tracking / exit codes
+
+# Not sure about this dichotomy -- might be tricky wrt job tracking / exit codes
                 if run_as_sbatch:
-                    slurm_job_id = sbatch_piper_job(command_line_list, project, log_file_path)
+                    slurm_job_id = sbatch_piper_seqrun(seqrun_command_line, project, sample,
+                                                       libprep, seqrun)
                 else:
                     p_handle = launch_piper_job(command_line, project, log_file_path)
                 try:
@@ -101,11 +107,14 @@ def analyze_seqrun(project, sample, libprep, seqrun, run_as_sbatch=True,
                                           pid=p_handle.pid)
                 except CharonError as e:
                     ## This is a problem. If the job isn't recorded, we won't
-                    ## ever know that it has been run and its results will be ignored.
-                    ## I think? Or no I guess if it's relaunched then the results will be there.
+                    ## ever know that it has been run.
+                    ## I guess if it's relaunched then the results will be there.
                     ## But we will have multiple processes running.
                     ## FIXME fix this --> how?
-                    LOG.error("<Could not record ...>")
+                    LOG.error('Could not record process for project/sample/libprep/seqrun'
+                              '{}/{}/{}/{}, workflow {}'.format(project, sample,
+                                                                libprep, seqrun,
+                                                                workflow_subtask))
                     continue
             except (NotImplementedError, RuntimeError) as e:
                 error_msg = ('Processing project "{}" / sample "{}" / libprep "{}" / '
@@ -170,10 +179,76 @@ def analyze_sample(project, sample, config=None, config_file_path=None):
                  'processing.'.format(sample, project))
 
 
-def sbatch_piper_job(command_line_list, project, slurm_queue=None):
-    from ngi_pipeline.engines.piper_ngi.utils import SBATCH_HEADER
-    sbatch_text = SBATCH_HEADER
-    more_text = """more"""
+@with_ngi_config
+def sbatch_piper_seqrun(command_line, project, sample, libprep, seqrun, workflow_name,
+                        config=None, config_file_path=None):
+    scratch_data_dir = "$SNIC_TMP/DATA/{}".format(project.dirname)
+    scratch_analysis_dir = "$SNIC_TMP/ANALYSIS/{}".format(project.dirname)
+    perm_data_dir = os.path.join(project.base_dir, "DATA", project.dirname)
+    perm_analysis_dir = os.path.join(project.base_dir, "ANALYSIS", project.dirname)
+
+    slurm_project_id = config["environment"]["project_id"]
+    slurm_queue = config.get("slurm", {}).get("queue") or "node"
+    num_cores = config.get("slurm", {}).get("cores") or 16
+    seqrun_identifier = "{}-{}-{}-{}-{}".format(project, sample, libprep, seqrun, workflow_name)
+    ## This depends on the workflow and cluster but I guess I can just hardcode for now
+    #slurm_time = config.get("piper", {}).get("job_walltime")
+    # Need a better way to decide on the log names
+    slurm_out_log = os.path.join(perm_analysis_dir, "logs", "{}.out".format(seqrun_identifier))
+    slurm_err_log = os.path.join(perm_analysis_dir, "logs", "{}.err".format(seqrun_identifier))
+    sbatch_text = create_sbatch_header(slurm_project_id=slurm_project_id,
+                                       slurm_queue=slurm_queue,
+                                       num_cores=num_cores,
+                                       slurm_time="4-00:00:00", # 4 days
+                                       job_name="piper_{}".format(seqrun_identifier),
+                                       slurm_out_log=slurm_out_log,
+                                       slurm_err_log=slurm_err_log)
+    # Pull these from the config file
+    #for module_name in config["piper"]["load_modules"]:
+    #    sbatch_text += "module load {}".format(module_name)
+    ## FIXME
+    sbatch_text += "module load java/sun_jdk1.7.0_25\nmodule load R/2.15.0"
+
+    # Move the input files to scratch
+    sbatch_text += "rsync -a {} {}".format(perm_data_dir, scratch_data_dir)
+
+    # piper seqrun cl
+    sbatch_text += command_line
+
+    sbatch_text += "EXIT_STATUS=$?"
+    ngi_pipeline_scripts_dir = os.environ["NGI_PIPELINE_SCRIPTS"]
+    # Blaaarrgh this is horrible
+    # How do we know the name of the virtual environment???
+    sbatch_text += \
+    """if [[ $(python {scripts_dir}/check_charon_coverage(project="{project_id}", sample="{sample_id}", coverage=30)) ]]; then
+        source activate ngi
+        python {scripts_dir}/start_pipeline_from_project \
+               --sample-only {scratch_analysis_dir} \
+               --sample {sample_id}
+        EXIT_STATUS=$?
+    fi""".format(project_id=project.project_id,
+                 sample_id=sample.sample_name,
+                 scripts_dir=ngi_pipeline_scripts_dir,
+                 scratch_analysis_dir=scratch_analysis_dir)
+
+    ## TODO I'm not actually doing anything with the EXIT_STATUS at the moment
+    sbatch_text += "rsync -a {} {}".format(scratch_analysis_dir, perm_analysis_dir)
+
+    ## TODO add file rotation
+    sbatch_dir = os.path.join(perm_analysis_dir, "sbatch")
+    safe_makedir(sbatch_dir)
+    # Add timestamp
+    sbatch_outfile = os.path.join(sbatch_dir, "{}_{}.sbatch".format(sbatch_outfile,
+                            datetime.datetime.now().strftime("%Y-%m-%d_%H:%M:%S:%f")))
+    with open(sbatch_outfile, 'w') as f:
+        f.write(sbatch_text)
+    LOG.info("Queueing sbatch file {}".format(sbatch_outfile))
+    p_handle = execute_command_line("sbatch {}".format(sbatch_outfile))
+    ## FIXME One of these has the slurm job ID but I'll be damned if I remember which one
+    ##       Anyway it needs to be parsed
+    p_out, p_err = p_handle.communicate()
+    ## Parse the thing to get the slurm job id
+    return slurm_job_id
 
 
 def launch_piper_job(command_line, project, log_file_path=None):
@@ -185,7 +260,10 @@ def launch_piper_job(command_line, project, log_file_path=None):
     :returns: The subprocess.Popen object for the process
     :rtype: subprocess.Popen
     """
-    cwd = os.path.join(project.base_path, "ANALYSIS", project.dirname)
+    # Jobs launched via the command line do not utilize scratch space --
+    # use the standard project base path
+    working_dir = os.path.join(project.base_path, "ANALYSIS", project.dirname)
+    # This section of code is all logging
     file_handle=None
     if log_file_path:
         try:
@@ -194,7 +272,8 @@ def launch_piper_job(command_line, project, log_file_path=None):
             LOG.error('Could not open log file "{}"; reverting to standard '
                       'logger (error: {})'.format(log_file_path, e))
             log_file_path = None
-    popen_object = execute_command_line(command_line, cwd=cwd, shell=True,
+    # Execute
+    popen_object = execute_command_line(command_line, cwd=working_dir, shell=True,
                                         stdout=(file_handle or subprocess.PIPE),
                                         stderr=(file_handle or subprocess.PIPE))
     if not log_file_path:

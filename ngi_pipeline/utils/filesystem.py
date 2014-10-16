@@ -108,7 +108,7 @@ def do_symlink(src_files, dst_dir):
 def do_rsync(src_files, dst_dir):
     ## TODO I changed this -c because it takes for goddamn ever but I'll set it back once in Production
     #cl = ["rsync", "-car"]
-    cl = ["rsync", "-aPv"]
+    cl = ["rsync", "-av"]
     cl.extend(src_files)
     cl.append(dst_dir)
     cl = map(str, cl)
