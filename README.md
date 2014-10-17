@@ -2,7 +2,7 @@ Software designed to take demultiplexed Illumina flowcells and shove 'em through
 
 Nota bene
 =========
-This document is to be regareded as a internal instruction for developers are NGI at this stage - the instructions are not guaranteed to be complete nor comprehensive. Some time then things are more stable we'll write up a real README here. You have been warned!
+This document is to be regareded as a internal instruction for developers at NGI at this stage - the instructions are not guaranteed to be complete nor comprehensive. Some time then things are more stable we'll write up a real README here. You have been warned!
 
 Installation
 ============
@@ -93,7 +93,7 @@ $WORK_FOLDER looks like
     |— DATA 
     |— ANALYSIS
 
-`DATA` contains the data stored into `INBOX` but sorted for `project/sample/library_prep/run`. Currently we soft-link the data here both for testing purposes (thepipeline can be tried from beginning to end without the need to copy huge files) and  to alleviate the load on nestor file system. This reshuffling of the data is managed by the ngi_pipeline using the information stored into Charon. For Uppsala project not yet present in the db there is currently a fix that I hope will soon disappear.
+`DATA` contains the data stored into `INBOX` but sorted for `project/sample/library_prep/run`. Currently we soft-link the data here both for testing purposes (the pipeline can be tried from beginning to end without the need to copy huge files) and  to alleviate the load on nestor file system. This reshuffling of the data is managed by the ngi_pipeline using the information stored into Charon. For Uppsala project not yet present in the db there is currently a fix that I hope will soon disappear.
 
 `ANALYSIS` contains the analysis for each project. For each project the following folders are present:
 
@@ -130,7 +130,7 @@ The local_db is checked and charon is updated, once this is done ngi_pipeline tr
 
 N.B. after the analysis are started the local_db is updated but not charon. Therefore, if we run the script on a flowcelll it will happen that charon status will not change. By rerunning the same command you will see that the pipeline will refuse to start analysis as they are already running. When running the command for the second time ngi_pipeline will first (like before) check the current status of local_db and update charon. So only at this point it will be possible to see on charon that the status of the flowcell is RUNNING.
 
-Once the pipeline will be totally in production this will no be longer a problem as there will be a chron-job monitoring the local db and updating charon status (or something similar to this).
+Once the pipeline will be totally in production this will no be longer a problem as there will be a cronjob monitoring the local db and updating charon status (or something similar to this).
 
     #### M.KALLER_14_05 and M.Kaller_14_08
     python /proj/a2014205/software/ngi_pipeline/scripts/start_flowcell_analysis.py /proj/a2014205/INBOX/140815_SN1025_0222_AC4HA6ACXX
