@@ -12,18 +12,17 @@ shove'em through an analysis pipeline (e.g. Piper/GATK or bcbio-nextgen).
 NPI Pipeline Documentation:
 
 .. toctree::
-   :maxdepth: 2
+   :maxdepth: 3
 
-   components
-   codeflow
-   distributed/index
+   introduction/components
+   introduction/codeflow
 
-Code Documentation:
+Source Code Documentation:
 
 .. toctree::
-   :maxdepth: 2
+   :maxdepth: 3
 
-   code/index
+   api/modules
 
 
 Indices and tables
