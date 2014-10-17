@@ -6,11 +6,23 @@
 Welcome to NGI Pipeline's documentation!
 ========================================
 
-Contents:
+NGI pipeline is a software designed to take demultiplexed Illumina flowcells and 
+shove'em through an analysis pipeline (e.g. Piper/GATK or bcbio-nextgen).
+
+NPI Pipeline Documentation:
 
 .. toctree::
-   :maxdepth: 2
+   :maxdepth: 3
 
+   introduction/components
+   introduction/codeflow
+
+Source Code Documentation:
+
+.. toctree::
+   :maxdepth: 3
+
+   api/modules
 
 
 Indices and tables
