@@ -20,36 +20,16 @@ import os
 
 from ngi_pipeline.conductor.flowcell import process_demultiplexed_flowcell, process_demultiplexed_flowcells
 from ngi_pipeline.conductor.launchers import launch_analysis_for_samples
-#from ngi_pipeline.database.local_process_tracking import check_update_jobs_status
+
+from ngi_pipeline.engines.piper_ngi.local_process_tracking import update_charon_with_local_jobs_status
+from ngi_pipeline.database.classes import CharonSession, CharonError
+from ngi_pipeline.utils.filesystem import recreate_project_from_filesystem
+
 
 
 def main(demux_fcid_dir, restrict_to_projects=None, restrict_to_samples=None):
 
-        import pdb
-        pdb.set_trace()
-        
-        
-        demux_fcid_dir = "/proj/a2014205/INBOX/130611_SN7001298_0148_AH0CCVADXX/" #A.Wedell_13_03 sample P567_101
-        process_demultiplexed_flowcell(demux_fcid_dir, None, None)
-        time.sleep(60) #wait for 1 minutes
-        
-        demux_fcid_dir = "/proj/a2014205/INBOX/130612_D00134_0019_AH056WADXX/" # A.Wedell_13_03 sample P567_101
-        process_demultiplexed_flowcell(demux_fcid_dir, None, None)
-        time.sleep(60) #wait for 1 minutes
-        
-        demux_fcid_dir = "/proj/a2014205/INBOX/130627_D00134_0023_AH0JYUADXX/" # A.Wedell_13_03 sample P567_102
-        process_demultiplexed_flowcell(demux_fcid_dir, None, None)
-        time.sleep(60) #wait for 1 minutes
-        
-        demux_fcid_dir = "/proj/a2014205/INBOX/130701_SN7001298_0152_AH0J92ADXX/" # A.Wedell_13_03 sample P567_102
-        process_demultiplexed_flowcell(demux_fcid_dir, None, None)
-        time.sleep(60) #wait for 1 minutes
 
-        demux_fcid_dir = "/proj/a2014205/INBOX/130701_SN7001298_0153_BH0JMGADXX/" # A.Wedell_13_03 sample P567_102
-        process_demultiplexed_flowcell(demux_fcid_dir, None, None)
-        time.sleep(60) #wait for 1 minutes
-        
-        
         demux_fcid_dir = "/proj/a2014205/INBOX/140528_D00415_0049_BC423WACXX" # G.Grigelioniene_14_01
         process_demultiplexed_flowcell(demux_fcid_dir, None, None)
         time.sleep(60) #wait for 1 minutes
@@ -78,26 +58,32 @@ def main(demux_fcid_dir, restrict_to_projects=None, restrict_to_samples=None):
         time.sleep(60) #wait for 1 minutes
 
 
-
-
         ###UPPSALA
-        #/proj/a2010002/INBOX/140821_D00458_0029_AC45JGANXX
+        
+        demux_fcid_dir = "/proj/a2014205/INBOX/140821_D00458_0029_AC45JGANXX" # uppsala run
+        process_demultiplexed_flowcell(demux_fcid_dir, None, None)
+        time.sleep(60) #wait for 1 minutes
 
-        #check_update_jobs_status()
-        #trigger_sample_level_analysis()
-        
-        #for demux_fcid in ("146362_3YUPS4_4614_AYSD4DN8PK", "382000_FA15AC_1819_ADT0SZ8CAV", "526414_H4VQMR_0554_A2Z2D30IMP", "636430_FHTLAG_5491_ADVN76RAX0", "694405_SGXBZU_8447_ANAY949DA1", "707581_O81L8Q_5350_ABBQEYRQQR", "958288_QH3TH9_2625_AOET9TT9AK", "992290_KV8699_9429_AJM8N4NV1U"):
-        #    demux_fcid_dir= os.path.join("/proj/a2014205/INBOX/", demux_fcid)
-        #    process_demultiplexed_flowcell(demux_fcid_dir, None, None)
-        #    time.sleep(30)
-        
+        demux_fcid_dir = "/proj/a2014205/INBOX/140917_D00458_0034_AC4FF3ANXX" # -- rerun
+        process_demultiplexed_flowcell(demux_fcid_dir, None, None)
+        time.sleep(60) #wait for 1 minutes
+
         
         #and now a loop to update the DB
-        #while True:
-        #    check_update_jobs_status()
-        #    trigger_sample_level_analysis()
-        #    #check status every half an hour
-        #    time.sleep(3800)
+        time.sleep(3800)
+        charon_session = CharonSession()
+        ####charon_session.project_delete("ND-0522")
+        while True:
+            update_charon_with_local_jobs_status() ## this updated local_db and charon accordingly
+            # grab all projects from Charon
+            projects_dict = charon_session.projects_get_all()['projects']
+            for project_charon in projects_dict:
+                project_name = project_charon["name"]
+                project_dir  = os.path.join("/proj/a2014205/nobackup/NGI/analysis_ready/DATA", project_name)
+                if os.path.isdir(project_dir):
+                    projectObj = recreate_project_from_filesystem(project_dir, None)
+                    launch_analysis_for_samples([projectObj])
+            time.sleep(3800)
 
 
 if __name__ == '__main__':
