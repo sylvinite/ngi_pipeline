@@ -8,17 +8,13 @@ cluster (UPPMAX for NGI), or trigger analysis itself.
 import argparse
 
 from ngi_pipeline.conductor import flowcell
+from ngi_pipeline.log.loggers import minimal_logger
 #from ngi_pipeline.server import main as server_main
 
-
-############### TESTING STUFF ################
-def test():
-    import time
-    time.sleep(60)
-
-##############################################
+LOG = minimal_logger("ngi_pipeline_start")
 
 if __name__ == "__main__":
+
     parser = argparse.ArgumentParser(description="Launch NGI pipeline")
     subparsers = parser.add_subparsers(help="Choose the mode to run")
 
@@ -33,7 +29,7 @@ if __name__ == "__main__":
 
     # Another subparser for flowcell processing
     process_fc = subparsers_process.add_parser('flowcell', help='Start analysis of raw flowcells')
-    process_fc.add_argument("demux_fcid_dir", nargs="?", action="store",
+    process_fc.add_argument("demux_fcid_dir", action="store",
             help=("The path to the Illumina demultiplexed fc directories "
                   "to process."))
     process_fc.add_argument("-p", "--project", dest="restrict_to_projects", action="append",
@@ -45,8 +41,18 @@ if __name__ == "__main__":
     process_fc.add_argument("-f", "--restart-failed", dest="restart_failed_jobs", action="store_true",
             help=("Restart jobs marked as 'FAILED' in Charon"))
 
-    # Aubpparser for sample processing
+    # Add subparser for sample processing
     sample_group = subparsers_process.add_parser('sample', help='Start the analysis of a particular sample')
-    sample_group.add_argument('sample_dir', nargs="?", action="store",
-        help="The path to the Illumina sample directory")
+    sample_group.add_argument('sample_dir', action="store", help="The path to the Illumina sample directory")
+
     args = parser.parse_args()
+
+    # Finally execute corresponding functions
+    if 'demux_fcid_dir' in args:
+        LOG.info("Starting flowcell analysis in directory {}".format(args.demux_fcid_dir))
+        flowcell.process_demultiplexed_flowcell(args.demux_fcid_dir,
+                                                args.restrict_to_projects,
+                                                args.restrict_to_samples,
+                                                args.restart_failed_jobs)
+    elif 'port' in args:
+        raise NotImplementedError('Sorry, the server stuff is not yet implemented...')
