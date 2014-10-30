@@ -31,7 +31,22 @@ def test():
 ##############################################
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser("Launch NGI pipeline")
+    parser = argparse.ArgumentParser(description="Launch NGI pipeline")
+    subparsers = parser.add_subparsers(help="Choose the mode to run")
+
+    # Add subparser for the server mode
+    parser_server = subparsers.add_parser('server', help="Start ngi_pipeline server")
+    parser_server.add_argument('-p', '--port', help="Port in where to run the application")
+
+    # Add subparser for the process mode
+    parser_process = subparsers.add_parser('process', help="Start some analysis process")
+    parser_process.add_argument('unit', help="Unit to process", coiches=['flowcell'])
+    #XXX MAYBE I CAN USE A GROUP OR SOMETHING TO ENSURE THAT IF UNIT == FLOWCELL THEN A FC ID NEEDS TO BE PRESENT?
+
+
+    # Add subparser for the test mode
+
+
     parser.add_argument('mode', help=("Choose whether to launch an analysis or "
         "start the server to listen to HTTP requests"), choices=['process', 'server', 'test'])
     parser.add_argument('--unit', help="Unit to process", choices=['flowcell'])
