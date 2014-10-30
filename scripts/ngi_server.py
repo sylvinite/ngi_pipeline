@@ -1,36 +1,26 @@
-#!/usr/bin/env python
-"""Start a nextgen analysis server that handles processing from a distributed task queue.
-
-This reads configuration details and then starts a Celery server that will handle
-requests that are passed via an external message queue. This
-allows distributed processing of analysis sections with fewer assumptions about the
-system architecture.
+""" Small Tornado server to trigger bioinforamatics analysis.
 """
-import argparse
+import tornado.ioloop
+import tornado.web
 
-from subprocess import check_call
+from ngi_pipeline.conductor import flowcell
 
-from ngi_pipeline.utils.config import load_yaml_config
-from ngi_pipeline.distributed.celery import app
+class ProcessDemultiplexedFlowcellHandler(tornado.web.RequestHandler):
+    def get(self, flowcell_id):
+        restrict_to_projects = self.get_argument('restrict_to_projects', None)
+        restrict_to_samples = self.get_argument('restrict_to_samples', None)
+        restart_failed_jobs = self.get_argument('restart_failed_jobs', False)
+        config_file_path = self.get_argument('config_file_path', None)
+        #flowcell.process_demultiplexed_flowcell(flowcell_id, restrict_to_projects,
+        #        restrict_to_samples, restart_failed_jobs, config_file_path)
+        self.write("Flowcell {} started being processed".format(flowcell_id))
 
+application = tornado.web.Application([
+    # Here a regex that really matches a flowcell
+    (r"/ngi_pipeline/process_demultiplexed_flowcell/([^/]*)$", ProcessDemultiplexedFlowcellHandler),
+])
 
+if __name__ == "__main__":
+    application.listen(8888)
+    tornado.ioloop.IOLoop.instance().start()
 
-def run_server(config_file, queues=None, task_module=None):
-    """ Loads configuration and launches the server
-    """
-    config = load_yaml_config(config_file)
-
-    cl = ["celery"]
-    tasks = task_module if task_module else "ngi_pipeline.distributed.tasks"
-    cl += ["-A", tasks, "worker", "-n", "ngi_server"]
-    check_call(cl)
-
-
-if __name__=="__main__":
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--config", required=True,
-            help="The path to the configuration file.")
-    parser.add_argument("-t", "--tasks", dest="task_module", action="store",
-                      default=None, help="Task module to import")
-    args = parser.parse_args()
-    run_server(args.config, args.task_module)
