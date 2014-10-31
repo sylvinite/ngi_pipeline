@@ -9,7 +9,7 @@ import argparse
 
 from ngi_pipeline.conductor import flowcell
 from ngi_pipeline.log.loggers import minimal_logger
-#from ngi_pipeline.server import main as server_main
+from ngi_pipeline.server import main as server_main
 
 LOG = minimal_logger("ngi_pipeline_start")
 
@@ -20,7 +20,7 @@ if __name__ == "__main__":
 
     # Add subparser for the server
     parser_server = subparsers.add_parser('server', help="Start ngi_pipeline server")
-    parser_server.add_argument('-p', '--port', help="Port in where to run the application")
+    parser_server.add_argument('-p', '--port', type=int, help="Port in where to run the application")
 
 
     # Add subparser for the process
@@ -55,4 +55,5 @@ if __name__ == "__main__":
                                                 args.restrict_to_samples,
                                                 args.restart_failed_jobs)
     elif 'port' in args:
-        raise NotImplementedError('Sorry, the server stuff is not yet implemented...')
+        LOG.info('Starting ngi_pipeline server at port {}'.format(args.port))
+        server_main.start(args.port)
