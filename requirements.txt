@@ -1,5 +1,4 @@
 CouchDB==0.9
-Logbook==0.7.0
 PyYAML==3.11
 SQLAlchemy==0.9.7
 anyjson==0.3.3
