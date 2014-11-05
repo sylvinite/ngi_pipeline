@@ -57,18 +57,16 @@ def minimal_logger(namespace, config_file=None, to_file=True, debug=False):
     # File logger
     if to_file:
         cwd = os.path.dirname(os.path.realpath('.'))
-        if not config_file:
-            log.warn("No configuration file specified, logging in {}/ngi_pipeline.log".format(cwd))
-        else:
-            config = cl.load_config(config_file)
-            if not config.get('log_dir'):
-                log.warn("No logging path specified, logging in {}/ngi_pipeline.log".format(cwd))
+        log_path = os.path.join(cwd, 'ngi_pipeline.log')
+        if config_file or os.environ.get('NGI_CONFIG'):
+            if os.environ.get('NGI_CONFIG'):
+                config = cl.load_config(os.environ.get('NGI_CONFIG'))
             else:
-                log_path = os.path.join(config.get('log_dir'), 'ngi_pipeline.log')
-                log.info("Logging in file {}/ngi_pipeline.log".format(log_path))
-                fh = logging.FileHandler(log_path)
-                fh.setLevel(log_level)
-                fh.setFormatter(formatter)
-                log.addHandler(fh)
+                config = cl.load_config(config_file)
+            log_path = os.path.join(config.get('log_dir'), 'ngi_pipeline.log')
+        fh = logging.FileHandler(log_path)
+        fh.setLevel(log_level)
+        fh.setFormatter(formatter)
+        log.addHandler(fh)
 
     return log
