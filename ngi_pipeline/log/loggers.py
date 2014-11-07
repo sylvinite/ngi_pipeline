@@ -4,6 +4,7 @@ log module
 import logging
 import os
 import sys
+import yaml
 
 #from ngi_pipeline.utils.config import load_yaml_config
 from Queue import Queue
@@ -60,10 +61,12 @@ def minimal_logger(namespace, config_file=None, to_file=True, debug=False):
         log_path = os.path.join(cwd, 'ngi_pipeline.log')
         if config_file or os.environ.get('NGI_CONFIG'):
             if os.environ.get('NGI_CONFIG'):
-                config = cl.load_config(os.environ.get('NGI_CONFIG'))
+                with open(os.environ.get('NGI_CONFIG'), "r") as conf_file:
+                    config=yaml.load(conf_file)
             else:
-                config = cl.load_config(config_file)
-            log_path = os.path.join(config.get('log_dir'), 'ngi_pipeline.log')
+                with open(config_file, "r") as conf_file:
+                    config=yaml.load(conf_file)
+            log_path = os.path.join(config.get('log_dir', ''), 'ngi_pipeline.log')
         fh = logging.FileHandler(log_path)
         fh.setLevel(log_level)
         fh.setFormatter(formatter)
