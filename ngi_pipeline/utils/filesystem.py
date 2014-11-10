@@ -53,7 +53,7 @@ def load_modules(modules_list):
         raise RuntimeError("".join(error_msgs))
 
 
-def execute_command_line(cl, stdout=None, shell=False, stderr=None, cwd=None):
+def execute_command_line(cl, shell=False, stdout=None, stderr=None, cwd=None):
     """Execute a command line and return the subprocess.Popen object.
 
     :param cl: Can be either a list or a string; if string, gets shlex.splitted
