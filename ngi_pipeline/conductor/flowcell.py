@@ -162,7 +162,12 @@ def setup_analysis_directory_structure(fc_dir, projects_to_analyze,
             if not UPPSALA_PROJECT_RE.match(project_name):
                 # We can't determine if Uppsala projects are IGN as we have no
                 # data for Uppsala projects in Charon; process all of them
-                project_bpa = charon_session.project_get(project_name).get("best_practice_analysis")
+                try:
+                    project_bpa = charon_session.project_get(project_name).get("best_practice_analysis")
+                except (CharonError, RuntimeError, ValueError) as e:
+                    LOG.warn('Could not retrieve project id from Charon (record missing?). '
+                     'Probably  project {} is not an IGN (no mixed flowcells)'.format(project_name))
+                    continue
                 if not project_bpa == "IGN":
                     # If this is not an IGN project, skip it
                     continue

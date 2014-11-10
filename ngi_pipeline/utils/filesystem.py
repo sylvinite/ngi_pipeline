@@ -259,10 +259,9 @@ def recreate_project_from_filesystem(project_dir,
                                                           dirname=seqrun_name)
                 pattern = re.compile(".*\.(fastq|fq)(\.gz|\.gzip|\.bz2)?$")
                 all_files = glob.glob(os.path.join(seqrun_dir, "*"))
-                ## TODO check this
                 fastq_files = filter(os.path.isfile, filter(pattern.match, all_files))
                 for fq_file in fastq_files:
                     fq_name = os.path.basename(fq_file)
                     LOG.info('Adding fastq file "{}" to seqrun "{}"'.format(fq_name, seqrun_obj))
-                    seqrun_obj.add_fastq_files(fq_name)
+                    seqrun_obj.add_fastq_files([fq_name])
     return project_obj

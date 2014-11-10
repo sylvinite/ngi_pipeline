@@ -127,7 +127,7 @@ def analyze_sample(project, sample, config=None, config_file_path=None):
     # If these conditions become more complex we can create a function for this
     sample_total_autosomal_coverage = charon_session.sample_get(project.project_id,
                                      sample.name).get('total_autosomal_coverage')
-    if sample_total_autosomal_coverage > 28.9:
+    if sample_total_autosomal_coverage > 28.4:
         LOG.info('Sample "{}" in project "{}" is ready for processing.'.format(sample, project))
         for workflow_subtask in get_subtasks_for_level(level="sample"):
             if not is_sample_analysis_running_local(workflow_subtask=workflow_subtask,
@@ -413,14 +413,16 @@ def build_setup_xml(project, config, sample=None, libprep_id=None, seqrun_id=Non
 
     cl_args["output_xml_filepath"]  = output_xml_filepath
     cl_args["sequencing_tech"]      = "Illumina"
-
+    cl_args["qos"] = "seqver"
     setupfilecreator_cl = ("{sfc_binary} "
                            "--output {output_xml_filepath} "
                            "--project_name {project} "
                            "--sequencing_platform {sequencing_tech} "
                            "--sequencing_center {sequencing_center} "
                            "--uppnex_project_id {uppmax_proj} "
-                           "--reference {reference_path} ".format(**cl_args))
+                           "--reference {reference_path} "
+                           "--qos {qos}".format(**cl_args))
+    #NOTE: here I am assuming the different dir structure, it would be wiser to change the object type and have an uppsala project
     if not seqrun_id:
         #if seqrun_id is none it means I want to create a sample level setup xml
         for libprep in sample:
