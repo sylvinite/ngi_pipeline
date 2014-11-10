@@ -19,7 +19,7 @@ from ngi_pipeline.engines.piper_ngi.utils import create_exit_code_file_path, \
                                                  create_sbatch_header
 from ngi_pipeline.database.classes import CharonSession, CharonError
 from ngi_pipeline.log.loggers import log_process_non_blocking, minimal_logger
-from ngi_pipeline.utils.filesystem import load_modules, execute_command_line, rotate_log, safe_makedir
+from ngi_pipeline.utils.filesystem import load_modules, execute_command_line, rotate_file, safe_makedir
 from ngi_pipeline.utils.classes import with_ngi_config
 from ngi_pipeline.utils.parsers import parse_lane_from_filename, find_fastq_read_pairs_from_dir, \
                                        get_flowcell_id_from_dirtree
@@ -55,55 +55,54 @@ def analyze_seqrun(project, sample, libprep, seqrun,
     :param dict config: The parsed configuration file (optional)
     :param str config_file_path: The path to the configuration file (optional)
     """
-    # We will build the command lines for each workflow separately
-    # but sbatch them all together (in the order that they are passed back from
-    # get_subtasks_for_level()
-    command_lines = []
-    for workflow_subtask in get_subtasks_for_level(level="seqrun"):
-        if not is_seqrun_analysis_running_local(workflow_subtask=workflow_subtask,
-                                                project_id=project.project_id,
-                                                sample_id=sample.name,
-                                                libprep_id=libprep.name,
-                                                seqrun_id=seqrun.name):
-            ## Temporarily logging to a file until we get ELK set up
-            log_file_path = create_log_file_path(workflow_subtask=workflow_subtask,
-                                                 project_base_path=project.base_path,
-                                                 project_name=project.name,
-                                                 sample_id=sample.name,
-                                                 libprep_id=libprep.name,
-                                                 seqrun_id=seqrun.name)
-            rotate_log(log_file_path)
-
-            # Store the exit code of detached processes
-            ## Exit code does not go to scratch -- keep on /apus
-            exit_code_path = create_exit_code_file_path(workflow_subtask=workflow_subtask,
-                                                        project_base_path=project.base_path,
-                                                        project_name=project.name,
-                                                        sample_id=sample.name,
-                                                        libprep_id=libprep.name,
-                                                        seqrun_id=seqrun.name)
-
-            build_setup_xml(project, config, sample, libprep.name, seqrun.name)
-
-            command_lines.append(build_piper_cl(project, workflow_subtask, exit_code_path, config))
-
-    slurm_job_id = sbatch_piper_seqrun(command_lines, project, sample,libprep, seqrun)
     try:
-        record_process_seqrun(project=project,
-                              sample=sample,
-                              libprep=libprep,
-                              seqrun=seqrun,
-                              analysis_module_name="piper_ngi",
-                              analysis_dir=project.analysis_dir,
-                              slurm_job_id=slurm_job_id)
-    except CharonError as e:
-        ## This is a problem. If the job isn't recorded, we won't
-        ## ever know that it has been run.
-        ## I guess if it's relaunched then the results will be there.
-        ## But we will have multiple processes running.
-        ## FIXME fix this --> how?
-        LOG.error('Could not record process for project/sample/libprep/seqrun'
-                  '{}/{}/{}/{}'.format(project, sample, libprep, seqrun))
+        for workflow_subtask in get_subtasks_for_level(level="seqrun"):
+            if not is_seqrun_analysis_running_local(workflow_subtask=workflow_subtask,
+                                                    project_id=project.project_id,
+                                                    sample_id=sample.name,
+                                                    libprep_id=libprep.name,
+                                                    seqrun_id=seqrun.name):
+                ## Temporarily logging to a file until we get ELK set up
+                log_file_path = create_log_file_path(workflow_subtask=workflow_subtask,
+                                                     project_base_path=project.base_path,
+                                                     project_name=project.name,
+                                                     sample_id=sample.name,
+                                                     libprep_id=libprep.name,
+                                                     seqrun_id=seqrun.name)
+                rotate_file(log_file_path)
+
+                # Store the exit code of detached processes
+                ## Exit code does not go to scratch -- keep on /apus
+                exit_code_path = create_exit_code_file_path(workflow_subtask=workflow_subtask,
+                                                            project_base_path=project.base_path,
+                                                            project_name=project.name,
+                                                            sample_id=sample.name,
+                                                            libprep_id=libprep.name,
+                                                            seqrun_id=seqrun.name)
+
+                build_setup_xml(project, config, sample, libprep.name, seqrun.name)
+
+                command_line = (build_piper_cl(project, workflow_subtask, exit_code_path, config))
+                slurm_job_id = sbatch_piper_job(command_line, project, sample, libprep, seqrun)
+                try:
+                    record_process_seqrun(project=project,
+                                          sample=sample,
+                                          libprep=libprep,
+                                          seqrun=seqrun,
+                                          analysis_module_name="piper_ngi",
+                                          analysis_dir=project.analysis_dir,
+                                          slurm_job_id=slurm_job_id,
+                                          worfklow=workflow_subtask)
+                except CharonError as e:
+                    ## This is a problem. If the job isn't recorded, we won't
+                    ## ever know that it has been run.
+                    ## I guess if it's relaunched then the results will be there.
+                    ## But we will have multiple processes running.
+                    ## FIXME fix this --> how?
+                    LOG.error('Could not record process for project/sample/libprep/seqrun'
+                              '{}/{}/{}/{}, workflow {}'.format(project, sample,
+                                                                libprep, seqrun,
+                                                                workflow_))
     except (NotImplementedError, RuntimeError) as e:
         error_msg = ('Processing project "{}" / sample "{}" / libprep "{}" / '
                      'seqrun "{}" failed: {}'.format(project, sample, libprep, seqrun,
@@ -123,10 +122,10 @@ def analyze_sample(project, sample, config=None, config_file_path=None):
     load_modules(modules_to_load)
     charon_session = CharonSession()
     # Determine if we can begin sample-level processing yet.
-    # Conditions are that the coverage is above 28.9X
+    # Conditions are that the coverage is above 28.4X
     # If these conditions become more complex we can create a function for this
     sample_total_autosomal_coverage = charon_session.sample_get(project.project_id,
-                                     sample.name).get('total_autosomal_coverage')
+                                      sample.name).get('total_autosomal_coverage')
     if sample_total_autosomal_coverage > 28.4:
         LOG.info('Sample "{}" in project "{}" is ready for processing.'.format(sample, project))
         for workflow_subtask in get_subtasks_for_level(level="sample"):
@@ -139,7 +138,7 @@ def analyze_sample(project, sample, config=None, config_file_path=None):
                                                          project_base_path=project.base_path,
                                                          project_name=project.name,
                                                          sample_id=sample.name)
-                    rotate_log(log_file_path)
+                    rotate_file(log_file_path)
                     # Store the exit code of detached processes
                     exit_code_path = create_exit_code_file_path(workflow_subtask=workflow_subtask,
                                                                 project_base_path=project.base_path,
@@ -168,74 +167,114 @@ def analyze_sample(project, sample, config=None, config_file_path=None):
 
 
 @with_ngi_config
-def sbatch_piper_seqrun(command_line, project, sample, libprep, seqrun, workflow_name,
+def sbatch_piper_job(command_line, project, sample, libprep, seqrun, workflow_name,
                         config=None, config_file_path=None):
+    """sbatch a piper workflow. This is a little messy at the moment but if
+    the workflow name is "dna_alignonly" we also append a sample-level
+    analysis. It seems kludgy but I guess it's kind of a kludgy workflow.
+
+    :param str command_line: The command line to execute
+    :param NGIProject project: The NGIProject
+    :param NGISample sample: The NGISample
+    :param NGILibraryPrep libprep: The NGILibraryPrep
+    :param NGISeqrun seqrun: The NGISeqrun
+    :param str workflow_name: The name of the workflow to execute
+    :param dict config: The parsed configuration file (optional)
+    :param str config_file_path: The path to the configuration file (optional)
+    """
+    job_identifier = "{}-{}-{}-{}-{}".format(project, sample)
+    if libprep and seqrun:
+        job_identifier += "{}-{}-".format(libprep, seqrun)
+    job_identifier += workflow_name
+
+    # Paths to the various data directories
     scratch_data_dir = "$SNIC_TMP/DATA/{}".format(project.dirname)
     scratch_analysis_dir = "$SNIC_TMP/ANALYSIS/{}".format(project.dirname)
     perm_data_dir = os.path.join(project.base_dir, "DATA", project.dirname)
     perm_analysis_dir = os.path.join(project.base_dir, "ANALYSIS", project.dirname)
 
+    # Slurm-specific data
     slurm_project_id = config["environment"]["project_id"]
     slurm_queue = config.get("slurm", {}).get("queue") or "node"
     num_cores = config.get("slurm", {}).get("cores") or 16
-    seqrun_identifier = "{}-{}-{}-{}-{}".format(project, sample, libprep, seqrun, workflow_name)
     ## This depends on the workflow and cluster but I guess I can just hardcode for now
     #slurm_time = config.get("piper", {}).get("job_walltime")
-    # Need a better way to decide on the log names
-    slurm_out_log = os.path.join(perm_analysis_dir, "logs", "{}.out".format(seqrun_identifier))
-    slurm_err_log = os.path.join(perm_analysis_dir, "logs", "{}.err".format(seqrun_identifier))
+    slurm_time = "4-00:00:00" # 4 days
+    slurm_out_log = os.path.join(perm_analysis_dir, "logs", "sbatch_{}.out".format(job_identifier))
+    slurm_err_log = os.path.join(perm_analysis_dir, "logs", "sbatch_{}.err".format(job_identifier))
     sbatch_text = create_sbatch_header(slurm_project_id=slurm_project_id,
                                        slurm_queue=slurm_queue,
                                        num_cores=num_cores,
-                                       slurm_time="4-00:00:00", # 4 days
-                                       job_name="piper_{}".format(seqrun_identifier),
+                                       slurm_time=slurm_time,
+                                       job_name="piper_{}".format(job_identifier),
                                        slurm_out_log=slurm_out_log,
                                        slurm_err_log=slurm_err_log)
     # Pull these from the config file
-    #for module_name in config["piper"]["load_modules"]:
-    #    sbatch_text += "module load {}".format(module_name)
-    ## FIXME
-    sbatch_text += "module load java/sun_jdk1.7.0_25\nmodule load R/2.15.0"
+    for module_name in config["piper"]["load_modules"]:
+        sbatch_text += "module load {}".format(module_name)
 
     # Move the input files to scratch
     sbatch_text += "rsync -a {} {}".format(perm_data_dir, scratch_data_dir)
 
-    # piper seqrun cl
+    # Piper command line
     sbatch_text += command_line
 
-    sbatch_text += "EXIT_STATUS=$?"
-    ngi_pipeline_scripts_dir = os.environ["NGI_PIPELINE_SCRIPTS"]
-    # Blaaarrgh this is horrible
-    # How do we know the name of the virtual environment???
-    sbatch_text += \
-    """if [[ $(python {scripts_dir}/check_charon_coverage(project="{project_id}", sample="{sample_id}", coverage=30)) ]]; then
-        source activate ngi
-        python {scripts_dir}/start_pipeline_from_project \
-               --sample-only {scratch_analysis_dir} \
-               --sample {sample_id}
-        EXIT_STATUS=$?
-    fi""".format(project_id=project.project_id,
-                 sample_id=sample.sample_name,
-                 scripts_dir=ngi_pipeline_scripts_dir,
-                 scratch_analysis_dir=scratch_analysis_dir)
+    if workflow_name == "dna_alignonly":
+        # In this case we need to launch sample-level analysis as well
+        try:
+            conda_environment = config.get("environment", {}).get("conda_env") or \
+                                os.environ["CONDA_DEFAULT_ENV"]
+        except KeyError:
+            LOG.error("Could not determine conda environment to activate for sample-level "
+                      "analysis within the sbatch file; skipping automatic sample-level "
+                      "analysis (checked config file and $CONDA_DEFAULT_ENV) for "
+                      "analysis {}".format(job_identifier))
+        # Note my use of try-except-else. I know, pretty impressive.
+        #
+        # I don't know how to put this, but I'm... kind of a big deal.
+        else:
+            # Need the path to the ngi_pipeline scripts to launch sample-level analysis
+            # from within the sbatch file
+            # People know me. I'm very important.
+            ngi_pipeline_scripts_dir = config.get("environment", {}).get("ngi_scripts_dir") or \
+                                       os.environ["NGI_PIPELINE_SCRIPTS"]
+            sbatch_text += \
+            """if [[ $(python {scripts_dir}/check_charon_coverage(project="{project_id}", sample="{sample_id}", coverage=30)) ]]; then
+                source activate {conda_environment}
+                python {scripts_dir}/start_pipeline_from_project \
+                       --sample-only \
+                       --sample {sample_id} \
+                       {scratch_analysis_dir}
+            fi""".format(project_id=project.project_id,
+                         sample_id=sample.sample_name,
+                         scripts_dir=ngi_pipeline_scripts_dir,
+                         scratch_analysis_dir=scratch_analysis_dir,
+                         conda_environment=conda_environment)
 
-    ## TODO I'm not actually doing anything with the EXIT_STATUS at the moment
+    # I have many leather-bound books.
     sbatch_text += "rsync -a {} {}".format(scratch_analysis_dir, perm_analysis_dir)
 
-    ## TODO add file rotation
     sbatch_dir = os.path.join(perm_analysis_dir, "sbatch")
     safe_makedir(sbatch_dir)
-    # Add timestamp
     sbatch_outfile = os.path.join(sbatch_dir, "{}_{}.sbatch".format(sbatch_outfile,
                             datetime.datetime.now().strftime("%Y-%m-%d_%H:%M:%S:%f")))
+    if os.path.exists(sbatch_outfile):
+        rotate_file(sbatch_outfile)
     with open(sbatch_outfile, 'w') as f:
         f.write(sbatch_text)
-    LOG.info("Queueing sbatch file {}".format(sbatch_outfile))
-    p_handle = execute_command_line("sbatch {}".format(sbatch_outfile))
-    ## FIXME One of these has the slurm job ID but I'll be damned if I remember which one
-    ##       Anyway it needs to be parsed
+    LOG.info("Queueing sbatch file {} for job {}".format(sbatch_outfile, job_identifier))
+    p_handle = execute_command_line("sbatch {}".format(sbatch_outfile),
+                                    stdout=subprocess.PIPE,
+                                    stderr=subprocess.PIPE)
+    # My apartment smells of rich mahogany.
     p_out, p_err = p_handle.communicate()
-    ## Parse the thing to get the slurm job id
+    try:
+        ## Parse the thing to get the slurm job id
+        slurm_job_id = re.match(r'Submitted batch job (\d+)', p_out).groups()[0]
+    except AttributeError:
+        raise RuntimeError('Could not submit sbatch job for workflow "{}": '
+                           '{}'.format(job_identifier, p_err))
+    # I'm friends with Merlin Olsen, too. He... comes over on occasion.
     return slurm_job_id
 
 

@@ -8,19 +8,17 @@ database:
 
 environment:
     project_id: a2014205
+    conda_env: ngi
+    ngi_scripts_dir: $HOME/ngi_pipeline/scripts
 
 piper:
     path_to_piper_qscripts: /proj/a2014205/software/piper/qscripts
+    load_modules:
+        - java/sun_jdk1.7.0_25
+        - R/2.15.0
 
 supported_genomes:
-    "GRCh37": "/proj/a2014205/piper_references/gatk_bundle/2.8/b37/human_g1k_v37.fasta"
-    "rn4": None
-    "saccer2": None
-    "dm3": None
-    "tair9": None
-    "xentro2": None
-    "ws210": None
-    "canfam3": None
+    "GRCh37": /proj/a2014205/piper_references/gatk_bundle/2.8/b37/human_g1k_v37.fasta
 
 analysis:
     workflows:
