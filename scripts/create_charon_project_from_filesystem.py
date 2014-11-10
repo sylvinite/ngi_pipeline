@@ -15,9 +15,11 @@ LOG = minimal_logger(__name__)
 
 @with_ngi_config
 def main(demux_fcid_dirs, restrict_to_projects=None, restrict_to_samples=None,
-         force_update=False, workflow="NGI", already_parsed=False,
+         workflow="NGI", already_parsed=False,
+         force_update=False, delete_existing=False,
          config=None, config_file_path=None):
     if force_update: force_update = validate_force_update()
+    if delete_existing: delete_existing = validate_delete_existing()
     if not restrict_to_projects: restrict_to_projects = []
     if not restrict_to_samples: restrict_to_samples = []
     demux_fcid_dirs_set = set(demux_fcid_dirs)
@@ -46,12 +48,21 @@ def main(demux_fcid_dirs, restrict_to_projects=None, restrict_to_samples=None,
         projects_to_analyze = projects_to_analyze.values()
         for project in projects_to_analyze:
             try:
-                create_charon_entries_from_project(project, workflow=workflow, force_overwrite=force_update)
+                create_charon_entries_from_project(project, workflow=workflow,
+                                                   force_overwrite=force_update,
+                                                   delete_existing=delete_existing)
             except Exception as e:
                 print(e, file=sys.stderr)
 
 def validate_force_update():
-    print("DANGER WILL ROBINSON you have told this script to OVERWRITE EXISTING DATA in CHARON. Do you in fact want do to this??", file=sys.stderr)
+    return _validate_dangerous_user_thing("OVERWRITE EXISTING DATA in CHARON")
+
+def validate_delete_existing():
+    return _validate_dangerous_user_thing("DELETE EXISTING DATA in CHARON")
+
+
+def _validate_dangerous_user_thing(action="do SOMETHING that Mario thinks you should BE WARNED about"):
+    print("DANGER WILL ROBINSON you have told this script to {action}!! Do you in fact want do to this?!?".format(action=action), file=sys.stderr)
     attempts = 0
     while True:
         if attempts < 3:
@@ -75,6 +86,7 @@ if __name__=="__main__":
     parser.add_argument("-s", "--sample", dest="restrict_to_samples", action="append", help="Restrict processing to these samples. Use flag multiple times for multiple samples.")
     parser.add_argument("-w", "--workflow", default="NGI", help="The workflow to run for this project.")
     parser.add_argument("-f", "--force", dest="force_update", action="store_true", help="Force updating Charon projects. Danger danger danger. This will overwrite things.")
+    parser.add_argument("-d", "--delete", dest="delete_existing", action="store_true", help="Delete existing projects in Charon. Similarly dangerous.")
 
     args_dict = vars(parser.parse_args())
     main(**args_dict)

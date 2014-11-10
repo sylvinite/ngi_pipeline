@@ -11,10 +11,15 @@ environment:
     project_id: a2010002
     #extra_slurm_params:
     #    - "--qos=seqver"
+    ngi_scripts_dir: $HOME/ngi_pipeline/scripts
+    conda_env: ngi
 
 piper:
     # Also can be set as an environmental variable $PIPER_QSCRIPTS_DIR
     path_to_piper_qscripts: /proj/a2010002/software/piper/qscripts
+    load_modules:
+        - java/sun_jdk1.7.0_25
+        - R/2.15.0
 
 
 qc:
@@ -26,28 +31,10 @@ qc:
         path_to_config: 
 
 supported_genomes:
-    #"GRCh37": "/apus/data/uppnex/reference/Homo_sapiens/GRCh37/concat/Homo_sapiens.GRCh37.57.dna.concat.fa"
     "GRCh37": "/proj/a2009002/piper_references/gatk_bundle/2.8/b37/human_g1k_v37.fasta"
-    "GRCm38": "/apus/data/uppnex/reference/Mus_musculus/GRCm38/concat/Mus_musculus.GRCm38.69.dna.concat.fa"
-    "rn4": None
-    "saccer2": None
-    "dm3": None
-    "tair9": None
-    "xentro2": None
-    "ws210": None
-    "canfam3": None
-
-project:
-    INBOX: /proj/a2010002/archive
 
 analysis:
     workflows:
         NGI:
             analysis_engine: ngi_pipeline.engines.piper_ngi
-        #mate_pair:
-        #    analysis_engine: ngi_pipeline.engines.de_novo_pipeline
-        #RNA:
-        #    analysis_engine: ngi_pipeline.engines.bcbio_ngi
     top_dir: /proj/a2010002/nobackup/NGI/analysis_ready
-    #log: /proj/a2010002/data/log
-    #store_dir: /proj/a2010002/archive

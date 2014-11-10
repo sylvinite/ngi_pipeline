@@ -55,6 +55,8 @@ def analyze_seqrun(project, sample, libprep, seqrun,
     :param dict config: The parsed configuration file (optional)
     :param str config_file_path: The path to the configuration file (optional)
     """
+    modules_to_load = config.get("piper", {}).get("load_modules")
+    if modules_to_load: load_modules(modules_to_load)
     try:
         for workflow_subtask in get_subtasks_for_level(level="seqrun"):
             if not is_seqrun_analysis_running_local(workflow_subtask=workflow_subtask,
@@ -83,7 +85,8 @@ def analyze_seqrun(project, sample, libprep, seqrun,
                 build_setup_xml(project, config, sample, libprep.name, seqrun.name)
 
                 command_line = (build_piper_cl(project, workflow_subtask, exit_code_path, config))
-                slurm_job_id = sbatch_piper_job(command_line, project, sample, libprep, seqrun)
+                slurm_job_id = sbatch_piper_job(command_line, project, sample,
+                                                libprep, seqrun, workflow_subtask)
                 try:
                     record_process_seqrun(project=project,
                                           sample=sample,
@@ -168,7 +171,7 @@ def analyze_sample(project, sample, config=None, config_file_path=None):
 
 @with_ngi_config
 def sbatch_piper_job(command_line, project, sample, libprep, seqrun, workflow_name,
-                        config=None, config_file_path=None):
+                     config=None, config_file_path=None):
     """sbatch a piper workflow. This is a little messy at the moment but if
     the workflow name is "dna_alignonly" we also append a sample-level
     analysis. It seems kludgy but I guess it's kind of a kludgy workflow.
@@ -182,7 +185,7 @@ def sbatch_piper_job(command_line, project, sample, libprep, seqrun, workflow_na
     :param dict config: The parsed configuration file (optional)
     :param str config_file_path: The path to the configuration file (optional)
     """
-    job_identifier = "{}-{}-{}-{}-{}".format(project, sample)
+    job_identifier = "{}-{}-".format(project, sample)
     if libprep and seqrun:
         job_identifier += "{}-{}-".format(libprep, seqrun)
     job_identifier += workflow_name
@@ -190,11 +193,15 @@ def sbatch_piper_job(command_line, project, sample, libprep, seqrun, workflow_na
     # Paths to the various data directories
     scratch_data_dir = "$SNIC_TMP/DATA/{}".format(project.dirname)
     scratch_analysis_dir = "$SNIC_TMP/ANALYSIS/{}".format(project.dirname)
-    perm_data_dir = os.path.join(project.base_dir, "DATA", project.dirname)
-    perm_analysis_dir = os.path.join(project.base_dir, "ANALYSIS", project.dirname)
+    perm_data_dir = os.path.join(project.base_path, "DATA", project.dirname)
+    perm_analysis_dir = os.path.join(project.base_path, "ANALYSIS", project.dirname)
 
     # Slurm-specific data
-    slurm_project_id = config["environment"]["project_id"]
+    try:
+        slurm_project_id = config["environment"]["project_id"]
+    except KeyError:
+        raise RuntimeError('No SLURM project id specified in configuration file '
+                           'for job "{}"'.format(job_identifier))
     slurm_queue = config.get("slurm", {}).get("queue") or "node"
     num_cores = config.get("slurm", {}).get("cores") or 16
     ## This depends on the workflow and cluster but I guess I can just hardcode for now
@@ -209,15 +216,17 @@ def sbatch_piper_job(command_line, project, sample, libprep, seqrun, workflow_na
                                        job_name="piper_{}".format(job_identifier),
                                        slurm_out_log=slurm_out_log,
                                        slurm_err_log=slurm_err_log)
+    sbatch_text_list = sbatch_text.split("\n")
     # Pull these from the config file
     for module_name in config["piper"]["load_modules"]:
-        sbatch_text += "module load {}".format(module_name)
+        sbatch_text_list.append("module load {}".format(module_name))
 
     # Move the input files to scratch
-    sbatch_text += "rsync -a {} {}".format(perm_data_dir, scratch_data_dir)
+    sbatch_text_list.append("mkdir -p {}".format(scratch_data_dir))
+    sbatch_text_list.append("rsync -a {} {}".format(perm_data_dir, scratch_data_dir))
 
     # Piper command line
-    sbatch_text += command_line
+    sbatch_text_list.append(command_line)
 
     if workflow_name == "dna_alignonly":
         # In this case we need to launch sample-level analysis as well
@@ -238,36 +247,38 @@ def sbatch_piper_job(command_line, project, sample, libprep, seqrun, workflow_na
             # People know me. I'm very important.
             ngi_pipeline_scripts_dir = config.get("environment", {}).get("ngi_scripts_dir") or \
                                        os.environ["NGI_PIPELINE_SCRIPTS"]
-            sbatch_text += \
-            """if [[ $(python {scripts_dir}/check_charon_coverage(project="{project_id}", sample="{sample_id}", coverage=30)) ]]; then
-                source activate {conda_environment}
-                python {scripts_dir}/start_pipeline_from_project \
-                       --sample-only \
-                       --sample {sample_id} \
-                       {scratch_analysis_dir}
-            fi""".format(project_id=project.project_id,
-                         sample_id=sample.sample_name,
+            bash_conditional = \
+            ('source activate {conda_environment}\n'
+             'if [[ $(python {scripts_dir}/check_charon_coverage.py -p {project_id}", -s {sample_id} -c 30) ]]; then\n'
+             '   python {scripts_dir}/start_pipeline_from_project \\ \n'
+             '          --sample-only \\ \n'
+             '          --sample {sample_id} \\ \n'
+             '          {scratch_analysis_dir}\n'
+             'fi'.format(project_id=project.project_id,
+                         sample_id=sample.name,
                          scripts_dir=ngi_pipeline_scripts_dir,
                          scratch_analysis_dir=scratch_analysis_dir,
-                         conda_environment=conda_environment)
+                         conda_environment=conda_environment))
+            sbatch_text_list.extend(bash_conditional.split("\n"))
 
     # I have many leather-bound books.
-    sbatch_text += "rsync -a {} {}".format(scratch_analysis_dir, perm_analysis_dir)
+    sbatch_text_list.append("rsync -a {} {}".format(scratch_analysis_dir, perm_analysis_dir))
 
     sbatch_dir = os.path.join(perm_analysis_dir, "sbatch")
     safe_makedir(sbatch_dir)
-    sbatch_outfile = os.path.join(sbatch_dir, "{}_{}.sbatch".format(sbatch_outfile,
-                            datetime.datetime.now().strftime("%Y-%m-%d_%H:%M:%S:%f")))
+    sbatch_outfile = os.path.join(sbatch_dir, "{}.sbatch".format(job_identifier))
+                            #datetime.datetime.now().strftime("%Y-%m-%d_%H:%M:%S:%f")))
     if os.path.exists(sbatch_outfile):
         rotate_file(sbatch_outfile)
     with open(sbatch_outfile, 'w') as f:
-        f.write(sbatch_text)
+        f.write("\n".join(sbatch_text_list))
     LOG.info("Queueing sbatch file {} for job {}".format(sbatch_outfile, job_identifier))
     p_handle = execute_command_line("sbatch {}".format(sbatch_outfile),
                                     stdout=subprocess.PIPE,
                                     stderr=subprocess.PIPE)
     # My apartment smells of rich mahogany.
     p_out, p_err = p_handle.communicate()
+    import ipdb; ipdb.set_trace()
     try:
         ## Parse the thing to get the slurm job id
         slurm_job_id = re.match(r'Submitted batch job (\d+)', p_out).groups()[0]
@@ -459,8 +470,8 @@ def build_setup_xml(project, config, sample=None, libprep_id=None, seqrun_id=Non
                            "--sequencing_platform {sequencing_tech} "
                            "--sequencing_center {sequencing_center} "
                            "--uppnex_project_id {uppmax_proj} "
-                           "--reference {reference_path} "
-                           "--qos {qos}".format(**cl_args))
+                           "--reference {reference_path}".format(**cl_args))
+                           #"--qos {qos}".format(**cl_args))
     #NOTE: here I am assuming the different dir structure, it would be wiser to change the object type and have an uppsala project
     if not seqrun_id:
         #if seqrun_id is none it means I want to create a sample level setup xml
