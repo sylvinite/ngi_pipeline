@@ -23,16 +23,13 @@ def main(demux_fcid_dirs, restrict_to_projects=None, restrict_to_samples=None,
     if not restrict_to_projects: restrict_to_projects = []
     if not restrict_to_samples: restrict_to_samples = []
     demux_fcid_dirs_set = set(demux_fcid_dirs)
-    # Sort/copy each raw demux FC into project/sample/fcid format -- "analysis-ready"
     projects_to_analyze = dict()
-
     if already_parsed: # Starting from Project/Sample/Libprep/Seqrun tree format
         for demux_fcid_dir in demux_fcid_dirs_set:
             p = recreate_project_from_filesystem(demux_fcid_dir)
             projects_to_analyze[p.name] = p
     else: # Raw illumina flowcell
         for demux_fcid_dir in demux_fcid_dirs_set:
-            # These will be a bunch of Project objects each containing Samples, FCIDs, lists of fastq files
             projects_to_analyze = setup_analysis_directory_structure(demux_fcid_dir,
                                                                      projects_to_analyze,
                                                                      restrict_to_projects,
@@ -44,7 +41,6 @@ def main(demux_fcid_dirs, restrict_to_projects=None, restrict_to_samples=None,
                  "or there was an error gathering required "
                  "information.".format(",".join(demux_fcid_dirs_set)))
     else:
-        # Don't need the dict functionality anymore; revert to list
         projects_to_analyze = projects_to_analyze.values()
         for project in projects_to_analyze:
             try:
