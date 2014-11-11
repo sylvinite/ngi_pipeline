@@ -18,20 +18,53 @@ STHLM_UUSNP_SEQRUN_RE = re.compile(r'(?P<project_name>\w\.\w+_\d+_\d+|\w{2}-\d+)
 STHLM_UUSNP_SAMPLE_RE = re.compile(r'(?P<project_name>\w\.\w+_\d+_\d+|\w{2}-\d+)_(?P<sample_id>[\w-]+)')
 
 
-def get_slurm_job_exit_status(slurm_job_id):
-    """Gets the overall exit status of a slurm job. Uses the overall status,
-    which is to say we return the highest exit code of the job.
 
-    :param int slurm_job_id: This can be a string if you really want
+SLURM_EXIT_CODES = {"PENDING": None,
+                    "RUNNING": None,
+                    "RESIZING": None,
+                    "SUSPENDED": None,
+                    "COMPLETED": 0,
+                    "CANCELLED": 1,
+                    "FAILED": 1,
+                    "TIMEOUT": 1,
+                    "PREEMPTED": 1,
+                    "BOOT_FAIL": 1,
+                    "NODE_FAIL": 1,
+                    }
 
-    :returns: The highest exit code of the job
-    :rtype: int
+def get_slurm_job_status(slurm_job_id):
+    """Gets the State of a SLURM job and returns it as an integer (or None).
+
+    :param int slurm_job_id: An integer of your choosing
+
+    :returns: The status of the job (None == Queued/Running, 0 == Success, 1 == Failure)
+    :rtype: None or int
+
+    :raises TypeError: If the input is not/cannot be converted to an int
+    :raises ValueError: If the job ID is not found or the job status not understood
     """
-    exit_status = subprocess.check_output(shlex.split("sacct -n -j 3058477 -o ExitCode"))
-    if not exit_status:
-        return None
+    try:
+        check_cl = "sacct -n -j {:d} -o STATE".format(slurm_job_id)
+        # If the sbatch job has finished, this returns two lines. For example:
+        # $ sacct -j 3655032
+        #       JobID    JobName  Partition    Account  AllocCPUS      State ExitCode 
+        #       ------------ ---------- ---------- ---------- ---------- ---------- -------- 
+        #       3655032      test_sbat+       core   a2010002          1  COMPLETED      0:0 
+        #       3655032.bat+      batch              a2010002          1  COMPLETED      0:0 
+        #
+        # In this case I think we want the first one but I'm actually still not
+        # totally clear on this point -- the latter may be the return code of the
+        # actual sbatch command for the bash interpreter? Unclear.
+    except ValueError:
+        raise TypeError("SLURM Job ID not an integer: {}".format(slurm_job_id))
+    job_status = subprocess.check_output(shlex.split(check_cl))
+    if not job_status:
+        raise ValueError("No such slurm job found: {}".format(slurm_job_id))
     else:
-        return int(exit_status)
+        try:
+            return SLURM_EXIT_CODES[job_status.split()[0].strip("+")]
+        except (IndexError, KeyError, TypeError) as e:
+            raise ValueError("SLURM job status not understood: {}".format(job_status))
 
 
 def slurm_time_to_seconds(slurm_time_str):
