@@ -12,6 +12,7 @@ environment:
     ngi_scripts_dir: $HOME/ngi_pipeline/scripts
 
 piper:
+    # Also can be set as an environmental variable $PIPER_QSCRIPTS_DIR
     path_to_piper_qscripts: /proj/a2014205/software/piper/qscripts
     load_modules:
         - java/sun_jdk1.7.0_25
