@@ -1,8 +1,7 @@
 import os
 
 
-SBATCH_HEADER = """
-#!/bin/bash -l
+SBATCH_HEADER = """#!/bin/bash -l
 
 #SBATCH -A {slurm_project_id}
 #SBATCH -p {slurm_queue}
@@ -27,7 +26,7 @@ def create_sbatch_header(slurm_project_id, slurm_queue, num_cores, slurm_time,
     """
     ## TODO check how many cores are available for a given slurm queue
     if num_cores > 16: num_cores = 16
-    return SBATCH_HEADER.format(slurm_project_id=project_id,
+    return SBATCH_HEADER.format(slurm_project_id=slurm_project_id,
                                 slurm_queue=slurm_queue,
                                 num_cores=num_cores,
                                 slurm_time=slurm_time,

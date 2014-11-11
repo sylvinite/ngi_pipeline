@@ -10,7 +10,7 @@ LOG = minimal_logger(__name__)
 
 ## FIXME this is a hack, improve it soon/later/someday
 ##       (/never)
-def create_charon_entries_from_project(project, workflow="NGI", force_overwrite=False):
+def create_charon_entries_from_project(project, workflow="NGI", force_overwrite=False, delete_existing=False):
     """Given a project object, creates the relevant entries
     in Charon.
 
@@ -37,6 +37,10 @@ def create_charon_entries_from_project(project, workflow="NGI", force_overwrite=
             LOG.info('Project "{}" already exists; moving to samples...'.format(project))
 
     for sample in project:
+        if delete_existing:
+            LOG.warn('Deleting existing sample "{}"'.format(sample))
+            charon_session.sample_delete(projectid=project.project_id,
+                                         sampleid=sample.name)
         try:
             LOG.info('Creating sample "{}"'.format(sample))
             charon_session.sample_create(projectid=project.project_id,
@@ -54,6 +58,11 @@ def create_charon_entries_from_project(project, workflow="NGI", force_overwrite=
                          'to libpreps'.format(project, sample))
 
         for libprep in sample:
+            if delete_existing:
+                LOG.warn('Deleting existing libprep "{}"'.format(libprep))
+                charon_session.sample_delete(projectid=project.project_id,
+                                             sampleid=sample.name,
+                                             libprepid=libprep.name)
             try:
                 LOG.info('Creating libprep "{}"'.format(libprep))
                 charon_session.libprep_create(projectid=project.project_id,
@@ -74,6 +83,12 @@ def create_charon_entries_from_project(project, workflow="NGI", force_overwrite=
                              'exists; moving to libpreps'.format(project, sample, libprep))
 
             for seqrun in libprep:
+                if delete_existing:
+                    LOG.warn('Deleting existing seqrun "{}"'.format(seqrun))
+                    charon_session.sample_delete(projectid=project.project_id,
+                                                 sampleid=sample.name,
+                                                 libprepid=libprep.name,
+                                                 seqrunid=seqrun.name)
                 try:
                     LOG.info('Creating seqrun "{}"'.format(seqrun))
                     charon_session.seqrun_create(projectid=project.project_id,
