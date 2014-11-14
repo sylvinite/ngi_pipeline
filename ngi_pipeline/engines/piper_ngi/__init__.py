@@ -469,8 +469,8 @@ def build_setup_xml(project, config, sample=None, libprep_id=None, seqrun_id=Non
                            "--sequencing_platform {sequencing_tech} "
                            "--sequencing_center {sequencing_center} "
                            "--uppnex_project_id {uppmax_proj} "
-                           "--reference {reference_path}".format(**cl_args))
-                           #"--qos {qos}".format(**cl_args))
+                           "--reference {reference_path} "
+                           "--qos {qos}").format(**cl_args)
     #NOTE: here I am assuming the different dir structure, it would be wiser to change the object type and have an uppsala project
     if not seqrun_id:
         #if seqrun_id is none it means I want to create a sample level setup xml
