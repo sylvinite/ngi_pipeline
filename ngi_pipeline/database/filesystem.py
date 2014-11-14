@@ -60,7 +60,7 @@ def create_charon_entries_from_project(project, workflow="NGI", force_overwrite=
         for libprep in sample:
             if delete_existing:
                 LOG.warn('Deleting existing libprep "{}"'.format(libprep))
-                charon_session.sample_delete(projectid=project.project_id,
+                charon_session.libprep_delete(projectid=project.project_id,
                                              sampleid=sample.name,
                                              libprepid=libprep.name)
             try:
@@ -85,7 +85,7 @@ def create_charon_entries_from_project(project, workflow="NGI", force_overwrite=
             for seqrun in libprep:
                 if delete_existing:
                     LOG.warn('Deleting existing seqrun "{}"'.format(seqrun))
-                    charon_session.sample_delete(projectid=project.project_id,
+                    charon_session.seqrun_delete(projectid=project.project_id,
                                                  sampleid=sample.name,
                                                  libprepid=libprep.name,
                                                  seqrunid=seqrun.name)
