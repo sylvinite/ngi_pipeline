@@ -1,0 +1,29 @@
+# This file should be placed under $HOME/.ngiconfig/ngi_config.yaml
+# or its path exported as the environment variable NGI_CONFIG
+
+sbatch:
+
+database:
+    record_tracking_db_path: /proj/a2014205/ngi_resources/record_tracking_database.sql
+
+environment:
+    project_id: a2014205
+
+piper:
+    path_to_piper_qscripts: /proj/a2014205/software/piper/qscripts
+
+supported_genomes:
+    "GRCh37": "/proj/a2014205/piper_references/gatk_bundle/2.8/b37/human_g1k_v37.fasta"
+    "rn4": None
+    "saccer2": None
+    "dm3": None
+    "tair9": None
+    "xentro2": None
+    "ws210": None
+    "canfam3": None
+
+analysis:
+    workflows:
+        NGI:
+            analysis_engine: ngi_pipeline.engines.piper_ngi
+    top_dir: /proj/a2014205/nobackup/NGI/analysis_ready
