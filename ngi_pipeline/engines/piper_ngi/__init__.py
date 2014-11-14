@@ -198,20 +198,23 @@ def sbatch_piper_job(command_line, workflow_name, project, sample, libprep=None,
     :param dict config: The parsed configuration file (optional)
     :param str config_file_path: The path to the configuration file (optional)
     """
-    if not libprep: libprep = ""
-    if not seqrun: seqrun = ""
     job_identifier = "{}-{}-".format(project, sample)
     if libprep and seqrun:
         job_identifier += "{}-{}-".format(libprep, seqrun)
     job_identifier += workflow_name
 
     # Paths to the various data directories
-    ## TODO make this smarter -- only copy the files you need (not the entire project)
-    scratch_data_dir = os.path.join("$SNIC_TMP/DATA", project.dirname, sample.dirname,
-                                    libprep, seqrun)
-    scratch_analysis_dir = "$SNIC_TMP/ANALYSIS/{}".format(project.dirname, sample.dirname)
-    perm_data_dir = os.path.join(project.base_path, "DATA", project.dirname, sample.dirname)
-    perm_analysis_dir = os.path.join(project.base_path, "ANALYSIS", project.dirname)
+    project_dirname = project.dirname
+    sample_dirname = sample.dirname
+    libprep_dirname = libprep.__str__() or ""
+    seqrun_dirname = seqprep.__str__() or ""
+    # Final "" adds a trailing slash (for rsync)
+    ## TODO CHECK THIS LATER IT'S 16:55 FRIDAY
+    data_specific_path = os.path.join(project_dirname, sample_dirname, libprep_dirname, seqrun_dirname)
+    scratch_data_dir = os.path.join("$SNIC_TMP/DATA", data_specific_path, "")
+    scratch_analysis_dir = os.path.join("$SNIC_TMP/ANALYSIS/", data_specific_path, "")
+    perm_data_dir = os.path.join(project.base_path, "DATA", data_specific_path, "")
+    perm_analysis_dir = os.path.join(project.base_path, "ANALYSIS", data_specific_path, "")
 
     # Slurm-specific data
     try:
