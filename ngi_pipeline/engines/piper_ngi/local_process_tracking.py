@@ -168,7 +168,8 @@ def update_charon_with_local_jobs_status():
                                                               sampleid=sample_id)['status']
                     except (CharonError, KeyError) as e:
                         LOG.warn('Unable to get required information from Charon for '
-                          'sample "{}" / project "{}" -- forcing it to RUNNING: {}'.format(sample_id, project_id, e))
+                                 'sample "{}" / project "{}" -- forcing it to RUNNING: '
+                                 '{}'.format(sample_id, project_id, e))
                         charon_status = "NEW"
 
                     if not charon_status == "RUNNING":
