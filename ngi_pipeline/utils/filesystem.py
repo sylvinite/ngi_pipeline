@@ -206,9 +206,9 @@ def recreate_project_from_filesystem(project_dir,
     if not restrict_to_libpreps: restrict_to_libpreps = []
     if not restrict_to_seqruns: restrict_to_seqruns = []
 
-    project_name = os.path.split(project_dir)[1]
+    base_path, project_name = os.path.split(project_dir)
     if not project_name:
-        project_name = os.path.split(base_path)[1]
+        base_path, project_name = os.path.split(base_path)
     LOG.info('Setting up project "{}"'.format(project_name))
     try:
         # This requires Charon access -- maps e.g. "Y.Mom_14_01" to "P123"
