@@ -251,6 +251,7 @@ def sbatch_piper_job(command_line, project, sample, libprep, seqrun, workflow_na
             ## TODO hard-coded coverage as 30X here, adjust / pull from config file?
             bash_conditional = \
             ('source activate {conda_environment}\n'
+             'python {scripts_dir}/update_charon_with_local_jobs_status -e piper\n'
              'if [[ $(python {scripts_dir}/check_charon_coverage.py -p {project_id}, -s {sample_id} -c 30 && echo $?) ]]; then\n'
              '   python {scripts_dir}/start_pipeline_from_project \\ \n'
              '          --sample-only \\ \n'
