@@ -58,6 +58,8 @@ def analyze_seqrun(project, sample, libprep, seqrun,
     modules_to_load = config.get("piper", {}).get("load_modules")
     if modules_to_load: load_modules(modules_to_load)
     try:
+        ## FIXME This isn't ideal -- we're copying data to a separate node for each workflow subtask.
+        ##       These should most likely be combined into a single sbatch file and run sequentially?
         for workflow_subtask in get_subtasks_for_level(level="seqrun"):
             if not is_seqrun_analysis_running_local(workflow_subtask=workflow_subtask,
                                                     project_id=project.project_id,
@@ -103,6 +105,7 @@ def analyze_seqrun(project, sample, libprep, seqrun,
                               '{}/{}/{}/{}, workflow {}'.format(project, sample,
                                                                 libprep, seqrun,
                                                                 workflow_subtask))
+                    continue
     except (NotImplementedError, RuntimeError) as e:
         error_msg = ('Processing project "{}" / sample "{}" / libprep "{}" / '
                      'seqrun "{}" failed: {}'.format(project, sample, libprep, seqrun,
@@ -151,6 +154,9 @@ def analyze_sample(project, sample, config=None, config_file_path=None):
                                                                 project_name=project.name,
                                                                 sample_id=sample.name)
 
+                    ## TODO Does this work? Are the paths relative?
+                    ##      If not (and maybe in any event) we should move this step
+                    ##      to the sbatch file after the files are copied over to local scratch
                     build_setup_xml(project, config, sample)
                     command_line = build_piper_cl(project, workflow_subtask, exit_code_path, config)
                     slurm_job_id = sbatch_piper_job(command_line, workflow_subtask,
@@ -192,6 +198,8 @@ def sbatch_piper_job(command_line, workflow_name, project, sample, libprep=None,
     :param dict config: The parsed configuration file (optional)
     :param str config_file_path: The path to the configuration file (optional)
     """
+    if not libprep: libprep = ""
+    if not seqrun: seqrun = ""
     job_identifier = "{}-{}-".format(project, sample)
     if libprep and seqrun:
         job_identifier += "{}-{}-".format(libprep, seqrun)
@@ -199,9 +207,10 @@ def sbatch_piper_job(command_line, workflow_name, project, sample, libprep=None,
 
     # Paths to the various data directories
     ## TODO make this smarter -- only copy the files you need (not the entire project)
-    scratch_data_dir = "$SNIC_TMP/DATA/{}".format(project.dirname)
-    scratch_analysis_dir = "$SNIC_TMP/ANALYSIS/{}".format(project.dirname)
-    perm_data_dir = os.path.join(project.base_path, "DATA", project.dirname)
+    scratch_data_dir = os.path.join("$SNIC_TMP/DATA", project.dirname, sample.dirname,
+                                    libprep, seqrun)
+    scratch_analysis_dir = "$SNIC_TMP/ANALYSIS/{}".format(project.dirname, sample.dirname)
+    perm_data_dir = os.path.join(project.base_path, "DATA", project.dirname, sample.dirname)
     perm_analysis_dir = os.path.join(project.base_path, "ANALYSIS", project.dirname)
 
     # Slurm-specific data
