@@ -22,18 +22,14 @@ if __name__ == '__main__':
     parser.add_argument("-f", "--restart-failed", dest="restart_failed_jobs", action="store_true",
             help=("Restart jobs marked as FAILED in Charon."))
     g = parser.add_mutually_exclusive_group()
-    g.add_argument("--seqrun_only", action="store_true",
+    g.add_argument("--seqrun-only", action="store_true",
             help=("Only process at the seqrun level."))
-    g.add_argument("--sample_only", action="store_true",
+    g.add_argument("--sample-only", action="store_true",
             help=("Only process at the sample level."))
-    parser.add_argument("project_dir", nargs="?", action="store",
+    parser.add_argument("project_dir", nargs="1", action="store",
             help=("The path to the project to be processed."))
 
     args_dict = vars(parser.parse_args())
-
-    if not args_dict['project_dir']:
-        parser.print_usage()
-        sys.exit()
 
     project = recreate_project_from_filesystem(args_dict['project_dir'],
                                                args_dict['restrict_to_samples'])
