@@ -2,6 +2,8 @@
 # or its path exported as the environment variable NGI_CONFIG
 
 sbatch:
+    extra_params:
+        "--qos": "seqver"
 
 database:
     record_tracking_db_path: /proj/a2014205/ngi_resources/record_tracking_database.sql

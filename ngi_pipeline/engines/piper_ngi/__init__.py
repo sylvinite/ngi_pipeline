@@ -217,6 +217,9 @@ def sbatch_piper_job(command_line, project, sample, libprep, seqrun, workflow_na
                                        slurm_out_log=slurm_out_log,
                                        slurm_err_log=slurm_err_log)
     sbatch_text_list = sbatch_text.split("\n")
+    sbatch_extra_params = config.get("sbatch", {}).get("extra_params", {})
+    for param, value in sbatch_extra_params.iteritems():
+        sbatch_text_list.append("#SBATCH {} {}".format(param, value))
     # Pull these from the config file
     for module_name in config.get("piper", {}).get("load_modules", []):
         sbatch_text_list.append("module load {}".format(module_name))

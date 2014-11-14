@@ -2,6 +2,8 @@
 # or its path exported as the environment variable NGI_CONFIG
 
 sbatch:
+    extra_params:
+        "--qos": "seqver"
 
 database:
     record_tracking_db_path: /$HOME/.ngipipeline/record_tracking_database
