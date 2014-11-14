@@ -115,16 +115,15 @@ class SampleAnalysis(Base):
     project_name = Column(String(50))
     project_base_path = Column(String(100))
     sample_id = Column(String(50), primary_key=True)
-    workflow=Column(String(50))
+    workflow = Column(String(50))
     engine = Column(String(50))
     analysis_dir = Column(String(100))
     process_id = Column(Integer, unique=True)
-    ## Could introduce a ForeignKey to seqrun analyses here
-    #seqruns = relationship("SeqrunAnalysis", order_by="SeqrunAnalysis.process_id", backref="sampleanalysis")
+    slurm_job_id = Column(Integer, primary_key=True, unique=True)
 
     def __repr__(self):
-        return ("<SampleRunAnalysis({project_id}/{sample_id}: process id "
-                "{process_id}, engine {engine})>".format(project_id=self.project_id,
-                                                         sample_id=self.sample_id,
-                                                         process_id=self.process_id,
-                                                         engine=self.engine))
+        return ("<SampleRunAnalysis({project_id}/{sample_id}: slurm job id "
+                "{slurm_job_id}, engine {engine})>".format(project_id=self.project_id,
+                                                           sample_id=self.sample_id,
+                                                           slurm_job_id=slurm_job_id,
+                                                           engine=self.engine))
