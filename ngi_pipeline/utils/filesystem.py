@@ -53,7 +53,7 @@ def load_modules(modules_list):
         raise RuntimeError("".join(error_msgs))
 
 
-def execute_command_line(cl, stdout=None, shell=False, stderr=None, cwd=None):
+def execute_command_line(cl, shell=False, stdout=None, stderr=None, cwd=None):
     """Execute a command line and return the subprocess.Popen object.
 
     :param cl: Can be either a list or a string; if string, gets shlex.splitted
@@ -108,7 +108,7 @@ def do_symlink(src_files, dst_dir):
 def do_rsync(src_files, dst_dir):
     ## TODO I changed this -c because it takes for goddamn ever but I'll set it back once in Production
     #cl = ["rsync", "-car"]
-    cl = ["rsync", "-aPv"]
+    cl = ["rsync", "-av"]
     cl.extend(src_files)
     cl.append(dst_dir)
     cl = map(str, cl)
@@ -134,16 +134,16 @@ def safe_makedir(dname, mode=0777):
                 raise
     return dname
 
-def rotate_log(log_file_path, new_subdirectory="rotated_logs"):
-    if os.path.exists(log_file_path) and os.path.isfile(log_file_path):
-        file_path, extension = os.path.splitext(log_file_path)
-        file_name = os.path.basename(file_path)
+def rotate_file(file_path, new_subdirectory="rotated_files"):
+    if os.path.exists(file_path) and os.path.isfile(file_path):
+        file_dirpath, extension = os.path.splitext(file_path)
+        file_name = os.path.basename(file_dirpath)
         current_datetime = datetime.datetime.now().strftime("%Y-%m-%d_%H:%M:%S:%f")
         if new_subdirectory:
-            rotated_file_basepath = os.path.join(os.path.dirname(log_file_path),
+            rotated_file_basepath = os.path.join(os.path.dirname(file_path),
                                                  new_subdirectory)
         else:
-            rotated_file_basepath = os.path.dirname(log_file_path)
+            rotated_file_basepath = os.path.dirname(file_path)
         safe_makedir(rotated_file_basepath)
 
         rotate_file_path = os.path.join(rotated_file_basepath,
@@ -152,15 +152,13 @@ def rotate_log(log_file_path, new_subdirectory="rotated_logs"):
                                                                  extension))
         ## TODO what exceptions can we get here? OSError, else?
         try:
-            LOG.info('Attempting to rotate log file "{}" to '
-                     '"{}"...'.format(log_file_path, rotate_file_path))
-            ## FIXME check if the log file is currently open!!
-            ## This whole thing is a temporary fix anyway so I guess it's not important.
-            ## we won't be using files as logs in any event once we get ELK working.
-            shutil.move(log_file_path, rotate_file_path)
+            LOG.info('Attempting to rotate file "{}" to '
+                     '"{}"...'.format(file_path, rotate_file_path))
+            ## FIXME check if the log file is currently open!!?? How?!!
+            shutil.move(file_path, rotate_file_path)
         except OSError as e:
             raise OSError('Could not rotate log file "{}" to "{}": '
-                          '{}'.format(log_file_path, rotate_file_path, e))
+                          '{}'.format(file_path, rotate_file_path, e))
 
 @contextlib.contextmanager
 def curdir_tmpdir(remove=True):
