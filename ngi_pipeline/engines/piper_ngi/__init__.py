@@ -85,8 +85,8 @@ def analyze_seqrun(project, sample, libprep, seqrun,
                 build_setup_xml(project, config, sample, libprep.name, seqrun.name)
 
                 command_line = (build_piper_cl(project, workflow_subtask, exit_code_path, config))
-                slurm_job_id = sbatch_piper_job(command_line, project, sample,
-                                                libprep, seqrun, workflow_subtask)
+                slurm_job_id = sbatch_piper_job(command_line, workflow_subtask,
+                                                project, sample, libprep, seqrun)
                 try:
                     record_process_seqrun(project=project,
                                           sample=sample,
@@ -96,16 +96,13 @@ def analyze_seqrun(project, sample, libprep, seqrun,
                                           analysis_dir=project.analysis_dir,
                                           slurm_job_id=slurm_job_id,
                                           workflow_subtask=workflow_subtask)
-                except CharonError as e:
+                except RuntimeError as e:
                     ## This is a problem. If the job isn't recorded, we won't
                     ## ever know that it has been run.
-                    ## I guess if it's relaunched then the results will be there.
-                    ## But we will have multiple processes running.
-                    ## FIXME fix this --> how?
                     LOG.error('Could not record process for project/sample/libprep/seqrun'
                               '{}/{}/{}/{}, workflow {}'.format(project, sample,
                                                                 libprep, seqrun,
-                                                                workflow_))
+                                                                workflow_subtask))
     except (NotImplementedError, RuntimeError) as e:
         error_msg = ('Processing project "{}" / sample "{}" / libprep "{}" / '
                      'seqrun "{}" failed: {}'.format(project, sample, libprep, seqrun,
@@ -156,15 +153,19 @@ def analyze_sample(project, sample, config=None, config_file_path=None):
 
                     build_setup_xml(project, config, sample)
                     command_line = build_piper_cl(project, workflow_subtask, exit_code_path, config)
-                    p_handle = launch_piper_job(command_line, project, log_file_path)
+                    slurm_job_id = sbatch_piper_job(command_line, workflow_subtask,
+                                                    project, sample, libprep, seqrun)
                     try:
-                        record_process_sample(project=project, sample=sample,
-                                              workflow_subtask=workflow_subtask,
+                        record_process_sample(project=project,
+                                              sample=sample,
                                               analysis_module_name="piper_ngi",
                                               analysis_dir=project.analysis_dir,
-                                              pid=p_handle.pid)
+                                              slurm_job_id=slurm_job_id,
+                                              workflow_subtask=workflow_subtask)
                     except RuntimeError as e:
-                        LOG.error(e)
+                        LOG.error('Could not record process for project/sample '
+                                  '{}/{}, workflow {}'.format(project, sample,
+                                                              workflow_subtask))
                         continue
                 except (NotImplementedError, RuntimeError) as e:
                     error_msg = ('Processing project "{}" / sample "{}" failed: '
@@ -176,18 +177,18 @@ def analyze_sample(project, sample, config=None, config_file_path=None):
 
 
 @with_ngi_config
-def sbatch_piper_job(command_line, project, sample, libprep, seqrun, workflow_name,
-                     config=None, config_file_path=None):
+def sbatch_piper_job(command_line, workflow_name, project, sample, libprep=None,
+                     seqrun=None, config=None, config_file_path=None):
     """sbatch a piper workflow. This is a little messy at the moment but if
     the workflow name is "dna_alignonly" we also append a sample-level
     analysis. It seems kludgy but I guess it's kind of a kludgy workflow.
 
     :param str command_line: The command line to execute
+    :param str workflow_name: The name of the workflow to execute
     :param NGIProject project: The NGIProject
     :param NGISample sample: The NGISample
     :param NGILibraryPrep libprep: The NGILibraryPrep
     :param NGISeqrun seqrun: The NGISeqrun
-    :param str workflow_name: The name of the workflow to execute
     :param dict config: The parsed configuration file (optional)
     :param str config_file_path: The path to the configuration file (optional)
     """
@@ -197,6 +198,7 @@ def sbatch_piper_job(command_line, project, sample, libprep, seqrun, workflow_na
     job_identifier += workflow_name
 
     # Paths to the various data directories
+    ## TODO make this smarter -- only copy the files you need (not the entire project)
     scratch_data_dir = "$SNIC_TMP/DATA/{}".format(project.dirname)
     scratch_analysis_dir = "$SNIC_TMP/ANALYSIS/{}".format(project.dirname)
     perm_data_dir = os.path.join(project.base_path, "DATA", project.dirname)
