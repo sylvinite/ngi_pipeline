@@ -17,7 +17,10 @@ from ngi_pipeline.conductor.classes import NGIProject
 from ngi_pipeline.database.classes import CharonError
 from ngi_pipeline.database.communicate import get_project_id_from_name
 from ngi_pipeline.log.loggers import minimal_logger
+from ngi_pipeline.utils.classes import with_ngi_config
+
 from requests.exceptions import Timeout
+
 
 LOG = minimal_logger(__name__)
 
@@ -190,10 +193,12 @@ def chdir(new_dir):
     finally:
         os.chdir(cur_dir)
 
+@with_ngi_config
 def recreate_project_from_filesystem(project_dir,
                                      restrict_to_samples=None,
                                      restrict_to_libpreps=None,
-                                     restrict_to_seqruns=None):
+                                     restrict_to_seqruns=None,
+                                     config=None, config_file_path=None):
     """Recreates the full project/sample/libprep/seqrun set of
     NGIObjects using the directory tree structure."""
 
@@ -201,9 +206,9 @@ def recreate_project_from_filesystem(project_dir,
     if not restrict_to_libpreps: restrict_to_libpreps = []
     if not restrict_to_seqruns: restrict_to_seqruns = []
 
-    base_path, project_name = os.path.split(project_dir)
+    project_name = os.path.split(project_dir)[1]
     if not project_name:
-        base_path, project_name = os.path.split(base_path)
+        project_name = os.path.split(base_path)[1]
     LOG.info('Setting up project "{}"'.format(project_name))
     try:
         # This requires Charon access -- maps e.g. "Y.Mom_14_01" to "P123"
@@ -216,7 +221,7 @@ def recreate_project_from_filesystem(project_dir,
     project_obj = NGIProject(name=project_name,
                              dirname=project_name,
                              project_id=project_id,
-                             base_path=base_path)
+                             base_path=config["analysis"]["top_dir"])
 
     samples_pattern = os.path.join(project_dir, "*")
     samples = filter(os.path.isdir, glob.glob(samples_pattern))
