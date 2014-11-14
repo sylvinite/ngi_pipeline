@@ -8,6 +8,7 @@ from ngi_pipeline.utils.classes import with_ngi_config
 
 from sqlalchemy import create_engine
 from sqlalchemy import Column, Integer, String
+from sqlalchemy.exc import OperationalError
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 
@@ -30,7 +31,10 @@ def get_db_session(database_path=None, config=None, config_file_path=None):
         LOG.info('Creating local job tracking database "{}"'.format(database_path))
         # This needs to be called somehow even if the engine already exists
         # possibly this should be module-level
-        engine = create_database_populate_schema(database_abspath)
+        try:
+            engine = create_database_populate_schema(database_abspath)
+        except OperationalError as e:
+            raise RuntimeError("Could not create database at {}: {}".format(database_abspath, e))
     else:
         LOG.debug('Local job tracking database at "{}" already exists; '
                   'connecting.'.format(database_abspath))
@@ -48,7 +52,7 @@ def get_db_session(database_path=None, config=None, config_file_path=None):
 def _init_engine(database_path):
     """Create the engine connection."""
     database_abspath = os.path.abspath(database_path)
-    return create_engine('sqlite:////{}'.format(database_abspath))
+    return create_engine('sqlite:///{}'.format(database_abspath))
     #return create_engine('sqlite:///:memory:', echo=True)
 
 
@@ -89,17 +93,17 @@ class SeqrunAnalysis(Base):
     engine = Column(String(50))
     analysis_dir = Column(String(100))
     #process_id = Column(Integer, primary_key=True, unique=True)
-    slurm_job_id=Column(Integer, primary_key=True, unique=True)
+    slurm_job_id = Column(Integer, primary_key=True, unique=True)
 
     def __repr__(self):
         # locals() as a dict for str.format: nice-looking and easy but seems a little sneaky. Discuss!
         return ("<FlowcellRunAnalysis({project_id}/{sample_id}/{libprep_id}/{seqrun_id}: "
-                "process id {process_id}, engine {engine}, "
+                "slurm job id {slurm_job_id}, engine {engine}, "
                 "workflow {workflow})>".format(project_id=self.project_id,
                                                sample_id=self.sample_id,
                                                libprep_id=self.libprep_id,
                                                seqrun_id=self.seqrun_id,
-                                               process_id=self.process_id,
+                                               slurm_job_id=self.slurm_job_id,
                                                engine=self.engine,
                                                workflow=self.workflow))
 

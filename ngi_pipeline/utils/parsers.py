@@ -3,6 +3,8 @@ import csv
 import glob
 import os
 import re
+import shlex
+import subprocess
 import xml.etree.cElementTree as ET
 import xml.parsers.expat
 
@@ -41,7 +43,8 @@ def get_slurm_job_status(slurm_job_id):
     :rtype: None or int
 
     :raises TypeError: If the input is not/cannot be converted to an int
-    :raises ValueError: If the job ID is not found or the job status not understood
+    :raises ValueError: If the slurm job ID is not found
+    :raises RuntimeError: If the slurm job status is not understood
     """
     try:
         check_cl = "sacct -n -j {:d} -o STATE".format(slurm_job_id)
@@ -64,7 +67,7 @@ def get_slurm_job_status(slurm_job_id):
         try:
             return SLURM_EXIT_CODES[job_status.split()[0].strip("+")]
         except (IndexError, KeyError, TypeError) as e:
-            raise ValueError("SLURM job status not understood: {}".format(job_status))
+            raise RuntimeError("SLURM job status not understood: {}".format(job_status))
 
 
 def slurm_time_to_seconds(slurm_time_str):

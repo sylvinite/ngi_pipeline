@@ -8,7 +8,8 @@ from ngi_pipeline.database.classes import CharonSession, CharonError
 from ngi_pipeline.log.loggers import minimal_logger
 from ngi_pipeline.engines.piper_ngi.database import SeqrunAnalysis, SampleAnalysis, get_db_session
 from ngi_pipeline.engines.piper_ngi.utils import create_exit_code_file_path
-from ngi_pipeline.utils.parsers import parse_qualimap_results, \
+from ngi_pipeline.utils.parsers import get_slurm_job_status, \
+                                       parse_qualimap_results, \
                                        STHLM_UUSNP_SEQRUN_RE, \
                                        STHLM_UUSNP_SAMPLE_RE
 
@@ -36,13 +37,18 @@ def update_charon_with_local_jobs_status():
             seqrun_id = seqrun_entry.seqrun_id
             slurm_job_id= seqrun_entry.slurm_job_id
 
-            exit_code = get_slurm_job_exit_status(slurm_job_id)
+            piper_exit_code = get_exit_code(workflow_name=workflow,
+                                            project_base_path=project_base_path,
+                                            project_name=project_name,
+                                            sample_id=sample_id,
+                                            libprep_id=libprep_id,
+                                            seqrun_id=seqrun_id)
             label = "project/sample/libprep/seqrun {}/{}/{}/{}".format(project_name,
                                                                        sample_id,
                                                                        libprep_id,
                                                                        seqrun_id)
             try:
-                if exit_code == 0:
+                if piper_exit_code == 0:
                     # 0 -> Job finished successfully
                     LOG.info('Workflow "{}" for {} finished succesfully. '
                              'Recording status "DONE" in Charon'.format(workflow, label))
@@ -64,17 +70,10 @@ def update_charon_with_local_jobs_status():
                                                  alignment_status=set_alignment_status)
                     # Job is only deleted if the Charon update succeeds
                     session.delete(seqrun_entry)
-                elif exit_code == 1 or (not psutil.pid_exists(pid) and not exit_code):
-                    if exit_code == 1:
-                        # 1 -> Job failed (DATA_FAILURE / COMPUTATION_FAILURE ?)
-                        LOG.info('Workflow "{}" for {} failed. Recording status '
-                                 '"FAILED" in Charon.'.format(workflow, label))
-                    else:
-                        # Job failed without writing an exit code (process no longer running)
-                        LOG.error('ERROR: No exit code found for process {} '
-                                  'but it does not appear to be running '
-                                  '(pid {} does not exist). Setting status to '
-                                  '"FAILED", inspect manually'.format(label, pid))
+                elif piper_exit_code == 1:
+                    # 1 -> Job failed (DATA_FAILURE / COMPUTATION_FAILURE ?)
+                    LOG.info('Workflow "{}" for {} failed. Recording status '
+                             '"FAILED" in Charon.'.format(workflow, label))
                     charon_session.seqrun_update(projectid=project_id,
                                                  sampleid=sample_id,
                                                  libprepid=libprep_id,
@@ -84,20 +83,36 @@ def update_charon_with_local_jobs_status():
                     LOG.debug("Deleting local entry {}".format(seqrun_entry))
                     session.delete(seqrun_entry)
                 else:
-                    # None -> Job still running
-                    charon_status = charon_session.seqrun_get(projectid=project_id,
-                                                              sampleid=sample_id,
-                                                              libprepid=libprep_id,
-                                                              seqrunid=seqrun_id)['alignment_status']
-                    if not charon_status == "RUNNING":
-                        LOG.warn('Tracking inconsistency for {}: Charon status is "{}" but '
-                                 'local process tracking database indicates it is running. '
-                                 'Setting value in Charon to RUNNING.'.format(label, charon_status))
+                    # None -> Job still running OR exit code was never written (failure)
+                    try:
+                        slurm_exit_code = get_slurm_job_status(slurm_job_id)
+                    except ValueError as e:
+                        slurm_exit_code = 1
+                    if slurm_exit_code is not None: # None indicates job is still running
+                        LOG.warn('No exit code found but job not running for '
+                                '{}: setting status to "FAILED" in Charon'.format(label))
                         charon_session.seqrun_update(projectid=project_id,
                                                      sampleid=sample_id,
                                                      libprepid=libprep_id,
                                                      seqrunid=seqrun_id,
-                                                     alignment_status="RUNNING")
+                                                     alignment_status="FAILED")
+                        # Job is only deleted if the Charon update succeeds
+                        LOG.debug("Deleting local entry {}".format(seqrun_entry))
+                        session.delete(seqrun_entry)
+                    else:
+                        charon_status = charon_session.seqrun_get(projectid=project_id,
+                                                                  sampleid=sample_id,
+                                                                  libprepid=libprep_id,
+                                                                  seqrunid=seqrun_id)['alignment_status']
+                        if not charon_status == "RUNNING":
+                            LOG.warn('Tracking inconsistency for {}: Charon status is "{}" but '
+                                     'local process tracking database indicates it is running. '
+                                     'Setting value in Charon to RUNNING.'.format(label, charon_status))
+                            charon_session.seqrun_update(projectid=project_id,
+                                                         sampleid=sample_id,
+                                                         libprepid=libprep_id,
+                                                         seqrunid=seqrun_id,
+                                                         alignment_status="RUNNING")
             except CharonError as e:
                 LOG.error('Unable to update Charon status for "{}": {}'.format(label, e))
 
@@ -112,6 +127,7 @@ def update_charon_with_local_jobs_status():
             sample_id = sample_entry.sample_id
             pid = sample_entry.process_id
 
+            ## THIS CODE NEEDS UPDATING TO USE SLURM
             exit_code = get_exit_code(workflow_name=workflow,
                                       project_base_path=project_base_path,
                                       project_name=project_name,
@@ -269,9 +285,9 @@ def update_seq_run_for_lane(seqrun_dict, lane_alignment_metrics):
 
 ## TODO This can be moved to a more generic local_process_tracking submodule
 def record_process_seqrun(project, sample, libprep, seqrun, workflow_subtask,
-                          analysis_module_name, analysis_dir, pid):
-    LOG.info('Recording process id "{}" for project "{}", sample "{}", libprep "{}", '
-             'seqrun "{}", workflow "{}"'.format(pid, project, sample, libprep,
+                          analysis_module_name, analysis_dir, slurm_job_id):
+    LOG.info('Recording slurm job id "{}" for project "{}", sample "{}", libprep "{}", '
+             'seqrun "{}", workflow "{}"'.format(slurm_job_id, project, sample, libprep,
                                                  seqrun, workflow_subtask))
     with get_db_session() as session:
         seqrun_db_obj = SeqrunAnalysis(project_id=project.project_id,
@@ -283,14 +299,14 @@ def record_process_seqrun(project, sample, libprep, seqrun, workflow_subtask,
                                        engine=analysis_module_name,
                                        workflow=workflow_subtask,
                                        analysis_dir=analysis_dir,
-                                       process_id=pid)
+                                       slurm_job_id=slurm_job_id)
         ## FIXME We must make sure that an entry for this doesn't already exist!
         session.add(seqrun_db_obj)
         for attempts in range(3):
             try:
                 session.commit()
-                LOG.info('Successfully recorded process id "{}" for project "{}", sample "{}", '
-                         'libprep "{}", seqrun "{}", workflow "{}"'.format(pid,
+                LOG.info('Successfully recorded slurm job ID "{}" for project "{}", sample "{}", '
+                         'libprep "{}", seqrun "{}", workflow "{}"'.format(slurm_job_id,
                                                                            project,
                                                                            sample,
                                                                            libprep,
@@ -301,8 +317,8 @@ def record_process_seqrun(project, sample, libprep, seqrun, workflow_subtask,
                 LOG.warn("Database is locked. Waiting...")
                 time.sleep(15)
         else:
-            raise RuntimeError('Could not record  process id "{}" for project "{}", sample "{}", '
-                               'libprep "{}", seqrun "{}", workflow "{}"'.format(pid,
+            raise RuntimeError('Could not record slurm job id "{}" for project "{}", sample "{}", '
+                               'libprep "{}", seqrun "{}", workflow "{}"'.format(slurm_job_id,
                                                                                  project,
                                                                                  sample,
                                                                                  libprep,

@@ -95,7 +95,7 @@ def analyze_seqrun(project, sample, libprep, seqrun,
                                           analysis_module_name="piper_ngi",
                                           analysis_dir=project.analysis_dir,
                                           slurm_job_id=slurm_job_id,
-                                          worfklow=workflow_subtask)
+                                          workflow_subtask=workflow_subtask)
                 except CharonError as e:
                     ## This is a problem. If the job isn't recorded, we won't
                     ## ever know that it has been run.
@@ -207,8 +207,8 @@ def sbatch_piper_job(command_line, project, sample, libprep, seqrun, workflow_na
     ## This depends on the workflow and cluster but I guess I can just hardcode for now
     #slurm_time = config.get("piper", {}).get("job_walltime")
     slurm_time = "4-00:00:00" # 4 days
-    slurm_out_log = os.path.join(perm_analysis_dir, "logs", "sbatch_{}.out".format(job_identifier))
-    slurm_err_log = os.path.join(perm_analysis_dir, "logs", "sbatch_{}.err".format(job_identifier))
+    slurm_out_log = os.path.join(perm_analysis_dir, "logs", "{}_sbatch.out".format(job_identifier))
+    slurm_err_log = os.path.join(perm_analysis_dir, "logs", "{}_sbatch.err".format(job_identifier))
     sbatch_text = create_sbatch_header(slurm_project_id=slurm_project_id,
                                        slurm_queue=slurm_queue,
                                        num_cores=num_cores,
@@ -218,12 +218,13 @@ def sbatch_piper_job(command_line, project, sample, libprep, seqrun, workflow_na
                                        slurm_err_log=slurm_err_log)
     sbatch_text_list = sbatch_text.split("\n")
     # Pull these from the config file
-    for module_name in config["piper"]["load_modules"]:
+    for module_name in config.get("piper", {}).get("load_modules", []):
         sbatch_text_list.append("module load {}".format(module_name))
 
     # Move the input files to scratch
     sbatch_text_list.append("mkdir -p {}".format(scratch_data_dir))
-    sbatch_text_list.append("rsync -a {} {}".format(perm_data_dir, scratch_data_dir))
+    # These trailing slashes are of course important when using rsync
+    sbatch_text_list.append("rsync -a {}/ {}/".format(perm_data_dir, scratch_data_dir))
 
     # Piper command line
     sbatch_text_list.append(command_line)
@@ -247,9 +248,10 @@ def sbatch_piper_job(command_line, project, sample, libprep, seqrun, workflow_na
             # People know me. I'm very important.
             ngi_pipeline_scripts_dir = config.get("environment", {}).get("ngi_scripts_dir") or \
                                        os.environ["NGI_PIPELINE_SCRIPTS"]
+            ## TODO hard-coded coverage as 30X here, adjust / pull from config file?
             bash_conditional = \
             ('source activate {conda_environment}\n'
-             'if [[ $(python {scripts_dir}/check_charon_coverage.py -p {project_id}", -s {sample_id} -c 30) ]]; then\n'
+             'if [[ $(python {scripts_dir}/check_charon_coverage.py -p {project_id}, -s {sample_id} -c 30 && echo $?) ]]; then\n'
              '   python {scripts_dir}/start_pipeline_from_project \\ \n'
              '          --sample-only \\ \n'
              '          --sample {sample_id} \\ \n'
@@ -262,7 +264,7 @@ def sbatch_piper_job(command_line, project, sample, libprep, seqrun, workflow_na
             sbatch_text_list.extend(bash_conditional.split("\n"))
 
     # I have many leather-bound books.
-    sbatch_text_list.append("rsync -a {} {}".format(scratch_analysis_dir, perm_analysis_dir))
+    sbatch_text_list.append("rsync -a {}/ {}/".format(scratch_analysis_dir, perm_analysis_dir))
 
     sbatch_dir = os.path.join(perm_analysis_dir, "sbatch")
     safe_makedir(sbatch_dir)
@@ -278,7 +280,6 @@ def sbatch_piper_job(command_line, project, sample, libprep, seqrun, workflow_na
                                     stderr=subprocess.PIPE)
     # My apartment smells of rich mahogany.
     p_out, p_err = p_handle.communicate()
-    import ipdb; ipdb.set_trace()
     try:
         ## Parse the thing to get the slurm job id
         slurm_job_id = re.match(r'Submitted batch job (\d+)', p_out).groups()[0]
@@ -286,7 +287,7 @@ def sbatch_piper_job(command_line, project, sample, libprep, seqrun, workflow_na
         raise RuntimeError('Could not submit sbatch job for workflow "{}": '
                            '{}'.format(job_identifier, p_err))
     # I'm friends with Merlin Olsen, too. He... comes over on occasion.
-    return slurm_job_id
+    return int(slurm_job_id)
 
 
 def launch_piper_job(command_line, project, log_file_path=None):
