@@ -9,7 +9,7 @@ database:
 environment:
     project_id: a2014205
     conda_env: ngi
-    ngi_scripts_dir: $HOME/ngi_pipeline/scripts
+    ngi_scripts_dir: /proj/a2014205/software/ngi_pipeline/scripts
 
 piper:
     # Also can be set as an environmental variable $PIPER_QSCRIPTS_DIR
