@@ -382,11 +382,6 @@ def build_piper_cl(project, workflow_name, exit_code_path, config):
 
 def add_exit_code_recording(cl, exit_code_path):
     """Takes a command line and returns it with increased pizzaz"""
-    ## FIXME need to change this to get the SLURM job id return code
-    ##       this of course can also not just be appended to the end of the cl,
-    ##       as that will now be an sbatch command. We will have to
-    ##       just run this intermittently
-    ##      See separate function in ngi_pipeline.utils.parsers.get_slurm_job_status
     record_exit_code = "; echo $? > {}".format(exit_code_path)
     if type(cl) is list:
         # This should work, right? Right
