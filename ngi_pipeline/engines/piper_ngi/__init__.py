@@ -129,7 +129,13 @@ def analyze_sample(project, sample, config=None, config_file_path=None):
     # If these conditions become more complex we can create a function for this
     sample_total_autosomal_coverage = charon_session.sample_get(project.project_id,
                                       sample.name).get('total_autosomal_coverage')
-    if sample_total_autosomal_coverage > 28.4:
+    try:
+        required_total_autosomal_coverage = int(config.get("piper", {}).get("sample", {}).get("required_autosomal_coverage"))
+    except (TypeError, ValueError) as e:
+        LOG.error('Unable to parse required total autosomal coverage value from '
+                  'config file (value was "{}"); using 30 instead.'.format(required_total_autosomal_coverage))
+        required_total_autosomal_coverage = 30
+    if sample_total_autosomal_coverage >= required_total_autosomal_coverage:
         LOG.info('Sample "{}" in project "{}" is ready for processing.'.format(sample, project))
         for workflow_subtask in get_subtasks_for_level(level="sample"):
             if not is_sample_analysis_running_local(workflow_subtask=workflow_subtask,
@@ -251,11 +257,16 @@ def sbatch_piper_job(command_line, project, sample, libprep, seqrun, workflow_na
             # People know me. I'm very important.
             ngi_pipeline_scripts_dir = config.get("environment", {}).get("ngi_scripts_dir") or \
                                        os.environ["NGI_PIPELINE_SCRIPTS"]
-            ## TODO hard-coded coverage as 30X here, adjust / pull from config file?
+            try:
+                required_total_autosomal_coverage = int(config.get("piper", {}).get("sample", {}).get("required_autosomal_coverage"))
+            except (TypeError, ValueError) as e:
+                LOG.error('Unable to parse required total autosomal coverage value from '
+                          'config file (value was "{}"); using 30 instead.'.format(required_total_autosomal_coverage))
+            required_total_autosomal_coverage = 30
             bash_conditional = \
             ('source activate {conda_environment}\n'
              'python {scripts_dir}/update_charon_with_local_jobs_status.py -e piper\n'
-             'if [[ $(python {scripts_dir}/check_charon_coverage.py -p {project_id}, -s {sample_id} -c 30 && echo $?) ]]; then\n'
+             'if [[ $(python {scripts_dir}/check_charon_coverage.py -p {project_id}, -s {sample_id} -c {req_coverage} && echo $?) ]]; then\n'
              '   python {scripts_dir}/start_pipeline_from_project \\ \n'
              '          --sample-only \\ \n'
              '          --sample {sample_id} \\ \n'
@@ -264,7 +275,8 @@ def sbatch_piper_job(command_line, project, sample, libprep, seqrun, workflow_na
                          sample_id=sample.name,
                          scripts_dir=ngi_pipeline_scripts_dir,
                          scratch_analysis_dir=scratch_analysis_dir,
-                         conda_environment=conda_environment))
+                         conda_environment=conda_environment,
+                         req_coverage=required_total_autosomal_coverage))
             sbatch_text_list.extend(bash_conditional.split("\n"))
 
     # I have many leather-bound books.
