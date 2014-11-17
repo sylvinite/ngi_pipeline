@@ -207,14 +207,16 @@ def sbatch_piper_job(command_line, workflow_name, project, sample, libprep=None,
     project_dirname = project.dirname
     sample_dirname = sample.dirname
     libprep_dirname = libprep.__str__() or ""
-    seqrun_dirname = seqprep.__str__() or ""
+    seqrun_dirname = seqrun.__str__() or ""
     # Final "" adds a trailing slash (for rsync)
     ## TODO CHECK THIS LATER IT'S 16:55 FRIDAY
     data_specific_path = os.path.join(project_dirname, sample_dirname, libprep_dirname, seqrun_dirname)
     scratch_data_dir = os.path.join("$SNIC_TMP/DATA", data_specific_path, "")
     scratch_analysis_dir = os.path.join("$SNIC_TMP/ANALYSIS/", data_specific_path, "")
     perm_data_dir = os.path.join(project.base_path, "DATA", data_specific_path, "")
+    perm_data_topdir = os.path.join(project.base_path, "DATA", project_dirname, "")
     perm_analysis_dir = os.path.join(project.base_path, "ANALYSIS", data_specific_path, "")
+    perm_analysis_topdir = os.path.join(project.base_path, "ANALYSIS", project_dirname, "")
 
     # Slurm-specific data
     try:
@@ -227,8 +229,8 @@ def sbatch_piper_job(command_line, workflow_name, project, sample, libprep=None,
     ## This depends on the workflow and cluster but I guess I can just hardcode for now
     #slurm_time = config.get("piper", {}).get("job_walltime")
     slurm_time = "4-00:00:00" # 4 days
-    slurm_out_log = os.path.join(perm_analysis_dir, "logs", "{}_sbatch.out".format(job_identifier))
-    slurm_err_log = os.path.join(perm_analysis_dir, "logs", "{}_sbatch.err".format(job_identifier))
+    slurm_out_log = os.path.join(perm_analysis_topdir, "logs", "{}_sbatch.out".format(job_identifier))
+    slurm_err_log = os.path.join(perm_analysis_topdir, "logs", "{}_sbatch.err".format(job_identifier))
     sbatch_text = create_sbatch_header(slurm_project_id=slurm_project_id,
                                        slurm_queue=slurm_queue,
                                        num_cores=num_cores,
@@ -237,7 +239,7 @@ def sbatch_piper_job(command_line, workflow_name, project, sample, libprep=None,
                                        slurm_out_log=slurm_out_log,
                                        slurm_err_log=slurm_err_log)
     sbatch_text_list = sbatch_text.split("\n")
-    sbatch_extra_params = config.get("sbatch", {}).get("extra_params", {})
+    sbatch_extra_params = config.get("slurm", {}).get("extra_params", {})
     for param, value in sbatch_extra_params.iteritems():
         sbatch_text_list.append("#SBATCH {} {}".format(param, value))
     # Pull these from the config file
@@ -289,12 +291,11 @@ def sbatch_piper_job(command_line, workflow_name, project, sample, libprep=None,
                          req_coverage=required_total_autosomal_coverage))
             sbatch_text_list.extend(bash_conditional.split("\n"))
 
-    sbatch_text_list.append("rsync -a {}/ {}/".format(scratch_analysis_dir, perm_analysis_dir))
+    sbatch_text_list.append("rsync -a {}/ {}/\n".format(scratch_analysis_dir, perm_analysis_dir))
 
-    sbatch_dir = os.path.join(perm_analysis_dir, "sbatch")
+    sbatch_dir = os.path.join(perm_analysis_topdir, "sbatch")
     safe_makedir(sbatch_dir)
     sbatch_outfile = os.path.join(sbatch_dir, "{}.sbatch".format(job_identifier))
-                            #datetime.datetime.now().strftime("%Y-%m-%d_%H:%M:%S:%f")))
     if os.path.exists(sbatch_outfile):
         rotate_file(sbatch_outfile)
     with open(sbatch_outfile, 'w') as f:
@@ -486,8 +487,8 @@ def build_setup_xml(project, config, sample=None, libprep_id=None, seqrun_id=Non
                            "--sequencing_platform {sequencing_tech} "
                            "--sequencing_center {sequencing_center} "
                            "--uppnex_project_id {uppmax_proj} "
-                           "--reference {reference_path} "
-                           "--qos {qos}").format(**cl_args)
+                           "--reference {reference_path} ").format(**cl_args)
+                           #"--qos {qos}").format(**cl_args)
     #NOTE: here I am assuming the different dir structure, it would be wiser to change the object type and have an uppsala project
     if not seqrun_id:
         #if seqrun_id is none it means I want to create a sample level setup xml

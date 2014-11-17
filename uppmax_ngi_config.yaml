@@ -1,7 +1,7 @@
 # This file should be placed under $HOME/.ngiconfig/ngi_config.yaml
 # or its path exported as the environment variable NGI_CONFIG
 
-sbatch:
+slurm:
     extra_params:
         "--qos": "seqver"
 
