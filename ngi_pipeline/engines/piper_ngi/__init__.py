@@ -262,13 +262,9 @@ def sbatch_piper_job(command_line, workflow_name, project, sample, libprep=None,
                       "analysis within the sbatch file; skipping automatic sample-level "
                       "analysis (checked config file and $CONDA_DEFAULT_ENV) for "
                       "analysis {}".format(job_identifier))
-        # Note my use of try-except-else. I know, pretty impressive.
-        #
-        # I don't know how to put this, but I'm... kind of a big deal.
         else:
             # Need the path to the ngi_pipeline scripts to launch sample-level analysis
             # from within the sbatch file
-            # People know me. I'm very important.
             ngi_pipeline_scripts_dir = config.get("environment", {}).get("ngi_scripts_dir") or \
                                        os.environ["NGI_PIPELINE_SCRIPTS"]
             try:
@@ -293,7 +289,6 @@ def sbatch_piper_job(command_line, workflow_name, project, sample, libprep=None,
                          req_coverage=required_total_autosomal_coverage))
             sbatch_text_list.extend(bash_conditional.split("\n"))
 
-    # I have many leather-bound books.
     sbatch_text_list.append("rsync -a {}/ {}/".format(scratch_analysis_dir, perm_analysis_dir))
 
     sbatch_dir = os.path.join(perm_analysis_dir, "sbatch")
@@ -308,7 +303,6 @@ def sbatch_piper_job(command_line, workflow_name, project, sample, libprep=None,
     p_handle = execute_command_line("sbatch {}".format(sbatch_outfile),
                                     stdout=subprocess.PIPE,
                                     stderr=subprocess.PIPE)
-    # My apartment smells of rich mahogany.
     p_out, p_err = p_handle.communicate()
     try:
         ## Parse the thing to get the slurm job id
@@ -316,7 +310,6 @@ def sbatch_piper_job(command_line, workflow_name, project, sample, libprep=None,
     except AttributeError:
         raise RuntimeError('Could not submit sbatch job for workflow "{}": '
                            '{}'.format(job_identifier, p_err))
-    # I'm friends with Merlin Olsen, too. He... comes over on occasion.
     return int(slurm_job_id)
 
 
