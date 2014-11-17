@@ -26,7 +26,7 @@ if __name__ == '__main__':
             help=("Only process at the seqrun level."))
     g.add_argument("--sample-only", action="store_true",
             help=("Only process at the sample level."))
-    parser.add_argument("project_dir", nargs="1", action="store",
+    parser.add_argument("project_dir", nargs=1, action="store",
             help=("The path to the project to be processed."))
 
     args_dict = vars(parser.parse_args())
