@@ -9,7 +9,6 @@ def locate_ngi_config():
     if not os.path.isfile(config_file_path):
         error_msg = ("Configuration file \"{}\" does not exist or is not a "
                      "file. Cannot proceed.".format(config_file_path))
-        #LOG.error(error_msg)
         raise RuntimeError(error_msg)
     return config_file_path
 

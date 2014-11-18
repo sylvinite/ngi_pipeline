@@ -135,6 +135,9 @@ class CharonSession(requests.Session):
         return self.project_get_samples(projectid)
         #return self.get(self.construct_charon_url('samples', projectid)).json()
 
+    def sample_delete(self, projectid, sampleid):
+        return self.delete(self.construct_charon_url("sample", projectid, sampleid))
+
     # LibPrep
     def libprep_create(self, projectid, sampleid, libprepid, status=None, limsid=None):
         url = self.construct_charon_url("libprep", projectid, sampleid)
@@ -160,6 +163,9 @@ class CharonSession(requests.Session):
     def libpreps_get_all(self, projectid, sampleid):
         return self.sample_get_libpreps(projectid, sampleid)
         #return self.get(self.construct_charon_url('libpreps', projectid, sampleid)).json()
+
+    def libprep_delete(self, projectid, sampleid, libprepid):
+        return self.delete(self.construct_charon_url("libprep", projectid, sampleid, libprepid))
 
     # SeqRun
     def seqrun_create(self, projectid, sampleid, libprepid, seqrunid,
@@ -206,10 +212,12 @@ class CharonSession(requests.Session):
         data = { k: None for k in self._seqrun_reset_params}
         return self.put(url, json.dumps(data)).text
 
-
     def seqruns_get_all(self, projectid, sampleid, libprepid):
         return self.libprep_get_seqruns(projectid, sampleid, libprepid)
         #return self.get(self.construct_charon_url('seqruns', projectid, sampleid, libprepid)).json()
+
+    def seqrun_delete(self, projectid, sampleid, libprepid, seqrunid):
+        return self.delete(self.construct_charon_url("seqrun", projectid, sampleid, libprepid, seqrunid))
 
 
 ## TODO create different CharonError subclasses for different codes (e.g. 400, 404)

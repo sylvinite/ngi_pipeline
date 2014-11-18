@@ -4,13 +4,12 @@ log module
 import logging
 import os
 import sys
-import yaml
 
-#from ngi_pipeline.utils.config import load_yaml_config
 from Queue import Queue
 from subprocess import Popen, PIPE
 from threading import Thread
 
+from ngi_pipeline.utils.classes import with_ngi_config
 
 def log_process_non_blocking(output_buffer, logging_fn):
     """Non-blocking redirection of a buffer to a logging function.
@@ -28,13 +27,13 @@ def log_process_non_blocking(output_buffer, logging_fn):
 
 def _enqueue_output(output_buffer, queue, logging_fn):
     for line in iter(output_buffer.readline, b''):
-        # the fastest hack FIXME
-        #logging_fn(line)
         logging_fn(line + "\n")
     output_buffer.close()
 
 
-def minimal_logger(namespace, config_file=None, to_file=True, debug=False):
+@with_ngi_config
+def minimal_logger(namespace, to_file=True, debug=False,
+                   config=None, config_file_path=None):
     """Make and return a minimal console logger. Optionally write to a file as well.
 
     :param namespace: String - namespace of logger
@@ -57,16 +56,9 @@ def minimal_logger(namespace, config_file=None, to_file=True, debug=False):
 
     # File logger
     if to_file:
-        cwd = os.path.dirname(os.path.realpath('.'))
-        log_path = os.path.join(cwd, 'ngi_pipeline.log')
-        if config_file or os.environ.get('NGI_CONFIG'):
-            if os.environ.get('NGI_CONFIG'):
-                with open(os.environ.get('NGI_CONFIG'), "r") as conf_file:
-                    config=yaml.load(conf_file)
-            else:
-                with open(config_file, "r") as conf_file:
-                    config=yaml.load(conf_file)
-            log_path = os.path.join(config.get('log_dir', ''), 'ngi_pipeline.log')
+        config_file_dir = config.get("logging", {}).get("log_dir") or \
+                          os.environ.get("NGI_CONFIG") or os.getcwd()
+        log_path = os.path.join(config_file_dir, "ngi_pipeline.log")
         fh = logging.FileHandler(log_path)
         fh.setLevel(log_level)
         fh.setFormatter(formatter)
