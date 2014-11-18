@@ -209,11 +209,10 @@ def sbatch_piper_job(command_line, workflow_name, project, sample, libprep=None,
     ## TODO CHECK THIS LATER IT'S 16:55 FRIDAY
     data_specific_path = os.path.join(project_dirname, sample_dirname, libprep_dirname, seqrun_dirname)
     scratch_data_dir = os.path.join("$SNIC_TMP/DATA", data_specific_path, "")
-    scratch_analysis_dir = os.path.join("$SNIC_TMP/ANALYSIS/", data_specific_path, "")
+    scratch_analysis_dir = os.path.join("$SNIC_TMP/ANALYSIS/", project_dirname, "")
     perm_data_dir = os.path.join(project.base_path, "DATA", data_specific_path, "")
     perm_data_topdir = os.path.join(project.base_path, "DATA", project_dirname, "")
-    perm_analysis_dir = os.path.join(project.base_path, "ANALYSIS", data_specific_path, "")
-    perm_analysis_topdir = os.path.join(project.base_path, "ANALYSIS", project_dirname, "")
+    perm_analysis_dir = os.path.join(project.base_path, "ANALYSIS", project_dirname, "")
 
     # Slurm-specific data
     try:
@@ -226,8 +225,8 @@ def sbatch_piper_job(command_line, workflow_name, project, sample, libprep=None,
     ## This depends on the workflow and cluster but I guess I can just hardcode for now
     #slurm_time = config.get("piper", {}).get("job_walltime")
     slurm_time = "4-00:00:00" # 4 days
-    slurm_out_log = os.path.join(perm_analysis_topdir, "logs", "{}_sbatch.out".format(job_identifier))
-    slurm_err_log = os.path.join(perm_analysis_topdir, "logs", "{}_sbatch.err".format(job_identifier))
+    slurm_out_log = os.path.join(perm_analysis_dir, "logs", "{}_sbatch.out".format(job_identifier))
+    slurm_err_log = os.path.join(perm_analysis_dir, "logs", "{}_sbatch.err".format(job_identifier))
     sbatch_text = create_sbatch_header(slurm_project_id=slurm_project_id,
                                        slurm_queue=slurm_queue,
                                        num_cores=num_cores,
@@ -290,7 +289,7 @@ def sbatch_piper_job(command_line, workflow_name, project, sample, libprep=None,
 
     sbatch_text_list.append("rsync -a {}/ {}/\n".format(scratch_analysis_dir, perm_analysis_dir))
 
-    sbatch_dir = os.path.join(perm_analysis_topdir, "sbatch")
+    sbatch_dir = os.path.join(perm_analysis_dir, "sbatch")
     safe_makedir(sbatch_dir)
     sbatch_outfile = os.path.join(sbatch_dir, "{}.sbatch".format(job_identifier))
     if os.path.exists(sbatch_outfile):
