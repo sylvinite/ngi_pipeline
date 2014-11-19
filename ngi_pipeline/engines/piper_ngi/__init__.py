@@ -245,8 +245,11 @@ def sbatch_piper_seqrun(command_line_list, workflow_name, project, sample, libpr
     for module_name in config.get("piper", {}).get("load_modules", []):
         sbatch_text_list.append("module load {}".format(module_name))
 
-    # Move the input files to scratch
+    # Create required output dirs on the scratch node
     sbatch_text_list.append("mkdir -p {}".format(scratch_data_dir))
+    sbatch_text_list.append("mkdir -p {}".format(scratch_analysis_dir))
+
+    # Move the input files to scratch
     # These trailing slashes are of course important when using rsync
     sbatch_text_list.append("rsync -a {}/ {}/".format(perm_data_dir, scratch_data_dir))
 
