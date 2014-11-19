@@ -180,7 +180,7 @@ def analyze_sample(project, sample, config=None, config_file_path=None):
 
 
 @with_ngi_config
-def sbatch_piper_job(command_line, workflow_name, project, sample, libprep=None,
+def sbatch_piper_seqrun(command_line, workflow_name, project, sample, libprep=None,
                      seqrun=None, config=None, config_file_path=None):
     """sbatch a piper workflow. This is a little messy at the moment but if
     the workflow name is "dna_alignonly" we also append a sample-level
@@ -195,24 +195,21 @@ def sbatch_piper_job(command_line, workflow_name, project, sample, libprep=None,
     :param dict config: The parsed configuration file (optional)
     :param str config_file_path: The path to the configuration file (optional)
     """
-    job_identifier = "{}-{}-".format(project, sample)
-    if libprep and seqrun:
-        job_identifier += "{}-{}-".format(libprep, seqrun)
-    job_identifier += workflow_name
+    job_identifier = "{}-{}-{}-{}-{}".format(project, sample, libprep, seqrun, workflow_name)
 
     # Paths to the various data directories
     project_dirname = project.dirname
     sample_dirname = sample.dirname
-    libprep_dirname = libprep.__str__() or ""
-    seqrun_dirname = seqrun.__str__() or ""
-    # Final "" adds a trailing slash (for rsync)
-    ## TODO CHECK THIS LATER IT'S 16:55 FRIDAY
-    data_specific_path = os.path.join(project_dirname, sample_dirname, libprep_dirname, seqrun_dirname)
-    scratch_data_dir = os.path.join("$SNIC_TMP/DATA", data_specific_path, "")
-    scratch_analysis_dir = os.path.join("$SNIC_TMP/ANALYSIS/", project_dirname, "")
-    perm_data_dir = os.path.join(project.base_path, "DATA", data_specific_path, "")
+    libprep_dirname = libprep.dirname
+    seqrun_dirname = seqrun.dirname
+    perm_data_dir = os.path.join(project.base_path, "DATA", os.path.join(project_dirname, sample_dirname, libprep_dirname, seqrun_dirname))
     perm_data_topdir = os.path.join(project.base_path, "DATA", project_dirname, "")
+    scratch_data_dir = os.path.join("$SNIC_TMP/DATA", os.path.join(project_dirname, sample_dirname, libprep_dirname, seqrun_dirname))
     perm_analysis_dir = os.path.join(project.base_path, "ANALYSIS", project_dirname, "")
+    scratch_analysis_dir = os.path.join("$SNIC_TMP/ANALYSIS/", project_dirname, "")
+    perm_aln_dir = os.path.join(perm_analysis_dir, "01_raw_alignments")
+    scratch_qc_dir = os.path.join(scratch_analysis_dir, "02_preliminary_alignment_qc")
+    perm_qc_dir = os.path.join(perm_analysis_dir, "02_preliminary_alignment_qc")
 
     # Slurm-specific data
     try:
@@ -222,9 +219,7 @@ def sbatch_piper_job(command_line, workflow_name, project, sample, libprep=None,
                            'for job "{}"'.format(job_identifier))
     slurm_queue = config.get("slurm", {}).get("queue") or "node"
     num_cores = config.get("slurm", {}).get("cores") or 16
-    ## This depends on the workflow and cluster but I guess I can just hardcode for now
-    #slurm_time = config.get("piper", {}).get("job_walltime")
-    slurm_time = "4-00:00:00" # 4 days
+    slurm_time = config.get("piper", {}).get("job_walltime", {}).get("dna_alignonly") or "4-00:00:00"
     slurm_out_log = os.path.join(perm_analysis_dir, "logs", "{}_sbatch.out".format(job_identifier))
     slurm_err_log = os.path.join(perm_analysis_dir, "logs", "{}_sbatch.err".format(job_identifier))
     sbatch_text = create_sbatch_header(slurm_project_id=slurm_project_id,
@@ -250,42 +245,46 @@ def sbatch_piper_job(command_line, workflow_name, project, sample, libprep=None,
     # Piper command line
     sbatch_text_list.append(command_line)
 
-    if workflow_name == "dna_alignonly":
-        # In this case we need to launch sample-level analysis as well
+    # Copy alignment qc results back to permanent
+    sbatch_text_list.append("rsync -a {}/ {}/".format(scratch_qc_dir, perm_qc_dir))
+
+    try:
+        conda_environment = config.get("environment", {}).get("conda_env") or \
+                            os.environ["CONDA_DEFAULT_ENV"]
+    except KeyError:
+        LOG.error("Could not determine conda environment to activate for sample-level "
+                  "analysis within the sbatch file; skipping automatic sample-level "
+                  "analysis (checked config file and $CONDA_DEFAULT_ENV) for "
+                  "analysis {}".format(job_identifier))
+    else:
+        # Need the path to the ngi_pipeline scripts to launch sample-level analysis
+        # from within the sbatch file
+        ngi_pipeline_scripts_dir = config.get("environment", {}).get("ngi_scripts_dir") or \
+                                   os.environ["NGI_PIPELINE_SCRIPTS"]
         try:
-            conda_environment = config.get("environment", {}).get("conda_env") or \
-                                os.environ["CONDA_DEFAULT_ENV"]
-        except KeyError:
-            LOG.error("Could not determine conda environment to activate for sample-level "
-                      "analysis within the sbatch file; skipping automatic sample-level "
-                      "analysis (checked config file and $CONDA_DEFAULT_ENV) for "
-                      "analysis {}".format(job_identifier))
-        else:
-            # Need the path to the ngi_pipeline scripts to launch sample-level analysis
-            # from within the sbatch file
-            ngi_pipeline_scripts_dir = config.get("environment", {}).get("ngi_scripts_dir") or \
-                                       os.environ["NGI_PIPELINE_SCRIPTS"]
-            try:
-                required_total_autosomal_coverage = int(config.get("piper", {}).get("sample", {}).get("required_autosomal_coverage"))
-            except (TypeError, ValueError) as e:
-                LOG.error('Unable to parse required total autosomal coverage value from '
-                          'config file (value was "{}"); using 30 instead.'.format(required_total_autosomal_coverage))
-            required_total_autosomal_coverage = 30
-            bash_conditional = \
-            ('source activate {conda_environment}\n'
-             'python {scripts_dir}/update_charon_with_local_jobs_status.py -e piper\n'
-             'if [[ $(python {scripts_dir}/check_charon_coverage.py -p {project_id}, -s {sample_id} -c {req_coverage} && echo $?) ]]; then\n'
-             '   python {scripts_dir}/start_pipeline_from_project \\ \n'
-             '          --sample-only \\ \n'
-             '          --sample {sample_id} \\ \n'
-             '          {scratch_analysis_dir}\n'
-             'fi'.format(project_id=project.project_id,
-                         sample_id=sample.name,
-                         scripts_dir=ngi_pipeline_scripts_dir,
-                         scratch_analysis_dir=scratch_analysis_dir,
-                         conda_environment=conda_environment,
-                         req_coverage=required_total_autosomal_coverage))
-            sbatch_text_list.extend(bash_conditional.split("\n"))
+            required_total_autosomal_coverage = int(config.get("piper", {}).get("sample", {}).get("required_autosomal_coverage"))
+        except (TypeError, ValueError) as e:
+            LOG.error('Unable to parse required total autosomal coverage value from '
+                      'config file (value was "{}"); using 30 instead.'.format(required_total_autosomal_coverage))
+        required_total_autosomal_coverage = 30
+        relevant_alignment_files_pattern = "{sample_name}.*.{sample_name}*".format(sample_name=sample.name)
+        ## Add error checking (path doesn't exist? can't access?)
+        relevant_alignment_files = glob.glob(os.path.join(perm_aln_dir, relevant_alignment_files_pattern))
+        bash_conditional = \
+        ('source activate {conda_environment}\n'
+         'if [[ $(python {scripts_dir}/check_coverage_filesystem.py -p {perm_qc_dir}, -s {sample_id} -c {req_coverage} && echo $?) ]]; then\n'
+         '   python {scripts_dir}/start_pipeline_from_project \\ \n'
+         '          --sample-only \\ \n'
+         '          --sample {sample_id} \\ \n'
+         '          {scratch_analysis_dir}\n'
+         'fi'.format(conda_environment=conda_environment,
+                     project_id=project.project_id,
+                     req_coverage=required_total_autosomal_coverage,
+                     sample_id=sample.name,
+                     perm_qc_dir=perm_qc_dir,
+                     scratch_analysis_dir=scratch_analysis_dir,
+                     scripts_dir=ngi_pipeline_scripts_dir))
+        sbatch_text_list.extend(bash_conditional.split("\n"))
 
     sbatch_text_list.append("rsync -a {}/ {}/\n".format(scratch_analysis_dir, perm_analysis_dir))
 
@@ -307,6 +306,7 @@ def sbatch_piper_job(command_line, workflow_name, project, sample, libprep=None,
     except AttributeError:
         raise RuntimeError('Could not submit sbatch job for workflow "{}": '
                            '{}'.format(job_identifier, p_err))
+    import ipdb; ipdb.set_trace()
     return int(slurm_job_id)
 
 
