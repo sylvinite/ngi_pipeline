@@ -1,4 +1,5 @@
 import glob
+import inspect
 import os
 import psutil
 import re
@@ -35,7 +36,7 @@ def update_charon_with_local_jobs_status():
             sample_id = seqrun_entry.sample_id
             libprep_id = seqrun_entry.libprep_id
             seqrun_id = seqrun_entry.seqrun_id
-            slurm_job_id= seqrun_entry.slurm_job_id
+            slurm_job_id = seqrun_entry.slurm_job_id
 
             piper_exit_code = get_exit_code(workflow_name=workflow,
                                             project_base_path=project_base_path,
@@ -125,76 +126,163 @@ def update_charon_with_local_jobs_status():
             project_id = sample_entry.project_id
             project_base_path = sample_entry.project_base_path
             sample_id = sample_entry.sample_id
-            pid = sample_entry.process_id
+            slurm_job_id = sample_entry.slurm_job_id
 
-            ## THIS CODE NEEDS UPDATING TO USE SLURM
-            exit_code = get_exit_code(workflow_name=workflow,
-                                      project_base_path=project_base_path,
-                                      project_name=project_name,
-                                      sample_id=sample_id)
+            piper_exit_code = get_exit_code(workflow_name=workflow,
+                                            project_base_path=project_base_path,
+                                            project_name=project_name,
+                                            sample_id=sample_id)
+
             label = "project/sample/libprep/seqrun {}/{}".format(project_name,
-                                                                       sample_id)
+                                                                 sample_id)
             try:
-                if exit_code == 0:
+                if piper_exit_code == 0:
                     # 0 -> Job finished successfully
                     LOG.info('Workflow "{}" for {} finished succesfully. '
                              'Recording status "DONE" in Charon'.format(workflow, label))
                     set_status = "DONE"
-                    ## TODO implement sample-level analysis results parsing / reporting to Charon?
-                    #try:
-                    #    write_to_charon_alignment_results(base_path=project_base_path,
-                    #                                      project_name=project_name,
-                    #                                      project_id=project_id,
-                    #                                      sample_id=sample_id,
-                    #                                      libprep_id=libprep_id,
-                    #                                      seqrun_id=seqrun_id)
-                    #except (RuntimeError, ValueError) as e:
-                    #    LOG.error(e)
-                    #    set_alignment_status = "FAILED"
                     charon_session.sample_update(projectid=project_id,
                                                  sampleid=sample_id,
                                                  status=set_status)
                     # Job is only deleted if the Charon update succeeds
                     session.delete(sample_entry)
-                elif exit_code == 1 or (not psutil.pid_exists(pid) and not exit_code):
-                    if exit_code == 1:
-                        # 1 -> Job failed (DATA_FAILURE / COMPUTATION_FAILURE ?)
-                        LOG.info('Workflow "{}" for {} failed. Recording status '
-                                 '"COMPUTATION_FAILED" in Charon.'.format(workflow, label))
-                    else:
-                        # Job failed without writing an exit code
-                        LOG.error('ERROR: No exit code found for process {} '
-                                  'but it does not appear to be running '
-                                  '(pid {} does not exist). Setting status to '
-                                  '"COMPUTATION_FAILED", inspect manually'.format(label, pid))
+                elif piper_exit_code == 1:
+                    # 1 -> Job failed (DATA_FAILURE / COMPUTATION_FAILURE ?)
+                    LOG.info('Workflow "{}" for {} failed. Recording status '
+                             '"COMPUTATION_FAILED" in Charon.'.format(workflow, label))
                     charon_session.sample_update(projectid=project_id,
                                                  sampleid=sample_id,
                                                  status="COMPUTATION_FAILED")
                     # Job is only deleted if the Charon update succeeds
                     session.delete(sample_entry)
                 else:
-                    # None -> Job still running
+                    # None -> Job still running OR exit code was never written (failure)
                     try:
-                        charon_status = charon_session.sample_get(projectid=project_id,
-                                                              sampleid=sample_id)['status']
-                    except (CharonError, KeyError) as e:
-                        LOG.warn('Unable to get required information from Charon for '
-                                 'sample "{}" / project "{}" -- forcing it to RUNNING: '
-                                 '{}'.format(sample_id, project_id, e))
-                        charon_status = "NEW"
-
-                    if not charon_status == "RUNNING":
-                        LOG.warn('Tracking inconsistency for {}: Charon status is "{}" but '
-                                 'local process tracking database indicates it is running. '
-                                 'Setting value in Charon to RUNNING.'.format(label, charon_status))
+                        slurm_exit_code = get_slurm_job_status(slurm_job_id)
+                    except ValueError as e:
+                        slurm_exit_code = 1
+                    if slurm_exit_code is not None: # None indicates job is still running
+                        LOG.warn('No exit code found but job not running for '
+                                 '{}: setting status to "FAILED" in Charon'.format(label))
                         charon_session.sample_update(projectid=project_id,
                                                      sampleid=sample_id,
-                                                     status="RUNNING")
+                                                     alignment_status="COMPUTATION_FAILED")
+                        # Job is only deleted if the Charon update succeeds
+                        LOG.debug("Deleting local entry {}".format(sample_entry))
+                        session.delete(sample_entry)
+                    else:
+                        charon_status = charon_session.sample_get(projectid=project_id,
+                                                              sampleid=sample_id)['status']
+                        if not charon_status == "RUNNING":
+                            LOG.warn('Tracking inconsistency for {}: Charon status is "{}" but '
+                                     'local process tracking database indicates it is running. '
+                                     'Setting value in Charon to RUNNING.'.format(label, charon_status))
+                            charon_session.sample_update(projectid=project_id,
+                                                         sampleid=sample_id,
+                                                         status="RUNNING")
             except CharonError as e:
                 LOG.error('Unable to update Charon status for "{}": {}'.format(label, e))
         session.commit()
 
 
+def parse_mean_autosomal_coverage_for_seqrun(piper_qc_dir, sample_id, seqrun_id=None, fcid=None):
+    """This will return an integer value representing the total autosomal coverage
+    for a particular seqrun as gleaned from the qualimapReport.html present in
+    piper_qc_dir.
+
+    :param str piper_qc_dir: The path to the Piper qc dir (02_preliminary_alignment_qc at time of writing)
+    :param str sample_id: The sample name (e.g. P1170_105)
+    :param str seqrun_id: The run id (e.g. 140821_D00458_0029_AC45JGANXX) (optional) (specify either this or fcid)
+    :param str fcid: The FCID (optional) (specify either this or seqrun_id)
+
+    :returns: The mean autosomal coverage
+    :rtype: int
+
+    :raises OSError: If the qc path specified is missing or otherwise inaccessible
+    :raises RuntimeError: If you specify both the seqrun_id and fcid and they don't match
+    :raises ValueError: If arguments are incorrect
+    :raises TypeError: If you don't pass one of seqrun_id or fcid
+    """
+    if not (seqrun_id or fcid):
+        raise TypeError('{}() requires a value for either "seqrun_id" or "fcid"'.format(inspect.stack()[0][3]))
+    return _parse_mean_coverage_from_qualimap(piper_qc_dir, sample_id, seqrun_id, fcid)
+
+
+def parse_mean_autosomal_coverage_for_sample(piper_qc_dir, sample_id):
+    """This will return an integer value representing the total autosomal coverage
+    for a particular sample as gleaned from the qualimapReport.html present in
+    piper_qc_dir.
+
+    :param str piper_qc_dir: The path to the Piper qc dir (02_preliminary_alignment_qc at time of writing)
+    :param str sample_id: The sample name (e.g. P1170_105)
+
+    :returns: The mean autosomal coverage
+    :rtype: int
+    :raises OSError: If the qc path specified is missing or otherwise inaccessible
+    :raises RuntimeError: If you specify both the seqrun_id and fcid and they don't match
+    :raises ValueError: If arguments are incorrect
+    """
+    return _parse_mean_coverage_from_qualimap(piper_qc_dir, sample_id)
+
+
+def _parse_mean_coverage_from_qualimap(piper_qc_dir, sample_id, seqrun_id=None, fcid=None):
+    """This will return an integer value representing the total autosomal coverage
+    for a particular sample OR seqrun (if seqrun_id is passed) as gleaned from
+    the qualimapReport.html present in piper_qc_dir.
+
+    :param str piper_qc_dir: The path to the Piper qc dir (02_preliminary_alignment_qc at time of writing)
+    :param str sample_id: The sample name (e.g. P1170_105)
+    :param str seqrun_id: The run id (e.g. 140821_D00458_0029_AC45JGANXX) (optional) (specify either this or fcid)
+    :param str fcid: The FCID (optional) (specify either this or seqrun_id)
+
+    :returns: The mean autosomal coverage
+    :rtype: int
+
+    :raises OSError: If the qc path specified is missing or otherwise inaccessible
+    :raises RuntimeError: If you specify both the seqrun_id and fcid and they don't match
+    :raises ValueError: If arguments are incorrect
+    """
+    try:
+        if seqrun_id and fcid and (fcid != seqrun_id.split("_")[3]):
+            raise ValueError(('seqrun_id and fcid both passed as arguments but do not '
+                              'match (seqrun_id: "{}", fcid: "{}")'.format(seqrun_id, fcid)))
+        if seqrun_id:
+            piper_run_id = seqrun_id.split("_")[3]
+        elif fcid:
+            piper_run_id = fcid
+        else:
+            piper_run_id = None
+    except IndexError:
+        raise ValueError('Can\'t parse FCID from run id ("{}")'.format(seqrun_id))
+
+
+    seqrun_dict = {}
+    seqrun_dict["lanes"] = 0
+    # Find all the appropriate files
+    try:
+        os.path.isdir(piper_qc_dir) and os.listdir(piper_qc_dir)
+    except OSError as e:
+        raise OSError('Piper result directory "{}" inaccessible when updating stats to Charon: {}.'.format(piper_qc_dir, e))
+    piper_qc_dir_base = "{}.{}.{}".format(sample_id, (piper_run_id or "*"), sample_id)
+    piper_qc_path = "{}*/".format(os.path.join(piper_qc_dir, piper_qc_dir_base))
+    piper_qc_dirs = glob.glob(piper_qc_path)
+    if not piper_qc_dirs: # Something went wrong in the alignment or we can't parse the file format
+        raise OSError('Piper qc directories under "{}" are missing or in an unexpected format when updating stats to Charon.'.format(piper_qc_path))
+    # Examine each lane and update the dict with its alignment metrics
+    for qc_lane in piper_qc_dirs:
+        genome_result = os.path.join(qc_lane, "genome_results.txt")
+        # This means that if any of the lanes are missing results, the sequencing run is marked as a failure.
+        # We should flag this somehow and send an email at some point.
+        if not os.path.isfile(genome_result):
+            raise OSError('File "genome_results.txt" is missing from Piper result directory "{}"'.format(piper_qc_dir))
+        # Get the alignment results for this lane
+        lane_alignment_metrics = parse_qualimap_results(genome_result)
+        # Update the dict for this lane
+        update_seq_run_for_lane(seqrun_dict, lane_alignment_metrics)
+    return seqrun_dict["mean_autosomal_coverage"]
+
+
+## TODO update this to use the function above
 def write_to_charon_alignment_results(base_path, project_name, project_id, sample_id, libprep_id, seqrun_id):
     """Update the status of a sequencing run after alignment.
 
@@ -252,11 +340,9 @@ def write_to_charon_alignment_results(base_path, project_name, project_id, sampl
         raise CharonError(error_msg)
 
 
-# TODO rethink this possibly, works at the moment
 def update_seq_run_for_lane(seqrun_dict, lane_alignment_metrics):
     num_lanes = seqrun_dict.get("lanes")    # This gives 0 the first time
     seqrun_dict["lanes"] = seqrun_dict["lanes"] + 1   # Increment
-    ## FIXME Change this so the lane_alignment_metrics has a "lane" value
     current_lane = re.match(".+\.(\d)\.bam", lane_alignment_metrics["bam_file"]).group(1)
 
     fields_to_update = ('mean_coverage',
@@ -324,14 +410,25 @@ def record_process_seqrun(project, sample, libprep, seqrun, workflow_subtask,
                                                                                  libprep,
                                                                                  seqrun,
                                                                                  workflow_subtask))
+    try:
+        LOG.info(('Updating Charon status for project/sample/libprep/seqrun '
+                  '{}/{}/{}/{} to "RUNNING"').format(project, sample, libprep, seqrun))
+        CharonSession().seqrun_update(projectid=project.project_id,
+                                      sampleid=sample.name,
+                                      libprepid=libprep.name,
+                                      seqrunid=seqrun.name,
+                                      alignment_status="RUNNING")
+    except CharonError as e:
+        LOG.warn('Could not update Charon status for project/sample/libprep/seqrun '
+                 '{}/{}/{}/{} due to error: {}'.format(project, sample, libprep, seqrun, e))
 
 
 ## TODO This can be moved to a more generic local_process_tracking submodule
 # FIXME change to use strings maybe
 def record_process_sample(project, sample, workflow_subtask, analysis_module_name,
-                          analysis_dir, pid, config=None):
-    LOG.info('Recording process id "{}" for project "{}", sample "{}", '
-             'workflow "{}"'.format(pid, project, sample, workflow_subtask))
+                          analysis_dir, slurm_job_id, config=None):
+    LOG.info('Recording slurm job id "{}" for project "{}", sample "{}", '
+             'workflow "{}"'.format(slurm_job_id, project, sample, workflow_subtask))
     with get_db_session() as session:
         seqrun_db_obj = SampleAnalysis(project_id=project.project_id,
                                        project_name=project.name,
@@ -340,21 +437,30 @@ def record_process_sample(project, sample, workflow_subtask, analysis_module_nam
                                        engine=analysis_module_name,
                                        workflow=workflow_subtask,
                                        analysis_dir=analysis_dir,
-                                       process_id=pid)
+                                       slurm_job_id=slurm_job_id)
         ## FIXME We must make sure that an entry for this doesn't already exist!
         session.add(seqrun_db_obj)
         for attempts in range(3):
             try:
                 session.commit()
-                LOG.info('Successfully recorded process id "{}" for project "{}", sample "{}", '
-                         'workflow "{}"'.format(pid, project, sample, workflow_subtask))
+                LOG.info('Successfully recorded slurm job id "{}" for project "{}", sample "{}", '
+                         'workflow "{}"'.format(slurm_job_id, project, sample, workflow_subtask))
                 break
             except sqlalchemy.exc.OperationalError:
                 LOG.warn("Database locked. Waiting...")
                 time.sleep(15)
         else:
-            raise RuntimeError('Could not record process id "{}" for project "{}", sample "{}", '
-                               'workflow "{}"'.format(pid, project, sample, workflow_subtask))
+            raise RuntimeError('Could not record slurm job id "{}" for project "{}", sample "{}", '
+                               'workflow "{}"'.format(slurm_job_id, project, sample, workflow_subtask))
+    try:
+        LOG.info(('Updating Charon status for project/sample '
+                  '{}/{} to "RUNNING"').format(project, sample))
+        CharonSession().seqrun_update(projectid=project.project_id,
+                                      sampleid=sample.name,
+                                      status="RUNNING")
+    except CharonError as e:
+        LOG.warn('Could not update Charon status for project/sample '
+                 '{}/{} due to error: {}'.format(project, sample, e))
 
 
 # Do we need this function?

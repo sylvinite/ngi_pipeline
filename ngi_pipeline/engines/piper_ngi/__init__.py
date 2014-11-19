@@ -2,6 +2,7 @@
 from __future__ import print_function
 
 import collections
+import glob
 import os
 import re
 import shlex
@@ -84,11 +85,11 @@ def analyze_seqrun(project, sample, libprep, seqrun,
                                                             libprep_id=libprep.name,
                                                             seqrun_id=seqrun.name)
 
-                build_setup_xml(project, config, sample, libprep.name, seqrun.name)
-
-                command_line = (build_piper_cl(project, workflow_subtask, exit_code_path, config))
-                slurm_job_id = sbatch_piper_job(command_line, workflow_subtask,
-                                                project, sample, libprep, seqrun)
+                setup_xml_cl = build_setup_xml(project, config, sample, libprep.name, seqrun.name,
+                                               local_scratch_mode=True)
+                piper_cl = build_piper_cl(project, workflow_subtask, exit_code_path, config)
+                slurm_job_id = sbatch_piper_seqrun([setup_xml_cl, piper_cl], workflow_subtask,
+                                                   project, sample, libprep, seqrun)
                 try:
                     record_process_seqrun(project=project,
                                           sample=sample,
@@ -151,13 +152,12 @@ def analyze_sample(project, sample, config=None, config_file_path=None):
                                                                 project_name=project.name,
                                                                 sample_id=sample.name)
 
-                    ## TODO Does this work? Are the paths relative?
-                    ##      If not (and maybe in any event) we should move this step
-                    ##      to the sbatch file after the files are copied over to local scratch
-                    build_setup_xml(project, config, sample)
-                    command_line = build_piper_cl(project, workflow_subtask, exit_code_path, config)
-                    slurm_job_id = sbatch_piper_job(command_line, workflow_subtask,
-                                                    project, sample, libprep, seqrun)
+                    setup_xml_cl = build_setup_xml(project, config, sample,
+                                                   local_scratch_mode=True)
+                    piper_cl = build_piper_cl(project, workflow_subtask, exit_code_path, config)
+                    slurm_job_id = sbatch_piper_sample([setup_xml_cl, piper_cl],
+                                                       workflow_subtask,
+                                                       project, sample)
                     try:
                         record_process_sample(project=project,
                                               sample=sample,
@@ -180,13 +180,12 @@ def analyze_sample(project, sample, config=None, config_file_path=None):
 
 
 @with_ngi_config
-def sbatch_piper_job(command_line, workflow_name, project, sample, libprep=None,
-                     seqrun=None, config=None, config_file_path=None):
-    """sbatch a piper workflow. This is a little messy at the moment but if
-    the workflow name is "dna_alignonly" we also append a sample-level
-    analysis. It seems kludgy but I guess it's kind of a kludgy workflow.
+def sbatch_piper_seqrun(command_line_list, workflow_name, project, sample, libprep,
+                        seqrun, config=None, config_file_path=None):
+    """sbatch a piper seqrun-level workflow, starting sample analysis
+    (separately) if coverage is sufficient.
 
-    :param str command_line: The command line to execute
+    :param line command_lines: The list of command lines to execute (in order)
     :param str workflow_name: The name of the workflow to execute
     :param NGIProject project: The NGIProject
     :param NGISample sample: The NGISample
@@ -195,24 +194,29 @@ def sbatch_piper_job(command_line, workflow_name, project, sample, libprep=None,
     :param dict config: The parsed configuration file (optional)
     :param str config_file_path: The path to the configuration file (optional)
     """
-    job_identifier = "{}-{}-".format(project, sample)
-    if libprep and seqrun:
-        job_identifier += "{}-{}-".format(libprep, seqrun)
-    job_identifier += workflow_name
+    job_identifier = "{}-{}-{}-{}-{}".format(project, sample, libprep, seqrun, workflow_name)
 
     # Paths to the various data directories
     project_dirname = project.dirname
     sample_dirname = sample.dirname
-    libprep_dirname = libprep.__str__() or ""
-    seqrun_dirname = seqrun.__str__() or ""
-    # Final "" adds a trailing slash (for rsync)
-    ## TODO CHECK THIS LATER IT'S 16:55 FRIDAY
-    data_specific_path = os.path.join(project_dirname, sample_dirname, libprep_dirname, seqrun_dirname)
-    scratch_data_dir = os.path.join("$SNIC_TMP/DATA", data_specific_path, "")
-    scratch_analysis_dir = os.path.join("$SNIC_TMP/ANALYSIS/", project_dirname, "")
-    perm_data_dir = os.path.join(project.base_path, "DATA", data_specific_path, "")
-    perm_data_topdir = os.path.join(project.base_path, "DATA", project_dirname, "")
-    perm_analysis_dir = os.path.join(project.base_path, "ANALYSIS", project_dirname, "")
+    libprep_dirname = libprep.dirname
+    seqrun_dirname = seqrun.dirname
+    # DATA / seqrun-specific / permanent storage
+    perm_data_dir = os.path.join(project.base_path, "DATA", os.path.join(project_dirname, sample_dirname, libprep_dirname, seqrun_dirname))
+    # DATA / top-level directory / permanent storage
+    perm_data_topdir = os.path.join(project.base_path, "DATA", project_dirname)
+    # DATA / seqrun-specific / scratch storage
+    scratch_data_dir = os.path.join("$SNIC_TMP/DATA", os.path.join(project_dirname, sample_dirname, libprep_dirname, seqrun_dirname))
+    # ANALYSIS / top-level directory / permanent storage
+    perm_analysis_dir = os.path.join(project.base_path, "ANALYSIS", project_dirname)
+    # ANALYSIS / top-level directory / scratch storage
+    scratch_analysis_dir = os.path.join("$SNIC_TMP/ANALYSIS/", project_dirname)
+    # ANALYSIS / alignment data / permanent storage
+    perm_aln_dir = os.path.join(perm_analysis_dir, "01_raw_alignments")
+    # ANALYSIS / qc data / scratch storage
+    scratch_qc_dir = os.path.join(scratch_analysis_dir, "02_preliminary_alignment_qc")
+    # ANALYSIS / qc data / permanent storage
+    perm_qc_dir = os.path.join(perm_analysis_dir, "02_preliminary_alignment_qc")
 
     # Slurm-specific data
     try:
@@ -222,9 +226,147 @@ def sbatch_piper_job(command_line, workflow_name, project, sample, libprep=None,
                            'for job "{}"'.format(job_identifier))
     slurm_queue = config.get("slurm", {}).get("queue") or "node"
     num_cores = config.get("slurm", {}).get("cores") or 16
-    ## This depends on the workflow and cluster but I guess I can just hardcode for now
-    #slurm_time = config.get("piper", {}).get("job_walltime")
-    slurm_time = "4-00:00:00" # 4 days
+    slurm_time = config.get("piper", {}).get("job_walltime", {}).get(workflow_name) or "4-00:00:00"
+    slurm_out_log = os.path.join(perm_analysis_dir, "logs", "{}_sbatch.out".format(job_identifier))
+    slurm_err_log = os.path.join(perm_analysis_dir, "logs", "{}_sbatch.err".format(job_identifier))
+    sbatch_text = create_sbatch_header(slurm_project_id=slurm_project_id,
+                                       slurm_queue=slurm_queue,
+                                       num_cores=num_cores,
+                                       slurm_time=slurm_time,
+                                       job_name="piper_{}".format(job_identifier),
+                                       slurm_out_log=slurm_out_log,
+                                       slurm_err_log=slurm_err_log)
+    sbatch_extra_params = config.get("slurm", {}).get("extra_params", {})
+    for param, value in sbatch_extra_params.iteritems():
+        sbatch_text += "#SBATCH {} {}\n".format(param, value)
+    sbatch_text_list = sbatch_text.split("\n")
+
+    # Pull these from the config file
+    for module_name in config.get("piper", {}).get("load_modules", []):
+        sbatch_text_list.append("module load {}".format(module_name))
+
+    # Create required output dirs on the scratch node
+    sbatch_text_list.append("mkdir -p {}".format(scratch_data_dir))
+    sbatch_text_list.append("mkdir -p {}".format(scratch_analysis_dir))
+
+    # Move the input files to scratch
+    # These trailing slashes are of course important when using rsync
+    sbatch_text_list.append("rsync -a {}/ {}/".format(perm_data_dir, scratch_data_dir))
+
+    for command_line in command_line_list:
+        sbatch_text_list.append(command_line)
+
+    # Copy alignment qc results back to permanent
+    sbatch_text_list.append("rsync -a {}/ {}/".format(scratch_qc_dir, perm_qc_dir))
+
+    try:
+        conda_environment = config.get("environment", {}).get("conda_env") or \
+                            os.environ["CONDA_DEFAULT_ENV"]
+    except KeyError:
+        LOG.error("Could not determine conda environment to activate for sample-level "
+                  "analysis within the sbatch file; skipping automatic sample-level "
+                  "analysis (checked config file and $CONDA_DEFAULT_ENV) for "
+                  "analysis {}".format(job_identifier))
+    else:
+        # Need the path to the ngi_pipeline scripts to launch sample-level analysis
+        # from within the sbatch file
+        ngi_pipeline_scripts_dir = config.get("environment", {}).get("ngi_scripts_dir") or \
+                                   os.environ["NGI_PIPELINE_SCRIPTS"]
+        try:
+            required_total_autosomal_coverage = int(config.get("piper", {}).get("sample", {}).get("required_autosomal_coverage"))
+        except (TypeError, ValueError) as e:
+            LOG.error('Unable to parse required total autosomal coverage value from '
+                      'config file (value was "{}"); using 30 instead.'.format(required_total_autosomal_coverage))
+        required_total_autosomal_coverage = 30
+        relevant_alignment_files_pattern = "{sample_name}.*.{sample_name}*".format(sample_name=sample.name)
+        ## Add error checking (path doesn't exist? can't access?)
+        relevant_alignment_files = glob.glob(os.path.join(perm_aln_dir, relevant_alignment_files_pattern))
+        bash_conditional = \
+        ('source activate {conda_environment}\n'
+         'if [[ $(python {scripts_dir}/check_coverage_filesystem.py -p {perm_qc_dir} -s {sample_id} -c {req_coverage} && echo $?) ]]; then\n'
+         '   python {scripts_dir}/start_pipeline_from_project \\ \n'
+         '          --sample-only \\ \n'
+         '          --sample {sample_id} \\ \n'
+         '          {scratch_analysis_dir}\n'
+         'fi'.format(conda_environment=conda_environment,
+                     project_id=project.project_id,
+                     req_coverage=required_total_autosomal_coverage,
+                     sample_id=sample.name,
+                     perm_qc_dir=perm_qc_dir,
+                     scratch_analysis_dir=scratch_analysis_dir,
+                     scripts_dir=ngi_pipeline_scripts_dir))
+        sbatch_text_list.extend(bash_conditional.split("\n"))
+
+    sbatch_text_list.append("rsync -a {}/ {}/\n".format(scratch_analysis_dir, perm_analysis_dir))
+
+    sbatch_dir = os.path.join(perm_analysis_dir, "sbatch")
+    safe_makedir(sbatch_dir)
+    sbatch_outfile = os.path.join(sbatch_dir, "{}.sbatch".format(job_identifier))
+    if os.path.exists(sbatch_outfile):
+        rotate_file(sbatch_outfile)
+    with open(sbatch_outfile, 'w') as f:
+        f.write("\n".join(sbatch_text_list))
+    LOG.info("Queueing sbatch file {} for job {}".format(sbatch_outfile, job_identifier))
+    p_handle = execute_command_line("sbatch {}".format(sbatch_outfile),
+                                    stdout=subprocess.PIPE,
+                                    stderr=subprocess.PIPE)
+    p_out, p_err = p_handle.communicate()
+    try:
+        ## Parse the thing to get the slurm job id
+        slurm_job_id = re.match(r'Submitted batch job (\d+)', p_out).groups()[0]
+    except AttributeError:
+        raise RuntimeError('Could not submit sbatch job for workflow "{}": '
+                           '{}'.format(job_identifier, p_err))
+    return int(slurm_job_id)
+
+
+@with_ngi_config
+def sbatch_piper_sample(command_line_list, workflow_name, project, sample, libprep=None,
+                        config=None, config_file_path=None):
+    """sbatch a piper sample-level workflow.
+
+    :param list command_line_list: The list of command lines to execute (in order)
+    :param str workflow_name: The name of the workflow to execute
+    :param NGIProject project: The NGIProject
+    :param NGISample sample: The NGISample
+    :param dict config: The parsed configuration file (optional)
+    :param str config_file_path: The path to the configuration file (optional)
+    """
+    job_identifier = "{}-{}-{}".format(project, sample, workflow_name)
+
+    # Paths to the various data directories
+    project_dirname = project.dirname
+    sample_dirname = sample.dirname
+
+    # DATA / sample-specific / permanent storage
+    perm_data_dir = os.path.join(project.base_path, "DATA", os.path.join(project_dirname, sample_dirname))
+    # DATA / top-level directory / permanent storage
+    perm_data_topdir = os.path.join(project.base_path, "DATA", project_dirname)
+    # DATA / sample-specific / scratch storage
+    scratch_data_dir = os.path.join("$SNIC_TMP/DATA", os.path.join(project_dirname, sample_dirname))
+    # ANALYSIS / top-level directory / permanent storage
+    perm_analysis_dir = os.path.join(project.base_path, "ANALYSIS", project_dirname)
+    # ANALYSIS / top-level directory / scratch storage
+    scratch_analysis_dir = os.path.join("$SNIC_TMP/ANALYSIS/", project_dirname)
+
+    # ANALYSIS / alignment data / permanent storage
+    perm_aln_dir = os.path.join(perm_analysis_dir, "01_raw_alignments")
+    # ANALYSIS / alignment data / scratch storage
+    scratch_aln_dir = os.path.join(scratch_analysis_dir, "01_raw_alignments")
+    # ANALYSIS / qc data / permanent storage
+    perm_qc_dir = os.path.join(perm_analysis_dir, "02_preliminary_alignment_qc")
+    # ANALYSIS / qc data / scratch storage
+    scratch_qc_dir = os.path.join(scratch_analysis_dir, "02_preliminary_alignment_qc")
+
+    # Slurm-specific data
+    try:
+        slurm_project_id = config["environment"]["project_id"]
+    except KeyError:
+        raise RuntimeError('No SLURM project id specified in configuration file '
+                           'for job "{}"'.format(job_identifier))
+    slurm_queue = config.get("slurm", {}).get("queue") or "node"
+    num_cores = config.get("slurm", {}).get("cores") or 16
+    slurm_time = config.get("piper", {}).get("job_walltime", {}).get("workflow_name") or "4-00:00:00"
     slurm_out_log = os.path.join(perm_analysis_dir, "logs", "{}_sbatch.out".format(job_identifier))
     slurm_err_log = os.path.join(perm_analysis_dir, "logs", "{}_sbatch.err".format(job_identifier))
     sbatch_text = create_sbatch_header(slurm_project_id=slurm_project_id,
@@ -242,51 +384,25 @@ def sbatch_piper_job(command_line, workflow_name, project, sample, libprep=None,
     for module_name in config.get("piper", {}).get("load_modules", []):
         sbatch_text_list.append("module load {}".format(module_name))
 
-    # Move the input files to scratch
-    sbatch_text_list.append("mkdir -p {}".format(scratch_data_dir))
-    # These trailing slashes are of course important when using rsync
-    sbatch_text_list.append("rsync -a {}/ {}/".format(perm_data_dir, scratch_data_dir))
+    # Get a list of relevant input files
+    # We could also just use the shell pattern in the rsync command itself but
+    # I think it's more informative to see them in the sbatch file
+    sample_file_pattern = "{sample_name}.*.{sample_name}.*".format(sample_name=sample.name)
+    aln_files_to_copy = glob.glob(os.path.join(perm_aln_dir, sample_file_pattern))
+    qc_files_to_copy = glob.glob(os.path.join(perm_qc_dir, sample_file_pattern))
 
-    # Piper command line
-    sbatch_text_list.append(command_line)
+    # Copy alignment files
+    sbatch_text_list.append("mkdir -p {}".format(scratch_aln_dir))
+    sbatch_text_list.append("rsync -a {input_files} {output_directory}".format(input_files=" ".join(aln_files_to_copy),
+                                                                               output_directory=scratch_aln_dir))
+    # Copy qc files
+    sbatch_text_list.append("mkdir -p {}".format(scratch_qc_dir))
+    sbatch_text_list.append("rsync -a {input_files} {output_directory}".format(input_files=" ".join(qc_files_to_copy),
+                                                                               output_directory=scratch_qc_dir))
+    for command_line in command_line_list:
+        sbatch_text_list.append(command_line)
 
-    if workflow_name == "dna_alignonly":
-        # In this case we need to launch sample-level analysis as well
-        try:
-            conda_environment = config.get("environment", {}).get("conda_env") or \
-                                os.environ["CONDA_DEFAULT_ENV"]
-        except KeyError:
-            LOG.error("Could not determine conda environment to activate for sample-level "
-                      "analysis within the sbatch file; skipping automatic sample-level "
-                      "analysis (checked config file and $CONDA_DEFAULT_ENV) for "
-                      "analysis {}".format(job_identifier))
-        else:
-            # Need the path to the ngi_pipeline scripts to launch sample-level analysis
-            # from within the sbatch file
-            ngi_pipeline_scripts_dir = config.get("environment", {}).get("ngi_scripts_dir") or \
-                                       os.environ["NGI_PIPELINE_SCRIPTS"]
-            try:
-                required_total_autosomal_coverage = int(config.get("piper", {}).get("sample", {}).get("required_autosomal_coverage"))
-            except (TypeError, ValueError) as e:
-                LOG.error('Unable to parse required total autosomal coverage value from '
-                          'config file (value was "{}"); using 30 instead.'.format(required_total_autosomal_coverage))
-            required_total_autosomal_coverage = 30
-            bash_conditional = \
-            ('source activate {conda_environment}\n'
-             'python {scripts_dir}/update_charon_with_local_jobs_status.py -e piper\n'
-             'if [[ $(python {scripts_dir}/check_charon_coverage.py -p {project_id}, -s {sample_id} -c {req_coverage} && echo $?) ]]; then\n'
-             '   python {scripts_dir}/start_pipeline_from_project \\ \n'
-             '          --sample-only \\ \n'
-             '          --sample {sample_id} \\ \n'
-             '          {scratch_analysis_dir}\n'
-             'fi'.format(project_id=project.project_id,
-                         sample_id=sample.name,
-                         scripts_dir=ngi_pipeline_scripts_dir,
-                         scratch_analysis_dir=scratch_analysis_dir,
-                         conda_environment=conda_environment,
-                         req_coverage=required_total_autosomal_coverage))
-            sbatch_text_list.extend(bash_conditional.split("\n"))
-
+    # Copy them sheez back
     sbatch_text_list.append("rsync -a {}/ {}/\n".format(scratch_analysis_dir, perm_analysis_dir))
 
     sbatch_dir = os.path.join(perm_analysis_dir, "sbatch")
@@ -408,7 +524,8 @@ def add_exit_code_recording(cl, exit_code_path):
     return cl + record_exit_code
 
 
-def build_setup_xml(project, config, sample=None, libprep_id=None, seqrun_id=None):
+def build_setup_xml(project, config, sample=None, libprep_id=None, seqrun_id=None,
+                    local_scratch_mode=False):
     """Build the setup.xml file for each project using the CLI-interface of
     Piper's SetupFileCreator.
 
@@ -418,10 +535,9 @@ def build_setup_xml(project, config, sample=None, libprep_id=None, seqrun_id=Non
     :param str library_id: id of the library
     :param str seqrun_id: flowcell identifier
 
-    :returns: A list of Project objects with setup.xml paths as attributes.
-    :rtype: list
+    :raises ValueError: If a required configuration file value is missing
+    :raises RuntimeError: If the setupFileCreator returns non-zero
     """
-
     if not seqrun_id:
         LOG.info('Building Piper setup.xml file for project "{}" '
                  'sample "{}"'.format(project, sample.name))
@@ -430,27 +546,19 @@ def build_setup_xml(project, config, sample=None, libprep_id=None, seqrun_id=Non
                  'sample "{}", libprep "{}", seqrun "{}"'.format(project, sample,
                                                                  libprep_id, seqrun_id))
 
-    project_top_level_dir = os.path.join(project.base_path, "DATA", project.dirname)
-    analysis_dir = os.path.join(project.base_path, "ANALYSIS", project.dirname)
-    safe_makedir(analysis_dir, 0770)
+    if local_scratch_mode:
+        project_top_level_dir = os.path.join("$SNIC_TMP/DATA/", project.dirname)
+        analysis_dir = os.path.join("$SNIC_TMP/ANALYSIS/", project.dirname)
+    else:
+        project_top_level_dir = os.path.join(project.base_path, "DATA", project.dirname)
+        analysis_dir = os.path.join(project.base_path, "ANALYSIS", project.dirname)
+        safe_makedir(analysis_dir, 0770)
     safe_makedir(os.path.join(analysis_dir, "logs"))
     cl_args = {'project': project.name}
-    # Load needed data from database
-    try:
-        # Information we need from the database:
-        # - species / reference genome that should be used (hg19, mm9)
-        # - analysis workflows to run (QC, DNA alignment, RNA alignment, variant calling, etc.)
-        # - adapters to be trimmed (?)
-        ## <open connection to project database>
-        #reference_genome = proj_db.get('species')
-        reference_genome = 'GRCh37'
-        # sequencing_center = proj_db.get('Sequencing Center')
-        cl_args["sequencing_center"] = "NGI"
-    except:
-        ## Handle database connection failures here once we actually try to connect to it
-        pass
+    cl_args["sequencing_center"] = "NGI"
 
     # Load needed data from configuration file
+    reference_genome = 'GRCh37'
     try:
         cl_args["reference_path"] = config['supported_genomes'][reference_genome]
         cl_args["uppmax_proj"] = config['environment']['project_id']
@@ -469,13 +577,13 @@ def build_setup_xml(project, config, sample=None, libprep_id=None, seqrun_id=Non
 
     if not seqrun_id:
         output_xml_filepath = os.path.join(analysis_dir,
-                                        "{}-{}-setup.xml".format(project, sample.name))
+                                           "{}-{}-setup.xml".format(project, sample.name))
     else:
         output_xml_filepath = os.path.join(analysis_dir,
-                                        "{}-{}-{}_setup.xml".format(project, sample.name, seqrun_id))
+                                           "{}-{}-{}_setup.xml".format(project, sample.name, seqrun_id))
 
-    cl_args["output_xml_filepath"]  = output_xml_filepath
-    cl_args["sequencing_tech"]      = "Illumina"
+    cl_args["output_xml_filepath"] = output_xml_filepath
+    cl_args["sequencing_tech"] = "Illumina"
     cl_args["qos"] = "seqver"
     setupfilecreator_cl = ("{sfc_binary} "
                            "--output {output_xml_filepath} "
@@ -483,32 +591,33 @@ def build_setup_xml(project, config, sample=None, libprep_id=None, seqrun_id=Non
                            "--sequencing_platform {sequencing_tech} "
                            "--sequencing_center {sequencing_center} "
                            "--uppnex_project_id {uppmax_proj} "
-                           "--reference {reference_path} ").format(**cl_args)
-                           #"--qos {qos}").format(**cl_args)
-    #NOTE: here I am assuming the different dir structure, it would be wiser to change the object type and have an uppsala project
+                           "--reference {reference_path} "
+                           "--qos {qos}").format(**cl_args)
     if not seqrun_id:
-        #if seqrun_id is none it means I want to create a sample level setup xml
         for libprep in sample:
             for seqrun in libprep:
                 sample_run_directory = os.path.join(project_top_level_dir, sample.dirname, libprep.name, seqrun.name )
                 for fastq_file_name in os.listdir(sample_run_directory):
-                    #MARIO: I am not a big fun of this, IGN object need to be created from file system in order to avoid this things
                     fastq_file = os.path.join(sample_run_directory, fastq_file_name)
                     setupfilecreator_cl += " --input_fastq {}".format(fastq_file)
     else:
-        #I need to create an xml file for this sample_run
         sample_run_directory = os.path.join(project_top_level_dir, sample.dirname, libprep_id, seqrun_id )
         for fastq_file_name in sample.libpreps[libprep_id].seqruns[seqrun_id].fastq_files:
             fastq_file = os.path.join(sample_run_directory, fastq_file_name)
             setupfilecreator_cl += " --input_fastq {}".format(fastq_file)
 
-    try:
-        LOG.info("Executing command line: {}".format(setupfilecreator_cl))
-        subprocess.check_call(shlex.split(setupfilecreator_cl))
-        project.setup_xml_path = output_xml_filepath
-        project.analysis_dir   = analysis_dir
-    except (subprocess.CalledProcessError, OSError, ValueError) as e:
-        error_msg = ("Unable to produce setup XML file for project {}; "
-                     "skipping project analysis. "
-                     "Error is: \"{}\". .".format(project, e))
-        raise RuntimeError(error_msg)
+    project.setup_xml_path = output_xml_filepath
+    project.analysis_dir = analysis_dir
+
+    return setupfilecreator_cl
+
+    #try:
+    #    LOG.info("Executing command line: {}".format(setupfilecreator_cl))
+    #    subprocess.check_call(shlex.split(setupfilecreator_cl))
+    #    project.setup_xml_path = output_xml_filepath
+    #    project.analysis_dir   = analysis_dir
+    #except (subprocess.CalledProcessError, OSError, ValueError) as e:
+    #    error_msg = ("Unable to produce setup XML file for project {}; "
+    #                 "skipping project analysis. "
+    #                 "Error is: \"{}\". .".format(project, e))
+    #    raise RuntimeError(error_msg)
