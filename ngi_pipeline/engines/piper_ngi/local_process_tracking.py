@@ -411,6 +411,17 @@ def record_process_seqrun(project, sample, libprep, seqrun, workflow_subtask,
                                                                                  libprep,
                                                                                  seqrun,
                                                                                  workflow_subtask))
+    try:
+        LOG.info(('Updating Charon status for project/sample/libprep/seqrun '
+                  '{}/{}/{}/{} to "RUNNING"').format(project, sample, libprep, seqrun))
+        CharonSession().seqrun_update(projectid=project.project_id,
+                                      sampleid=sample.name,
+                                      libprepid=libprep.name,
+                                      seqrunid=seqrun.name,
+                                      alignment_status="RUNNING")
+    except CharonError as e:
+        LOG.warn('Could not update Charon status for project/sample/libprep/seqrun '
+                 '{}/{}/{}/{} due to error: {}'.format(project, sample, libprep, seqrun, e))
 
 
 ## TODO This can be moved to a more generic local_process_tracking submodule
@@ -442,6 +453,15 @@ def record_process_sample(project, sample, workflow_subtask, analysis_module_nam
         else:
             raise RuntimeError('Could not record slurm job id "{}" for project "{}", sample "{}", '
                                'workflow "{}"'.format(slurm_job_id, project, sample, workflow_subtask))
+    try:
+        LOG.info(('Updating Charon status for project/sample '
+                  '{}/{} to "RUNNING"').format(project, sample))
+        CharonSession().seqrun_update(projectid=project.project_id,
+                                      sampleid=sample.name,
+                                      status="RUNNING")
+    except CharonError as e:
+        LOG.warn('Could not update Charon status for project/sample '
+                 '{}/{} due to error: {}'.format(project, sample, e))
 
 
 # Do we need this function?
