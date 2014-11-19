@@ -85,10 +85,10 @@ def analyze_seqrun(project, sample, libprep, seqrun,
                                                             libprep_id=libprep.name,
                                                             seqrun_id=seqrun.name)
 
-                build_setup_xml(project, config, sample, libprep.name, seqrun.name)
-
-                command_line = (build_piper_cl(project, workflow_subtask, exit_code_path, config))
-                slurm_job_id = sbatch_piper_seqrun(command_line, workflow_subtask,
+                setup_xml_cl = build_setup_xml(project, config, sample, libprep.name, seqrun.name,
+                                               local_scratch_mode=True)
+                piper_cl = build_piper_cl(project, workflow_subtask, exit_code_path, config)
+                slurm_job_id = sbatch_piper_seqrun([setup_xml_cl, piper_cl], workflow_subtask,
                                                    project, sample, libprep, seqrun)
                 try:
                     record_process_seqrun(project=project,
@@ -152,12 +152,11 @@ def analyze_sample(project, sample, config=None, config_file_path=None):
                                                                 project_name=project.name,
                                                                 sample_id=sample.name)
 
-                    ## TODO Does this work? Are the paths relative?
-                    ##      If not (and maybe in any event) we should move this step
-                    ##      to the sbatch file after the files are copied over to local scratch
-                    build_setup_xml(project, config, sample)
-                    command_line = build_piper_cl(project, workflow_subtask, exit_code_path, config)
-                    slurm_job_id = sbatch_piper_sample(command_line, workflow_subtask,
+                    setup_xml_cl = build_setup_xml(project, config, sample,
+                                                   local_scratch_mode=True)
+                    piper_cl = build_piper_cl(project, workflow_subtask, exit_code_path, config)
+                    slurm_job_id = sbatch_piper_sample([setup_xml_cl, piper_cl],
+                                                       workflow_subtask,
                                                        project, sample)
                     try:
                         record_process_sample(project=project,
@@ -181,12 +180,12 @@ def analyze_sample(project, sample, config=None, config_file_path=None):
 
 
 @with_ngi_config
-def sbatch_piper_seqrun(command_line, workflow_name, project, sample, libprep,
+def sbatch_piper_seqrun(command_line_list, workflow_name, project, sample, libprep,
                         seqrun, config=None, config_file_path=None):
     """sbatch a piper seqrun-level workflow, starting sample analysis
     (separately) if coverage is sufficient.
 
-    :param str command_line: The command line to execute
+    :param line command_lines: The list of command lines to execute (in order)
     :param str workflow_name: The name of the workflow to execute
     :param NGIProject project: The NGIProject
     :param NGISample sample: The NGISample
@@ -237,10 +236,11 @@ def sbatch_piper_seqrun(command_line, workflow_name, project, sample, libprep,
                                        job_name="piper_{}".format(job_identifier),
                                        slurm_out_log=slurm_out_log,
                                        slurm_err_log=slurm_err_log)
-    sbatch_text_list = sbatch_text.split("\n")
     sbatch_extra_params = config.get("slurm", {}).get("extra_params", {})
     for param, value in sbatch_extra_params.iteritems():
-        sbatch_text_list.append("#SBATCH {} {}".format(param, value))
+        sbatch_text += "#SBATCH {} {}\n".format(param, value)
+    sbatch_text_list = sbatch_text.split("\n")
+
     # Pull these from the config file
     for module_name in config.get("piper", {}).get("load_modules", []):
         sbatch_text_list.append("module load {}".format(module_name))
@@ -250,8 +250,8 @@ def sbatch_piper_seqrun(command_line, workflow_name, project, sample, libprep,
     # These trailing slashes are of course important when using rsync
     sbatch_text_list.append("rsync -a {}/ {}/".format(perm_data_dir, scratch_data_dir))
 
-    # Piper command line
-    sbatch_text_list.append(command_line)
+    for command_line in command_line_list:
+        sbatch_text_list.append(command_line)
 
     # Copy alignment qc results back to permanent
     sbatch_text_list.append("rsync -a {}/ {}/".format(scratch_qc_dir, perm_qc_dir))
@@ -318,11 +318,11 @@ def sbatch_piper_seqrun(command_line, workflow_name, project, sample, libprep,
 
 
 @with_ngi_config
-def sbatch_piper_sample(command_line, workflow_name, project, sample, libprep=None,
+def sbatch_piper_sample(command_line_list, workflow_name, project, sample, libprep=None,
                         config=None, config_file_path=None):
     """sbatch a piper sample-level workflow.
 
-    :param str command_line: The command line to execute
+    :param list command_line_list: The list of command lines to execute (in order)
     :param str workflow_name: The name of the workflow to execute
     :param NGIProject project: The NGIProject
     :param NGISample sample: The NGISample
@@ -396,9 +396,8 @@ def sbatch_piper_sample(command_line, workflow_name, project, sample, libprep=No
     sbatch_text_list.append("mkdir -p {}".format(scratch_qc_dir))
     sbatch_text_list.append("rsync -a {input_files} {output_directory}".format(input_files=" ".join(qc_files_to_copy),
                                                                                output_directory=scratch_qc_dir))
-
-    # Piper command line
-    sbatch_text_list.append(command_line)
+    for command_line in command_line_list:
+        sbatch_text_list.append(command_line)
 
     # Copy them sheez back
     sbatch_text_list.append("rsync -a {}/ {}/\n".format(scratch_analysis_dir, perm_analysis_dir))
@@ -522,7 +521,8 @@ def add_exit_code_recording(cl, exit_code_path):
     return cl + record_exit_code
 
 
-def build_setup_xml(project, config, sample=None, libprep_id=None, seqrun_id=None):
+def build_setup_xml(project, config, sample=None, libprep_id=None, seqrun_id=None,
+                    local_scratch_mode=False):
     """Build the setup.xml file for each project using the CLI-interface of
     Piper's SetupFileCreator.
 
@@ -532,10 +532,9 @@ def build_setup_xml(project, config, sample=None, libprep_id=None, seqrun_id=Non
     :param str library_id: id of the library
     :param str seqrun_id: flowcell identifier
 
-    :returns: A list of Project objects with setup.xml paths as attributes.
-    :rtype: list
+    :raises ValueError: If a required configuration file value is missing
+    :raises RuntimeError: If the setupFileCreator returns non-zero
     """
-
     if not seqrun_id:
         LOG.info('Building Piper setup.xml file for project "{}" '
                  'sample "{}"'.format(project, sample.name))
@@ -544,27 +543,19 @@ def build_setup_xml(project, config, sample=None, libprep_id=None, seqrun_id=Non
                  'sample "{}", libprep "{}", seqrun "{}"'.format(project, sample,
                                                                  libprep_id, seqrun_id))
 
-    project_top_level_dir = os.path.join(project.base_path, "DATA", project.dirname)
-    analysis_dir = os.path.join(project.base_path, "ANALYSIS", project.dirname)
-    safe_makedir(analysis_dir, 0770)
+    if local_scratch_mode:
+        project_top_level_dir = os.path.join("$SNIC_TMP/DATA/", project.dirname)
+        analysis_dir = os.path.join("$SNIC_TMP/ANALYSIS/", project.dirname)
+    else:
+        project_top_level_dir = os.path.join(project.base_path, "DATA", project.dirname)
+        analysis_dir = os.path.join(project.base_path, "ANALYSIS", project.dirname)
+        safe_makedir(analysis_dir, 0770)
     safe_makedir(os.path.join(analysis_dir, "logs"))
     cl_args = {'project': project.name}
-    # Load needed data from database
-    try:
-        # Information we need from the database:
-        # - species / reference genome that should be used (hg19, mm9)
-        # - analysis workflows to run (QC, DNA alignment, RNA alignment, variant calling, etc.)
-        # - adapters to be trimmed (?)
-        ## <open connection to project database>
-        #reference_genome = proj_db.get('species')
-        reference_genome = 'GRCh37'
-        # sequencing_center = proj_db.get('Sequencing Center')
-        cl_args["sequencing_center"] = "NGI"
-    except:
-        ## Handle database connection failures here once we actually try to connect to it
-        pass
+    cl_args["sequencing_center"] = "NGI"
 
     # Load needed data from configuration file
+    reference_genome = 'GRCh37'
     try:
         cl_args["reference_path"] = config['supported_genomes'][reference_genome]
         cl_args["uppmax_proj"] = config['environment']['project_id']
@@ -583,13 +574,13 @@ def build_setup_xml(project, config, sample=None, libprep_id=None, seqrun_id=Non
 
     if not seqrun_id:
         output_xml_filepath = os.path.join(analysis_dir,
-                                        "{}-{}-setup.xml".format(project, sample.name))
+                                           "{}-{}-setup.xml".format(project, sample.name))
     else:
         output_xml_filepath = os.path.join(analysis_dir,
-                                        "{}-{}-{}_setup.xml".format(project, sample.name, seqrun_id))
+                                           "{}-{}-{}_setup.xml".format(project, sample.name, seqrun_id))
 
-    cl_args["output_xml_filepath"]  = output_xml_filepath
-    cl_args["sequencing_tech"]      = "Illumina"
+    cl_args["output_xml_filepath"] = output_xml_filepath
+    cl_args["sequencing_tech"] = "Illumina"
     cl_args["qos"] = "seqver"
     setupfilecreator_cl = ("{sfc_binary} "
                            "--output {output_xml_filepath} "
@@ -597,32 +588,33 @@ def build_setup_xml(project, config, sample=None, libprep_id=None, seqrun_id=Non
                            "--sequencing_platform {sequencing_tech} "
                            "--sequencing_center {sequencing_center} "
                            "--uppnex_project_id {uppmax_proj} "
-                           "--reference {reference_path} ").format(**cl_args)
-                           #"--qos {qos}").format(**cl_args)
-    #NOTE: here I am assuming the different dir structure, it would be wiser to change the object type and have an uppsala project
+                           "--reference {reference_path} "
+                           "--qos {qos}").format(**cl_args)
     if not seqrun_id:
-        #if seqrun_id is none it means I want to create a sample level setup xml
         for libprep in sample:
             for seqrun in libprep:
                 sample_run_directory = os.path.join(project_top_level_dir, sample.dirname, libprep.name, seqrun.name )
                 for fastq_file_name in os.listdir(sample_run_directory):
-                    #MARIO: I am not a big fun of this, IGN object need to be created from file system in order to avoid this things
                     fastq_file = os.path.join(sample_run_directory, fastq_file_name)
                     setupfilecreator_cl += " --input_fastq {}".format(fastq_file)
     else:
-        #I need to create an xml file for this sample_run
         sample_run_directory = os.path.join(project_top_level_dir, sample.dirname, libprep_id, seqrun_id )
         for fastq_file_name in sample.libpreps[libprep_id].seqruns[seqrun_id].fastq_files:
             fastq_file = os.path.join(sample_run_directory, fastq_file_name)
             setupfilecreator_cl += " --input_fastq {}".format(fastq_file)
 
-    try:
-        LOG.info("Executing command line: {}".format(setupfilecreator_cl))
-        subprocess.check_call(shlex.split(setupfilecreator_cl))
-        project.setup_xml_path = output_xml_filepath
-        project.analysis_dir   = analysis_dir
-    except (subprocess.CalledProcessError, OSError, ValueError) as e:
-        error_msg = ("Unable to produce setup XML file for project {}; "
-                     "skipping project analysis. "
-                     "Error is: \"{}\". .".format(project, e))
-        raise RuntimeError(error_msg)
+    project.setup_xml_path = output_xml_filepath
+    project.analysis_dir = analysis_dir
+
+    return setupfilecreator_cl
+
+    #try:
+    #    LOG.info("Executing command line: {}".format(setupfilecreator_cl))
+    #    subprocess.check_call(shlex.split(setupfilecreator_cl))
+    #    project.setup_xml_path = output_xml_filepath
+    #    project.analysis_dir   = analysis_dir
+    #except (subprocess.CalledProcessError, OSError, ValueError) as e:
+    #    error_msg = ("Unable to produce setup XML file for project {}; "
+    #                 "skipping project analysis. "
+    #                 "Error is: \"{}\". .".format(project, e))
+    #    raise RuntimeError(error_msg)
