@@ -10,7 +10,6 @@ SBATCH_HEADER = """#!/bin/bash -l
 #SBATCH -J {job_name}
 #SBATCH -o {slurm_out_log}
 #SBATCH -e {slurm_err_log}
-
 """
 
 def create_sbatch_header(slurm_project_id, slurm_queue, num_cores, slurm_time,
