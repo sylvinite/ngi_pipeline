@@ -280,7 +280,7 @@ def sbatch_piper_seqrun(command_line, workflow_name, project, sample, libprep,
         relevant_alignment_files = glob.glob(os.path.join(perm_aln_dir, relevant_alignment_files_pattern))
         bash_conditional = \
         ('source activate {conda_environment}\n'
-         'if [[ $(python {scripts_dir}/check_coverage_filesystem.py -p {perm_qc_dir}, -s {sample_id} -c {req_coverage} && echo $?) ]]; then\n'
+         'if [[ $(python {scripts_dir}/check_coverage_filesystem.py -p {perm_qc_dir} -s {sample_id} -c {req_coverage} && echo $?) ]]; then\n'
          '   python {scripts_dir}/start_pipeline_from_project \\ \n'
          '          --sample-only \\ \n'
          '          --sample {sample_id} \\ \n'
