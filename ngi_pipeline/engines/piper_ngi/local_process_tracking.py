@@ -1,4 +1,5 @@
 import glob
+import inspect
 import os
 import psutil
 import re
@@ -195,6 +196,104 @@ def update_charon_with_local_jobs_status():
         session.commit()
 
 
+def parse_mean_autosomal_coverage_for_seqrun(piper_qc_dir, sample_id, seqrun_id=None, fcid=None):
+    """This will return an integer value representing the total autosomal coverage
+    for a particular seqrun as gleaned from the qualimapReport.html present in
+    piper_qc_dir.
+
+    :param str piper_qc_dir: The path to the Piper qc dir (02_preliminary_alignment_qc at time of writing)
+    :param str sample_id: The sample name (e.g. P1170_105)
+    :param str seqrun_id: The run id (e.g. 140821_D00458_0029_AC45JGANXX) (optional) (specify either this or fcid)
+    :param str fcid: The FCID (optional) (specify either this or seqrun_id)
+
+    :returns: The mean autosomal coverage
+    :rtype: int
+
+    :raises OSError: If the qc path specified is missing or otherwise inaccessible
+    :raises RuntimeError: If you specify both the seqrun_id and fcid and they don't match
+    :raises ValueError: If arguments are incorrect
+    :raises TypeError: If you don't pass one of seqrun_id or fcid
+    """
+    if not (seqrun_id or fcid):
+        raise TypeError('{}() requires a value for either "seqrun_id" or "fcid"'.format(inspect.stack()[0][3]))
+    return _parse_mean_coverage_from_qualimap(piper_qc_dir, sample_id, seqrun_id, fcid)
+
+
+def parse_mean_autosomal_coverage_for_sample(piper_qc_dir, sample_id):
+    """This will return an integer value representing the total autosomal coverage
+    for a particular sample as gleaned from the qualimapReport.html present in
+    piper_qc_dir.
+
+    :param str piper_qc_dir: The path to the Piper qc dir (02_preliminary_alignment_qc at time of writing)
+    :param str sample_id: The sample name (e.g. P1170_105)
+
+    :returns: The mean autosomal coverage
+    :rtype: int
+    :raises OSError: If the qc path specified is missing or otherwise inaccessible
+    :raises RuntimeError: If you specify both the seqrun_id and fcid and they don't match
+    :raises ValueError: If arguments are incorrect
+    """
+    return _parse_mean_coverage_from_qualimap(piper_qc_dir, sample_id)
+
+
+def _parse_mean_coverage_from_qualimap(piper_qc_dir, sample_id, seqrun_id=None, fcid=None):
+    """This will return an integer value representing the total autosomal coverage
+    for a particular sample OR seqrun (if seqrun_id is passed) as gleaned from
+    the qualimapReport.html present in piper_qc_dir.
+
+    :param str piper_qc_dir: The path to the Piper qc dir (02_preliminary_alignment_qc at time of writing)
+    :param str sample_id: The sample name (e.g. P1170_105)
+    :param str seqrun_id: The run id (e.g. 140821_D00458_0029_AC45JGANXX) (optional) (specify either this or fcid)
+    :param str fcid: The FCID (optional) (specify either this or seqrun_id)
+
+    :returns: The mean autosomal coverage
+    :rtype: int
+
+    :raises OSError: If the qc path specified is missing or otherwise inaccessible
+    :raises RuntimeError: If you specify both the seqrun_id and fcid and they don't match
+    :raises ValueError: If arguments are incorrect
+    """
+    try:
+        if seqrun_id and fcid and (fcid != seqrun_id.split("_")[3]):
+            raise ValueError(('seqrun_id and fcid both passed as arguments but do not '
+                              'match (seqrun_id: "{}", fcid: "{}")'.format(seqrun_id, fcid)))
+        if seqrun_id:
+            piper_run_id = seqrun_id.split("_")[3]
+        elif fcid:
+            piper_run_id = fcid
+        else:
+            piper_run_id = None
+    except IndexError:
+        raise ValueError('Can\'t parse FCID from run id ("{}")'.format(seqrun_id))
+
+
+    seqrun_dict = {}
+    seqrun_dict["lanes"] = 0
+    # Find all the appropriate files
+    try:
+        os.path.isdir(piper_qc_dir) and os.listdir(piper_qc_dir)
+    except OSError as e:
+        raise OSError('Piper result directory "{}" inaccessible when updating stats to Charon: {}.'.format(piper_qc_dir, e))
+    piper_qc_dir_base = "{}.{}.{}".format(sample_id, (piper_run_id or "*"), sample_id)
+    piper_qc_path = "{}*/".format(os.path.join(piper_qc_dir, piper_qc_dir_base))
+    piper_qc_dirs = glob.glob(piper_qc_path)
+    if not piper_qc_dirs: # Something went wrong in the alignment or we can't parse the file format
+        raise OSError('Piper qc directories under "{}" are missing or in an unexpected format when updating stats to Charon.'.format(piper_qc_path))
+    # Examine each lane and update the dict with its alignment metrics
+    for qc_lane in piper_qc_dirs:
+        genome_result = os.path.join(qc_lane, "genome_results.txt")
+        # This means that if any of the lanes are missing results, the sequencing run is marked as a failure.
+        # We should flag this somehow and send an email at some point.
+        if not os.path.isfile(genome_result):
+            raise OSError('File "genome_results.txt" is missing from Piper result directory "{}"'.format(piper_qc_dir))
+        # Get the alignment results for this lane
+        lane_alignment_metrics = parse_qualimap_results(genome_result)
+        # Update the dict for this lane
+        update_seq_run_for_lane(seqrun_dict, lane_alignment_metrics)
+    return seqrun_dict["mean_autosomal_coverage"]
+
+
+## TODO update this to use the function above
 def write_to_charon_alignment_results(base_path, project_name, project_id, sample_id, libprep_id, seqrun_id):
     """Update the status of a sequencing run after alignment.
 
@@ -252,11 +351,10 @@ def write_to_charon_alignment_results(base_path, project_name, project_id, sampl
         raise CharonError(error_msg)
 
 
-# TODO rethink this possibly, works at the moment
+# This works for one run
 def update_seq_run_for_lane(seqrun_dict, lane_alignment_metrics):
     num_lanes = seqrun_dict.get("lanes")    # This gives 0 the first time
     seqrun_dict["lanes"] = seqrun_dict["lanes"] + 1   # Increment
-    ## FIXME Change this so the lane_alignment_metrics has a "lane" value
     current_lane = re.match(".+\.(\d)\.bam", lane_alignment_metrics["bam_file"]).group(1)
 
     fields_to_update = ('mean_coverage',
