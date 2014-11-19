@@ -340,7 +340,6 @@ def write_to_charon_alignment_results(base_path, project_name, project_id, sampl
         raise CharonError(error_msg)
 
 
-# This works for one run
 def update_seq_run_for_lane(seqrun_dict, lane_alignment_metrics):
     num_lanes = seqrun_dict.get("lanes")    # This gives 0 the first time
     seqrun_dict["lanes"] = seqrun_dict["lanes"] + 1   # Increment
