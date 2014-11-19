@@ -2,6 +2,7 @@
 from __future__ import print_function
 
 import collections
+import glob
 import os
 import re
 import shlex
@@ -87,8 +88,8 @@ def analyze_seqrun(project, sample, libprep, seqrun,
                 build_setup_xml(project, config, sample, libprep.name, seqrun.name)
 
                 command_line = (build_piper_cl(project, workflow_subtask, exit_code_path, config))
-                slurm_job_id = sbatch_piper_job(command_line, workflow_subtask,
-                                                project, sample, libprep, seqrun)
+                slurm_job_id = sbatch_piper_seqrun(command_line, workflow_subtask,
+                                                   project, sample, libprep, seqrun)
                 try:
                     record_process_seqrun(project=project,
                                           sample=sample,
@@ -156,8 +157,8 @@ def analyze_sample(project, sample, config=None, config_file_path=None):
                     ##      to the sbatch file after the files are copied over to local scratch
                     build_setup_xml(project, config, sample)
                     command_line = build_piper_cl(project, workflow_subtask, exit_code_path, config)
-                    slurm_job_id = sbatch_piper_job(command_line, workflow_subtask,
-                                                    project, sample, libprep, seqrun)
+                    slurm_job_id = sbatch_piper_sample(command_line, workflow_subtask,
+                                                       project, sample)
                     try:
                         record_process_sample(project=project,
                                               sample=sample,
@@ -180,11 +181,10 @@ def analyze_sample(project, sample, config=None, config_file_path=None):
 
 
 @with_ngi_config
-def sbatch_piper_seqrun(command_line, workflow_name, project, sample, libprep=None,
-                     seqrun=None, config=None, config_file_path=None):
-    """sbatch a piper workflow. This is a little messy at the moment but if
-    the workflow name is "dna_alignonly" we also append a sample-level
-    analysis. It seems kludgy but I guess it's kind of a kludgy workflow.
+def sbatch_piper_seqrun(command_line, workflow_name, project, sample, libprep,
+                        seqrun, config=None, config_file_path=None):
+    """sbatch a piper seqrun-level workflow, starting sample analysis
+    (separately) if coverage is sufficient.
 
     :param str command_line: The command line to execute
     :param str workflow_name: The name of the workflow to execute
@@ -202,13 +202,21 @@ def sbatch_piper_seqrun(command_line, workflow_name, project, sample, libprep=No
     sample_dirname = sample.dirname
     libprep_dirname = libprep.dirname
     seqrun_dirname = seqrun.dirname
+    # DATA / seqrun-specific / permanent storage
     perm_data_dir = os.path.join(project.base_path, "DATA", os.path.join(project_dirname, sample_dirname, libprep_dirname, seqrun_dirname))
-    perm_data_topdir = os.path.join(project.base_path, "DATA", project_dirname, "")
+    # DATA / top-level directory / permanent storage
+    perm_data_topdir = os.path.join(project.base_path, "DATA", project_dirname)
+    # DATA / seqrun-specific / scratch storage
     scratch_data_dir = os.path.join("$SNIC_TMP/DATA", os.path.join(project_dirname, sample_dirname, libprep_dirname, seqrun_dirname))
-    perm_analysis_dir = os.path.join(project.base_path, "ANALYSIS", project_dirname, "")
-    scratch_analysis_dir = os.path.join("$SNIC_TMP/ANALYSIS/", project_dirname, "")
+    # ANALYSIS / top-level directory / permanent storage
+    perm_analysis_dir = os.path.join(project.base_path, "ANALYSIS", project_dirname)
+    # ANALYSIS / top-level directory / scratch storage
+    scratch_analysis_dir = os.path.join("$SNIC_TMP/ANALYSIS/", project_dirname)
+    # ANALYSIS / alignment data / permanent storage
     perm_aln_dir = os.path.join(perm_analysis_dir, "01_raw_alignments")
+    # ANALYSIS / qc data / scratch storage
     scratch_qc_dir = os.path.join(scratch_analysis_dir, "02_preliminary_alignment_qc")
+    # ANALYSIS / qc data / permanent storage
     perm_qc_dir = os.path.join(perm_analysis_dir, "02_preliminary_alignment_qc")
 
     # Slurm-specific data
@@ -219,7 +227,7 @@ def sbatch_piper_seqrun(command_line, workflow_name, project, sample, libprep=No
                            'for job "{}"'.format(job_identifier))
     slurm_queue = config.get("slurm", {}).get("queue") or "node"
     num_cores = config.get("slurm", {}).get("cores") or 16
-    slurm_time = config.get("piper", {}).get("job_walltime", {}).get("dna_alignonly") or "4-00:00:00"
+    slurm_time = config.get("piper", {}).get("job_walltime", {}).get(workflow_name) or "4-00:00:00"
     slurm_out_log = os.path.join(perm_analysis_dir, "logs", "{}_sbatch.out".format(job_identifier))
     slurm_err_log = os.path.join(perm_analysis_dir, "logs", "{}_sbatch.err".format(job_identifier))
     sbatch_text = create_sbatch_header(slurm_project_id=slurm_project_id,
@@ -306,7 +314,113 @@ def sbatch_piper_seqrun(command_line, workflow_name, project, sample, libprep=No
     except AttributeError:
         raise RuntimeError('Could not submit sbatch job for workflow "{}": '
                            '{}'.format(job_identifier, p_err))
-    import ipdb; ipdb.set_trace()
+    return int(slurm_job_id)
+
+
+@with_ngi_config
+def sbatch_piper_sample(command_line, workflow_name, project, sample, libprep=None,
+                        config=None, config_file_path=None):
+    """sbatch a piper sample-level workflow.
+
+    :param str command_line: The command line to execute
+    :param str workflow_name: The name of the workflow to execute
+    :param NGIProject project: The NGIProject
+    :param NGISample sample: The NGISample
+    :param dict config: The parsed configuration file (optional)
+    :param str config_file_path: The path to the configuration file (optional)
+    """
+    job_identifier = "{}-{}-{}".format(project, sample, workflow_name)
+
+    # Paths to the various data directories
+    project_dirname = project.dirname
+    sample_dirname = sample.dirname
+
+    # DATA / sample-specific / permanent storage
+    perm_data_dir = os.path.join(project.base_path, "DATA", os.path.join(project_dirname, sample_dirname))
+    # DATA / top-level directory / permanent storage
+    perm_data_topdir = os.path.join(project.base_path, "DATA", project_dirname)
+    # DATA / sample-specific / scratch storage
+    scratch_data_dir = os.path.join("$SNIC_TMP/DATA", os.path.join(project_dirname, sample_dirname))
+    # ANALYSIS / top-level directory / permanent storage
+    perm_analysis_dir = os.path.join(project.base_path, "ANALYSIS", project_dirname)
+    # ANALYSIS / top-level directory / scratch storage
+    scratch_analysis_dir = os.path.join("$SNIC_TMP/ANALYSIS/", project_dirname)
+
+    # ANALYSIS / alignment data / permanent storage
+    perm_aln_dir = os.path.join(perm_analysis_dir, "01_raw_alignments")
+    # ANALYSIS / alignment data / scratch storage
+    scratch_aln_dir = os.path.join(scratch_analysis_dir, "01_raw_alignments")
+    # ANALYSIS / qc data / permanent storage
+    perm_qc_dir = os.path.join(perm_analysis_dir, "02_preliminary_alignment_qc")
+    # ANALYSIS / qc data / scratch storage
+    scratch_qc_dir = os.path.join(scratch_analysis_dir, "02_preliminary_alignment_qc")
+
+    # Slurm-specific data
+    try:
+        slurm_project_id = config["environment"]["project_id"]
+    except KeyError:
+        raise RuntimeError('No SLURM project id specified in configuration file '
+                           'for job "{}"'.format(job_identifier))
+    slurm_queue = config.get("slurm", {}).get("queue") or "node"
+    num_cores = config.get("slurm", {}).get("cores") or 16
+    slurm_time = config.get("piper", {}).get("job_walltime", {}).get("workflow_name") or "4-00:00:00"
+    slurm_out_log = os.path.join(perm_analysis_dir, "logs", "{}_sbatch.out".format(job_identifier))
+    slurm_err_log = os.path.join(perm_analysis_dir, "logs", "{}_sbatch.err".format(job_identifier))
+    sbatch_text = create_sbatch_header(slurm_project_id=slurm_project_id,
+                                       slurm_queue=slurm_queue,
+                                       num_cores=num_cores,
+                                       slurm_time=slurm_time,
+                                       job_name="piper_{}".format(job_identifier),
+                                       slurm_out_log=slurm_out_log,
+                                       slurm_err_log=slurm_err_log)
+    sbatch_text_list = sbatch_text.split("\n")
+    sbatch_extra_params = config.get("slurm", {}).get("extra_params", {})
+    for param, value in sbatch_extra_params.iteritems():
+        sbatch_text_list.append("#SBATCH {} {}".format(param, value))
+    # Pull these from the config file
+    for module_name in config.get("piper", {}).get("load_modules", []):
+        sbatch_text_list.append("module load {}".format(module_name))
+
+    # Get a list of relevant input files
+    # We could also just use the shell pattern in the rsync command itself but
+    # I think it's more informative to see them in the sbatch file
+    sample_file_pattern = "{sample_name}.*.{sample_name}.*".format(sample_name=sample.name)
+    aln_files_to_copy = glob.glob(os.path.join(perm_aln_dir, sample_file_pattern))
+    qc_files_to_copy = glob.glob(os.path.join(perm_qc_dir, sample_file_pattern))
+
+    # Copy alignment files
+    sbatch_text_list.append("mkdir -p {}".format(scratch_aln_dir))
+    sbatch_text_list.append("rsync -a {input_files} {output_directory}".format(input_files=" ".join(aln_files_to_copy),
+                                                                               output_directory=scratch_aln_dir))
+    # Copy qc files
+    sbatch_text_list.append("mkdir -p {}".format(scratch_qc_dir))
+    sbatch_text_list.append("rsync -a {input_files} {output_directory}".format(input_files=" ".join(qc_files_to_copy),
+                                                                               output_directory=scratch_qc_dir))
+
+    # Piper command line
+    sbatch_text_list.append(command_line)
+
+    # Copy them sheez back
+    sbatch_text_list.append("rsync -a {}/ {}/\n".format(scratch_analysis_dir, perm_analysis_dir))
+
+    sbatch_dir = os.path.join(perm_analysis_dir, "sbatch")
+    safe_makedir(sbatch_dir)
+    sbatch_outfile = os.path.join(sbatch_dir, "{}.sbatch".format(job_identifier))
+    if os.path.exists(sbatch_outfile):
+        rotate_file(sbatch_outfile)
+    with open(sbatch_outfile, 'w') as f:
+        f.write("\n".join(sbatch_text_list))
+    LOG.info("Queueing sbatch file {} for job {}".format(sbatch_outfile, job_identifier))
+    p_handle = execute_command_line("sbatch {}".format(sbatch_outfile),
+                                    stdout=subprocess.PIPE,
+                                    stderr=subprocess.PIPE)
+    p_out, p_err = p_handle.communicate()
+    try:
+        ## Parse the thing to get the slurm job id
+        slurm_job_id = re.match(r'Submitted batch job (\d+)', p_out).groups()[0]
+    except AttributeError:
+        raise RuntimeError('Could not submit sbatch job for workflow "{}": '
+                           '{}'.format(job_identifier, p_err))
     return int(slurm_job_id)
 
 
