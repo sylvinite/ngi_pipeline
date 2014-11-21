@@ -169,7 +169,6 @@ def update_charon_with_local_jobs_status():
                         if slurm_exit_code is not None: # "None" indicates job is still running
                             JOB_FAILED = True
                     else:
-                        # Some logic for tracking locally-launched jobs
                         if not psutil.pid_exists(process_id):
                             # Job did not write an exit code and is also not running
                             JOB_FAILED = True
