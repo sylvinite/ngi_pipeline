@@ -25,6 +25,7 @@ def update_charon_with_local_jobs_status():
     with get_db_session() as session:
         charon_session = CharonSession()
 
+        ## TODO Make this work with both SLURM job IDs and local PIDs (see sample-level analysis)
         # Sequencing Run Analyses
         for seqrun_entry in session.query(SeqrunAnalysis).all():
 
@@ -126,7 +127,9 @@ def update_charon_with_local_jobs_status():
             project_id = sample_entry.project_id
             project_base_path = sample_entry.project_base_path
             sample_id = sample_entry.sample_id
+            # Only one of these will have a value
             slurm_job_id = sample_entry.slurm_job_id
+            process_id = sample_entry.process_id
 
             piper_exit_code = get_exit_code(workflow_name=workflow,
                                             project_base_path=project_base_path,
@@ -157,11 +160,20 @@ def update_charon_with_local_jobs_status():
                     session.delete(sample_entry)
                 else:
                     # None -> Job still running OR exit code was never written (failure)
-                    try:
-                        slurm_exit_code = get_slurm_job_status(slurm_job_id)
-                    except ValueError as e:
-                        slurm_exit_code = 1
-                    if slurm_exit_code is not None: # None indicates job is still running
+                    JOB_FAILED = None
+                    if slurm_job_id:
+                        try:
+                            slurm_exit_code = get_slurm_job_status(slurm_job_id)
+                        except ValueError as e:
+                            slurm_exit_code = 1
+                        if slurm_exit_code is not None: # "None" indicates job is still running
+                            JOB_FAILED = True
+                    else:
+                        # Some logic for tracking locally-launched jobs
+                        if not psutil.pid_exists(pid):
+                            # Job did not write an exit code and is also not running
+                            JOB_FAILED = True
+                    if JOB_FAILED:
                         LOG.warn('No exit code found but job not running for '
                                  '{}: setting status to "FAILED" in Charon'.format(label))
                         charon_session.sample_update(projectid=project_id,
@@ -170,7 +182,7 @@ def update_charon_with_local_jobs_status():
                         # Job is only deleted if the Charon update succeeds
                         LOG.debug("Deleting local entry {}".format(sample_entry))
                         session.delete(sample_entry)
-                    else:
+                    else: # Job still running
                         charon_status = charon_session.sample_get(projectid=project_id,
                                                               sampleid=sample_id)['status']
                         if not charon_status == "RUNNING":

@@ -25,6 +25,7 @@ LOG = minimal_logger(__name__)
 ## TODO set so that if no projects are passed it just grabs all the ones from
 ##      Charon that are NEW or whatever
 def launch_analysis_for_seqruns(projects_to_analyze, restart_failed_jobs=False,
+                                exec_mode="sbatch",
                                 config=None, config_file_path=None):
     """Launch the appropriate seqrun-level analysis for each fastq file in the project.
 
@@ -34,14 +35,16 @@ def launch_analysis_for_seqruns(projects_to_analyze, restart_failed_jobs=False,
     :param str config_file_path: The path to the NGI configuration file; optional/has default.
     """
     launch_analysis(level="seqrun", projects_to_analyze=projects_to_analyze,
-                    restart_failed_jobs=restart_failed_jobs, config=config,
-                    config_file_path=config_file_path)
+                    restart_failed_jobs=restart_failed_jobs,
+                    exec_mode=exec_mode,
+                    config=config, config_file_path=config_file_path)
 
 
 ## TODO add a "restart_running_jobs" parameter as well
 ## TODO set so that if no projects are passed it just grabs all the ones from
 ##      Charon that are ready for analysis I guess?
 def launch_analysis_for_samples(projects_to_analyze, restart_failed_jobs=False,
+                                exec_mode="sbatch",
                                 config=None, config_file_path=None):
     """Launch the appropriate sample-level analysis for each sample in the project
     that has completed all prerequisite (e.g. seqrun-level) steps.
@@ -52,11 +55,13 @@ def launch_analysis_for_samples(projects_to_analyze, restart_failed_jobs=False,
     :param str config_file_path: The path to the NGI configuration file; optional/has default.
     """
     launch_analysis(level="sample", projects_to_analyze=projects_to_analyze,
-                    restart_failed_jobs=restart_failed_jobs, config=config,
-                    config_file_path=config_file_path)
+                    restart_failed_jobs=restart_failed_jobs, 
+                    exec_mode=exec_mode,
+                    config=config, config_file_path=config_file_path)
 
 @with_ngi_config
 def launch_analysis(level, projects_to_analyze, restart_failed_jobs=False,
+                    exec_mode="sbatch",
                     config=None, config_file_path=None):
     """Launch the appropriate seqrun (flowcell-level) analysis for each fastq
     file in the project.
@@ -174,13 +179,15 @@ def launch_analysis(level, projects_to_analyze, restart_failed_jobs=False,
                     analysis_module.analyze_seqrun(project=project,
                                                    sample=sample,
                                                    libprep=libprep,
-                                                   seqrun=seqrun)
+                                                   seqrun=seqrun,
+                                                   exec_mode=exec_mode)
                 else: # sample level
                     LOG.info('Attempting to launch sample analysis for '
                              'project "{}" / sample "{}" / workflow '
                              '"{}"'.format(project, sample, workflow))
                     analysis_module.analyze_sample(project=project,
-                                                   sample=sample)
+                                                   sample=sample,
+                                                   exec_mode=exec_mode)
 
             except Exception as e:
                 raise

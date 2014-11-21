@@ -44,23 +44,28 @@ def get_subtasks_for_level(level):
         raise NotImplementedError('The level "{}" has no associated subtasks.')
 
 
+## TODO Make this work for both local and sbatch execution (see sample-level analysis)
 @with_ngi_config
-def analyze_seqrun(project, sample, libprep, seqrun,
+def analyze_seqrun(project, sample, libprep, seqrun, exec_mode="sbatch",
                    config=None, config_file_path=None):
     """Analyze data at the sequencing run (individual fastq) level.
 
     :param NGIProject project: the project to analyze
     :param NGISample sample: the sample to analyzed
     :param NGILibraryPrep libprep: The library prep to analyzed
-    :seqrun NGISeqrun seqrun: The sequencing run to analyzed
+    :param NGISeqrun seqrun: The sequencing run to analyzed
+    :param str exec_mode: "sbatch" or "local"
     :param dict config: The parsed configuration file (optional)
     :param str config_file_path: The path to the configuration file (optional)
+
+    :raises ValueError: If exec_mode is an unsupported value
     """
+    if exec_mode.lower() not in ("sbatch", "local"):
+        raise ValueError(('"exec_mode" param must be one of "sbatch" or "local" ')
+                         ('value was "{}"'.format(exec_mode)))
     modules_to_load = config.get("piper", {}).get("load_modules")
     if modules_to_load: load_modules(modules_to_load)
     try:
-        ## FIXME This isn't ideal -- we're copying data to a separate node for each workflow subtask.
-        ##       These should most likely be combined into a single sbatch file and run sequentially?
         for workflow_subtask in get_subtasks_for_level(level="seqrun"):
             if not is_seqrun_analysis_running_local(workflow_subtask=workflow_subtask,
                                                     project_id=project.project_id,
@@ -114,14 +119,20 @@ def analyze_seqrun(project, sample, libprep, seqrun,
         LOG.error(error_msg)
 
 @with_ngi_config
-def analyze_sample(project, sample, config=None, config_file_path=None):
+def analyze_sample(project, sample, exec_mode="local", config=None, config_file_path=None):
     """Analyze data at the sample level.
 
     :param NGIProject project: the project to analyze
     :param NGISample sample: the sample to analyzed
+    :param str exec_mode: "sbatch" or "local"
     :param dict config: The parsed configuration file (optional)
     :param str config_file_path: The path to the configuration file (optional)
+
+    :raises ValueError: If exec_mode is an unsupported value
     """
+    if exec_mode.lower() not in ("sbatch", "local"):
+        raise ValueError(('"exec_mode" param must be one of "sbatch" or "local" ')
+                         ('value was "{}"'.format(exec_mode)))
     modules_to_load = ["java/sun_jdk1.7.0_25", "R/2.15.0"]
     load_modules(modules_to_load)
     charon_session = CharonSession()
@@ -152,18 +163,28 @@ def analyze_sample(project, sample, config=None, config_file_path=None):
                                                                 project_name=project.name,
                                                                 sample_id=sample.name)
 
+                    # These must be run in this order; build_setup_xml modifies the project object.
+                    # At some point remove this hidden behavior
                     setup_xml_cl = build_setup_xml(project, config, sample,
-                                                   local_scratch_mode=True)
+                                                   local_scratch_mode=(exec_mode == "sbatch"))
                     piper_cl = build_piper_cl(project, workflow_subtask, exit_code_path, config)
-                    slurm_job_id = sbatch_piper_sample([setup_xml_cl, piper_cl],
-                                                       workflow_subtask,
-                                                       project, sample)
+
+                    if exec_mode == "sbatch":
+                        slurm_job_id = sbatch_piper_sample([setup_xml_cl, piper_cl],
+                                                           workflow_subtask,
+                                                           project, sample)
+                        process_id = None
+                    else:
+                        launch_piper_job(setup_xml_cl)
+                        process_id = launch_piper_job(piper_cl)
+                        slurm_job_id = None
                     try:
                         record_process_sample(project=project,
                                               sample=sample,
                                               analysis_module_name="piper_ngi",
                                               analysis_dir=project.analysis_dir,
                                               slurm_job_id=slurm_job_id,
+                                              process_id=process_id,
                                               workflow_subtask=workflow_subtask)
                     except RuntimeError as e:
                         LOG.error('Could not record process for project/sample '
@@ -284,9 +305,10 @@ def sbatch_piper_seqrun(command_line_list, workflow_name, project, sample, libpr
         bash_conditional = \
         ('source activate {conda_environment}\n'
          'if [[ $(python {scripts_dir}/check_coverage_filesystem.py -p {perm_qc_dir} -s {sample_id} -c {req_coverage} && echo $?) ]]; then\n'
-         '   python {scripts_dir}/start_pipeline_from_project \\ \n'
+         '   python {scripts_dir}/start_pipeline_from_project.py \\ \n'
          '          --sample-only \\ \n'
          '          --sample {sample_id} \\ \n'
+         '          --execution-mode local \\ \n'
          '          {scratch_analysis_dir}\n'
          'fi'.format(conda_environment=conda_environment,
                      project_id=project.project_id,
