@@ -13,7 +13,7 @@ from ngi_pipeline.utils.parsers import get_slurm_job_status, \
                                        parse_qualimap_results, \
                                        STHLM_UUSNP_SEQRUN_RE, \
                                        STHLM_UUSNP_SAMPLE_RE
-
+from sqlalchemy.exc import OperationalError
 
 LOG = minimal_logger(__name__)
 
@@ -170,7 +170,7 @@ def update_charon_with_local_jobs_status():
                             JOB_FAILED = True
                     else:
                         # Some logic for tracking locally-launched jobs
-                        if not psutil.pid_exists(pid):
+                        if not psutil.pid_exists(process_id):
                             # Job did not write an exit code and is also not running
                             JOB_FAILED = True
                     if JOB_FAILED:
@@ -184,7 +184,7 @@ def update_charon_with_local_jobs_status():
                         session.delete(sample_entry)
                     else: # Job still running
                         charon_status = charon_session.sample_get(projectid=project_id,
-                                                              sampleid=sample_id)['status']
+                                                                  sampleid=sample_id)['status']
                         if not charon_status == "RUNNING":
                             LOG.warn('Tracking inconsistency for {}: Charon status is "{}" but '
                                      'local process tracking database indicates it is running. '
@@ -383,9 +383,9 @@ def update_seq_run_for_lane(seqrun_dict, lane_alignment_metrics):
 
 ## TODO This can be moved to a more generic local_process_tracking submodule
 def record_process_seqrun(project, sample, libprep, seqrun, workflow_subtask,
-                          analysis_module_name, analysis_dir, slurm_job_id):
-    LOG.info('Recording slurm job id "{}" for project "{}", sample "{}", libprep "{}", '
-             'seqrun "{}", workflow "{}"'.format(slurm_job_id, project, sample, libprep,
+                          analysis_module_name, analysis_dir, process_id=None, slurm_job_id=None):
+    LOG.info('Recording job id "{}" for project "{}", sample "{}", libprep "{}", '
+             'seqrun "{}", workflow "{}"'.format((slurm_job_id or process_id), project, sample, libprep,
                                                  seqrun, workflow_subtask))
     with get_db_session() as session:
         seqrun_db_obj = SeqrunAnalysis(project_id=project.project_id,
@@ -397,26 +397,27 @@ def record_process_seqrun(project, sample, libprep, seqrun, workflow_subtask,
                                        engine=analysis_module_name,
                                        workflow=workflow_subtask,
                                        analysis_dir=analysis_dir,
+                                       process_id=process_id,
                                        slurm_job_id=slurm_job_id)
         ## FIXME We must make sure that an entry for this doesn't already exist!
         session.add(seqrun_db_obj)
         for attempts in range(3):
             try:
                 session.commit()
-                LOG.info('Successfully recorded slurm job ID "{}" for project "{}", sample "{}", '
-                         'libprep "{}", seqrun "{}", workflow "{}"'.format(slurm_job_id,
+                LOG.info('Successfully recorded job ID "{}" for project "{}", sample "{}", '
+                         'libprep "{}", seqrun "{}", workflow "{}"'.format((slurm_job_id or process_id),
                                                                            project,
                                                                            sample,
                                                                            libprep,
                                                                            seqrun,
                                                                            workflow_subtask))
                 break
-            except sqlalchemy.exc.OperationalError:
-                LOG.warn("Database is locked. Waiting...")
+            except OperationalError as e:
+                LOG.warn('Database is locked ("{}"). Waiting...'.format(e))
                 time.sleep(15)
         else:
             raise RuntimeError('Could not record slurm job id "{}" for project "{}", sample "{}", '
-                               'libprep "{}", seqrun "{}", workflow "{}"'.format(slurm_job_id,
+                               'libprep "{}", seqrun "{}", workflow "{}"'.format((slurm_job_id or process_id),
                                                                                  project,
                                                                                  sample,
                                                                                  libprep,
@@ -438,7 +439,7 @@ def record_process_seqrun(project, sample, libprep, seqrun, workflow_subtask,
 ## TODO This can be moved to a more generic local_process_tracking submodule
 # FIXME change to use strings maybe
 def record_process_sample(project, sample, workflow_subtask, analysis_module_name,
-                          analysis_dir, slurm_job_id, config=None):
+                          analysis_dir, process_id=None, slurm_job_id=None, config=None):
     LOG.info('Recording slurm job id "{}" for project "{}", sample "{}", '
              'workflow "{}"'.format(slurm_job_id, project, sample, workflow_subtask))
     with get_db_session() as session:
@@ -449,6 +450,7 @@ def record_process_sample(project, sample, workflow_subtask, analysis_module_nam
                                        engine=analysis_module_name,
                                        workflow=workflow_subtask,
                                        analysis_dir=analysis_dir,
+                                       process_id=process_id,
                                        slurm_job_id=slurm_job_id)
         ## FIXME We must make sure that an entry for this doesn't already exist!
         session.add(seqrun_db_obj)
@@ -458,8 +460,8 @@ def record_process_sample(project, sample, workflow_subtask, analysis_module_nam
                 LOG.info('Successfully recorded slurm job id "{}" for project "{}", sample "{}", '
                          'workflow "{}"'.format(slurm_job_id, project, sample, workflow_subtask))
                 break
-            except sqlalchemy.exc.OperationalError:
-                LOG.warn("Database locked. Waiting...")
+            except OperationalError as e:
+                LOG.warn('Database locked ("{}"). Waiting...'.format(e))
                 time.sleep(15)
         else:
             raise RuntimeError('Could not record slurm job id "{}" for project "{}", sample "{}", '
@@ -467,7 +469,7 @@ def record_process_sample(project, sample, workflow_subtask, analysis_module_nam
     try:
         LOG.info(('Updating Charon status for project/sample '
                   '{}/{} to "RUNNING"').format(project, sample))
-        CharonSession().seqrun_update(projectid=project.project_id,
+        CharonSession().sample_update(projectid=project.project_id,
                                       sampleid=sample.name,
                                       status="RUNNING")
     except CharonError as e:
