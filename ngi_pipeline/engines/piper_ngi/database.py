@@ -72,8 +72,8 @@ class SeqrunAnalysis(Base):
     project_base_path = Column(String(100))
     sample_id = Column(String(50))
     libprep_id = Column(String(50))
-    seqrun_id = Column(String(100))
-    workflow = Column(String(50))
+    seqrun_id = Column(String(100), primary_key=True)
+    workflow = Column(String(50), primary_key=True)
     engine = Column(String(50))
     analysis_dir = Column(String(100))
     # Only one of these is ever used
@@ -98,8 +98,8 @@ class SampleAnalysis(Base):
     project_id = Column(String(50))
     project_name = Column(String(50))
     project_base_path = Column(String(100))
-    sample_id = Column(String(50))
-    workflow = Column(String(50))
+    sample_id = Column(String(50), primary_key=True)
+    workflow = Column(String(50), primary_key=True)
     engine = Column(String(50))
     analysis_dir = Column(String(100))
     # Only one of these is ever used
