@@ -102,6 +102,7 @@ def analyze_seqrun(project, sample, libprep, seqrun, exec_mode="sbatch",
                                           seqrun=seqrun,
                                           analysis_module_name="piper_ngi",
                                           analysis_dir=project.analysis_dir,
+                                          process_id=None,
                                           slurm_job_id=slurm_job_id,
                                           workflow_subtask=workflow_subtask)
                 except RuntimeError as e:
@@ -175,8 +176,9 @@ def analyze_sample(project, sample, exec_mode="local", config=None, config_file_
                                                            project, sample)
                         process_id = None
                     else:
-                        launch_piper_job(setup_xml_cl)
-                        process_id = launch_piper_job(piper_cl)
+                        launch_piper_job(setup_xml_cl, project)
+                        process_handle = launch_piper_job(piper_cl, project)
+                        process_id = process_handle.pid
                         slurm_job_id = None
                     try:
                         record_process_sample(project=project,
@@ -248,6 +250,7 @@ def sbatch_piper_seqrun(command_line_list, workflow_name, project, sample, libpr
     slurm_queue = config.get("slurm", {}).get("queue") or "node"
     num_cores = config.get("slurm", {}).get("cores") or 16
     slurm_time = config.get("piper", {}).get("job_walltime", {}).get(workflow_name) or "4-00:00:00"
+    safe_makedir(os.path.join(perm_analysis_dir, "logs"))
     slurm_out_log = os.path.join(perm_analysis_dir, "logs", "{}_sbatch.out".format(job_identifier))
     slurm_err_log = os.path.join(perm_analysis_dir, "logs", "{}_sbatch.err".format(job_identifier))
     sbatch_text = create_sbatch_header(slurm_project_id=slurm_project_id,
@@ -575,7 +578,7 @@ def build_setup_xml(project, config, sample=None, libprep_id=None, seqrun_id=Non
         project_top_level_dir = os.path.join(project.base_path, "DATA", project.dirname)
         analysis_dir = os.path.join(project.base_path, "ANALYSIS", project.dirname)
         safe_makedir(analysis_dir, 0770)
-    safe_makedir(os.path.join(analysis_dir, "logs"))
+        safe_makedir(os.path.join(analysis_dir, "logs"))
     cl_args = {'project': project.name}
     cl_args["sequencing_center"] = "NGI"
 
