@@ -34,12 +34,6 @@ class CharonSession(requests.Session):
         self._api_token_dict = {'X-Charon-API-token': self._api_token}
         self._base_url = base_url or CHARON_BASE_URL
 
-    #def get(url_args, *args, **kwargs):
-    #    url = self.construct_charon_url(url_args)
-    #    return validate_response(super(CharonSession, self).get(url,
-    #                                   headers=self._api_token_dict,
-    #                                   *args, **kwargs))
-
         self.get = validate_response(functools.partial(self.get,
                     headers=self._api_token_dict, timeout=3))
         self.post = validate_response(functools.partial(self.post,
@@ -49,37 +43,23 @@ class CharonSession(requests.Session):
         self.delete = validate_response(functools.partial(self.delete,
                     headers=self._api_token_dict, timeout=3))
 
-        self._project_params = ("projectid", "name", "status", "pipeline", "bpa")
-        self._sample_params = ("sampleid", "status", "received", "qc_status",
-                               "genotyping_status", "genotyping_concordance",
-                               "lims_initial_qc", "total_autosomal_coverage")
-        self._libprep_params = ("libprepid", "limsid", "status")
-        self._seqrun_params = ('seqrunid', 'sequencing_status', 'alignment_status',
-                               'runid', 'seq_qc_flag', 'demux_qc_flag',
-                               'mean_coverage', 'std_coverage', 'GC_percentage',
-                               'aligned_bases', 'mapped_bases', 'mapped_reads',
-                               'total_reads', 'sequenced_bases', 'windows', 'bam_file',
-                               'output_file', 'mean_mapping_quality', 'bases_number',
-                               'contigs_number', 'mean_autosomal_coverage', 'lanes',
-                               'alignment_coverage', 'reads_per_lane')
-        self._seqrun_reset_params = tuple(set(self._seqrun_params) - \
-                                          set(['demux_qc_flag', 'lanes', 'windows', 'seq_qc_flag',
-                                               'alignment_coverage', 'alignment_status',
-                                               'sequencing_status', 'total_reads', 'runid', 'seqrunid']))
+        self._project_params = ("projectid", "name", "status", "bpa", "sequencing_facility")
+        self._sample_params = ("sampleid", "analysis_status", "qc_status", "genotyping_status",
+                               "total_autosomal_coverage", "total_sequenced_reads")
+        self._libprep_params = ("libprepid", "qc_analysis")
+        self._seqrun_params = ('seqrunid', 'lane_sequencing_status', 'alignment_status',
+                               'runid', "total_reads", "mean_autosomal_coverage")
+        self._seqrun_reset_params = tuple(set(self._seqrun_params - \
+                                          set(['lane_sequencing_status', 'total_reads'])))
 
-
-    ## Another option is to build this into the get/post/put/delete requests
-    ## --> Do we ever need to call this (or those) separately?
     @memoized
     def construct_charon_url(self, *args):
         """Build a Charon URL, appending any *args passed."""
         return "{}/api/v1/{}".format(self._base_url,'/'.join([str(a) for a in args]))
 
 
-    ## FIXME There's a lot of repeat code here that might could be condensed
-
     # Project
-    def project_create(self, projectid, name=None, status=None, pipeline=None, bpa=None):
+    def project_create(self, projectid, name=None, status=None, bpa=None, sequencing_facility=None):
         l_dict = locals()
         data = { k: l_dict.get(k) for k in self._project_params }
         return self.post(self.construct_charon_url('project'),
@@ -92,7 +72,7 @@ class CharonSession(requests.Session):
     def project_get_samples(self, projectid):
         return self.get(self.construct_charon_url('samples', projectid)).json()
     
-    def project_update(self, projectid, name=None, status=None, pipeline=None, bpa=None):
+    def project_update(self, projectid, name=None, status=None, bpa=None, sequencing_facility=None):
         l_dict = locals()
         data = { k: l_dict.get(k) for k in self._project_params if l_dict.get(k)}
         return self.put(self.construct_charon_url('project', projectid),
@@ -105,10 +85,10 @@ class CharonSession(requests.Session):
         return self.delete(self.construct_charon_url('project', projectid)).text
 
     # Sample
-    def sample_create(self, projectid, sampleid, status=None, received=None,
+    def sample_create(self, projectid, sampleid, analysis_status=None,
                       qc_status=None, genotyping_status=None,
-                      genotyping_concordance=None, lims_initial_qc=None,
-                      total_autosomal_coverage=None):
+                      total_autosomal_coverage=None,
+                      total_sequenced_reads=None):
         url = self.construct_charon_url("sample", projectid)
         l_dict = locals()
         data = { k: l_dict.get(k) for k in self._sample_params }
@@ -121,25 +101,20 @@ class CharonSession(requests.Session):
     def sample_get_libpreps(self, projectid, sampleid):
         return self.get(self.construct_charon_url('libpreps', projectid, sampleid)).json()
 
-    def sample_update(self, projectid, sampleid, status=None, received=None,
+    def sample_update(self, projectid, sampleid, analysis_status=None,
                       qc_status=None, genotyping_status=None,
-                      genotyping_concordance=None, lims_initial_qc=None,
-                      total_autosomal_coverage=None):
+                      total_autosomal_coverage=None,
+                      total_sequenced_reads=None):
         url = self.construct_charon_url("sample", projectid, sampleid)
         l_dict = locals()
         data = { k: l_dict.get(k) for k in self._sample_params if l_dict.get(k)}
         return self.put(url, json.dumps(data)).text
 
-    ## Eliminate?
-    def samples_get_all(self, projectid):
-        return self.project_get_samples(projectid)
-        #return self.get(self.construct_charon_url('samples', projectid)).json()
-
     def sample_delete(self, projectid, sampleid):
         return self.delete(self.construct_charon_url("sample", projectid, sampleid))
 
     # LibPrep
-    def libprep_create(self, projectid, sampleid, libprepid, status=None, limsid=None):
+    def libprep_create(self, projectid, sampleid, libprepid, qc_analysis=None):
         url = self.construct_charon_url("libprep", projectid, sampleid)
         l_dict = locals()
         data = { k: l_dict.get(k) for k in self._libprep_params }
@@ -153,32 +128,19 @@ class CharonSession(requests.Session):
         return self.get(self.construct_charon_url('seqruns', projectid, sampleid, libprepid)).json()
 
 
-    def libprep_update(self, projectid, sampleid, libprepid, status=None, limsid=None):
+    def libprep_update(self, projectid, sampleid, libprepid, qc_analysis=None):
         url = self.construct_charon_url("libprep", projectid, sampleid, libprepid)
         l_dict = locals()
         data = { k: l_dict.get(k) for k in self._libprep_params if l_dict.get(k)}
         return self.put(url, json.dumps(data)).text
-
-    ## Eliminate?
-    def libpreps_get_all(self, projectid, sampleid):
-        return self.sample_get_libpreps(projectid, sampleid)
-        #return self.get(self.construct_charon_url('libpreps', projectid, sampleid)).json()
 
     def libprep_delete(self, projectid, sampleid, libprepid):
         return self.delete(self.construct_charon_url("libprep", projectid, sampleid, libprepid))
 
     # SeqRun
     def seqrun_create(self, projectid, sampleid, libprepid, seqrunid,
-                      total_reads, mean_autosomal_coverage, reads_per_lane=None,
-                      sequencing_status=None, alignment_status=None, runid=None,
-                      seq_qc_flag=None, demux_qc_flag=None, mean_coverage=None,
-                      std_coverage=None, GC_percentage=None, aligned_bases=None,
-                      mapped_bases=None, mapped_reads=None,
-                      sequenced_bases=None, windows=None, bam_file=None,
-                      output_file=None, mean_mapping_quality=None,
-                      bases_number=None, contigs_number=None,
-                      lanes=None,
-                      alignment_coverage=None):
+                      lane_sequencing_status=None, alignment_status=None,
+                      runid=None, total_reads=None, mean_autosomal_coverage=None):
         url = self.construct_charon_url("seqrun", projectid, sampleid, libprepid)
         l_dict = locals()
         data = { k: l_dict.get(k) for k in self._seqrun_params }
@@ -188,18 +150,10 @@ class CharonSession(requests.Session):
         url = self.construct_charon_url("seqrun", projectid, sampleid, libprepid, seqrunid)
         return self.get(url).json()
 
-    def seqrun_update(self, projectid, sampleid, libprepid, seqrunid,
-                      total_reads=None, mean_autosomal_coverage=None, reads_per_lane=None,
-                      sequencing_status=None, alignment_status=None, runid=None,
-                      seq_qc_flag=None, demux_qc_flag=None, mean_coverage=None,
-                      std_coverage=None, GC_percentage=None, aligned_bases=None,
-                      mapped_bases=None, mapped_reads=None,
-                      sequenced_bases=None, windows=None, bam_file=None,
-                      output_file=None, mean_mapping_quality=None,
-                      bases_number=None, contigs_number=None,
-                      lanes=None, alignment_coverage=None,
+    def seqrun_create(self, projectid, sampleid, libprepid, seqrunid,
+                      lane_sequencing_status=None, alignment_status=None,
+                      runid=None, total_reads=None, mean_autosomal_coverage=None,
                       *args, **kwargs):
-        ## TODO Consider implementing for allathese functions
         if args: LOG.debug("Ignoring extra args: {}".format(", ".join(*args)))
         if kwargs: LOG.debug("Ignoring extra kwargs: {}".format(", ".join(["{}: {}".format(k,v) for k,v in kwargs.iteritems()])))
         url = self.construct_charon_url("seqrun", projectid, sampleid, libprepid, seqrunid)
@@ -211,10 +165,6 @@ class CharonSession(requests.Session):
         url = self.construct_charon_url("seqrun", projectid, sampleid, libprepid, seqrunid)
         data = { k: None for k in self._seqrun_reset_params}
         return self.put(url, json.dumps(data)).text
-
-    def seqruns_get_all(self, projectid, sampleid, libprepid):
-        return self.libprep_get_seqruns(projectid, sampleid, libprepid)
-        #return self.get(self.construct_charon_url('seqruns', projectid, sampleid, libprepid)).json()
 
     def seqrun_delete(self, projectid, sampleid, libprepid, seqrunid):
         return self.delete(self.construct_charon_url("seqrun", projectid, sampleid, libprepid, seqrunid))
