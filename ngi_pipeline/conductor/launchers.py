@@ -74,28 +74,29 @@ def launch_analysis(level, projects_to_analyze, restart_failed_jobs=False,
     update_charon_with_local_jobs_status()
     charon_session = CharonSession()
     for project in projects_to_analyze:
-        # Get information from Charon regarding which workflows to run
+        # Get information from Charon regarding which best practice analyses to run
         try:
             # E.g. "NGI" for NGI DNA Samples
-            workflow = charon_session.project_get(project.project_id)["pipeline"]
+            best_practice_analysis = charon_session.project_get(project.project_id)["best_practice_analysis"]
         except (KeyError, CharonError) as e:
-            # Workflow missing from Charon?
+            # BPA missing from Charon?
             LOG.error('Skipping project "{}" because of error: {}'.format(project, e))
             continue
         try:
-            analysis_engine_module_name = config["analysis"]["workflows"][workflow]["analysis_engine"]
+            analysis_engine_module_name = config["analysis"]["best_practice_analysis"][best_practice_analysis]["analysis_engine"]
         except KeyError:
-            error_msg = ("No analysis engine for workflow \"{}\" specified "
-                         "in configuration file. Skipping this workflow "
-                         "for project {}".format(workflow, project))
+            error_msg = ('No analysis engine for best practice analysis "{}" '
+                         'specified in configuration file. Skipping this BPA '
+                         'for project {}'.format(best_practice_analysis, project))
             LOG.error(error_msg)
             raise RuntimeError(error_msg)
         # Import the adapter module specified in the config file (e.g. piper_ngi)
         try:
             analysis_module = importlib.import_module(analysis_engine_module_name)
         except ImportError as e:
-            error_msg = ('Skipping project "{}" workflow "{}": couldn\'t import '
-                         'module "{}": {}'.format(project, workflow, analysis_engine_module_name, e))
+            error_msg = ('Skipping project "{}" best practice analysis"{}": couldn\'t import '
+                         'module "{}": {}'.format(project, best_practice_analysis,
+                                                  analysis_engine_module_name, e))
             LOG.error(error_msg)
             # Next project
             continue
@@ -120,6 +121,10 @@ def launch_analysis(level, projects_to_analyze, restart_failed_jobs=False,
             libprep = obj_dict.get("libprep")
             seqrun = obj_dict.get("seqrun")
 
+            label = "{}/{}".format(project, sample)
+            if libprep and seqrun:
+                label += "/{}/{}".format(libprep, seqrun)
+
             try:
                 if level == "seqrun":
                     charon_reported_status = charon_session.seqrun_get(project.project_id,
@@ -127,22 +132,21 @@ def launch_analysis(level, projects_to_analyze, restart_failed_jobs=False,
                                                                        seqrun)['alignment_status']
                 else: # sample-level
                     charon_reported_status = charon_session.sample_get(project.project_id,
-                                                                       sample)['status']
+                                                                       sample)['analysis_status']
             except (CharonError, KeyError) as e:
                 LOG.warn('Unable to get required information from Charon for '
-                          'sample "{}" / project "{}" -- forcing it to new: {}'.format(sample, project, e))
+                          '{} -- forcing it to new: {}'.format(label, e))
                 if level == "seqrun":
-                    charon_session.seqrun_update(project.project_id, sample.name, libprep.name, seqrun.name, alignment_status="NEW")
-                    charon_reported_status = charon_session.seqrun_get(project.project_id,
-                                                                       sample, libprep,
-                                                                       seqrun)['alignment_status']
+                    charon_reported_status = "NOT_RUNNING"
+                    charon_session.seqrun_update(project.project_id, sample.name, libprep.name,
+                                                 seqrun.name, alignment_status=charon_reported_status)
                 else:
-                    charon_session.sample_update(project.project_id, sample.name, status="NEW")
-                    charon_reported_status = charon_session.sample_get(project.project_id,
-                                                                       sample)['status']
+                    charon_reported_status = "TO_ANALYZE"
+                    charon_session.sample_update(project.project_id, sample.name,
+                                                 analysis_status=charon_reported_status)
 
             # Check Charon to ensure this hasn't already been processed
-            if charon_reported_status in ("RUNNING", "DONE"):
+            if charon_reported_status in ("RUNNING", "UNDER_ANALYSIS", "DONE"):
                 if level == "seqrun":
                     LOG.info('Charon reports seqrun analysis for project "{}" / sample "{}" '
                              '/ libprep "{}" / seqrun "{}" does not need processing '
@@ -164,18 +168,16 @@ def launch_analysis(level, projects_to_analyze, restart_failed_jobs=False,
                                   'investigation needed!'.format(project, sample, libprep, seqrun))
                     continue
             try:
-                # The engines themselves know which sub-workflows
+                # The engines themselves know which bpa substeps
                 # they need to execute for a given level. For example,
                 # with DNA Variant Calling on the sequencing run
                 # level, we need to execute basic alignment and QC.
                 if level == "seqrun":
                     LOG.info('Attempting to launch seqrun analysis for '
                              'project "{}" / sample "{}" / libprep "{}" '
-                             '/ seqrun "{}", workflow "{}"'.format(project,
-                                                                   sample,
-                                                                   libprep,
-                                                                   seqrun,
-                                                                   workflow))
+                             '/ seqrun "{}", best practice analysis '
+                             '"{}"'.format(project, sample, libprep, seqrun,
+                                           best_practice_analysis))
                     analysis_module.analyze_seqrun(project=project,
                                                    sample=sample,
                                                    libprep=libprep,
@@ -183,8 +185,8 @@ def launch_analysis(level, projects_to_analyze, restart_failed_jobs=False,
                                                    exec_mode=exec_mode)
                 else: # sample level
                     LOG.info('Attempting to launch sample analysis for '
-                             'project "{}" / sample "{}" / workflow '
-                             '"{}"'.format(project, sample, workflow))
+                             'project "{}" / sample "{}" / best practice analysis '
+                             '"{}"'.format(project, sample, best_practice_analysis))
                     analysis_module.analyze_sample(project=project,
                                                    sample=sample,
                                                    exec_mode=exec_mode)
@@ -192,8 +194,8 @@ def launch_analysis(level, projects_to_analyze, restart_failed_jobs=False,
             except Exception as e:
                 raise
                 LOG.error('Cannot process project "{}" / sample "{}" / '
-                          'libprep "{}" / seqrun "{}" / workflow '
-                          '"{}" : {}'.format(project, sample, libprep,
-                                             seqrun, workflow, e))
+                          'libprep "{}" / seqrun "{}" / best practice analysis '
+                          '"{}" : {}'.format(project, sample, libprep, seqrun,
+                                             best_practice_analysis, e))
                 set_new_seqrun_status = "FAILED"
                 continue
