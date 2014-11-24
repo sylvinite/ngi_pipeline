@@ -88,7 +88,7 @@ def process_demultiplexed_flowcells(demux_fcid_dirs, restrict_to_projects=None,
                                     fcid_dirs = ",".join(demux_fcid_dirs_set),
                                     restrict_to_projects = ",".join(restrict_to_projects))
         else:
-            error_message = ("No projects found to process in flowcells {}"
+            error_message = ("No projects found to process in flowcells {} "
                              "or there was an error gathering required "
                              "information.".format(",".join(demux_fcid_dirs_set)))
         LOG.info(error_message)
