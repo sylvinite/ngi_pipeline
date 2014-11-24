@@ -64,14 +64,14 @@ def processing_status(run):
         return 'IN_PROGRESS'
 
 
-def is_transfered(run, config):
+def is_transfered(run, transfer_file):
     """ Checks wether a run has been transferred to the analysis server or not
 
     :param str run: Run directory
-    :param dict config: Parsed configuration
+    :param str transfer_file: Path to file with information about transfered runs
     """
     try:
-        with open(config['transfer_file'], 'r') as f:
+        with open(transfer_file, 'r') as f:
             t_f = csv.reader(f, delimiter='\t')
             for row in t_f:
                 #Rows have two columns: run and transfer date
@@ -126,7 +126,7 @@ if __name__=="__main__":
             elif status == 'COMPLETED':
                 LOG.info(("Processing of run {} if finished, check if run has been "
                     "transfered and transfer it otherwise".format(run_name)))
-                transferred = is_transfered(run_name, config)
+                transferred = is_transfered(run_name, config['transfer_file'])
                 if not transferred:
                     LOG.info("Run {} hasn't been transfered yet.".format(run_name))
                     LOG.info('Transferring run {} to {} into {}'.format(run_name,

@@ -4,6 +4,8 @@ import os
 import shutil
 import unittest
 
+from datetime import datetime
+
 from run_tracker import *
 
 class TestTracker(unittest.TestCase):
@@ -30,19 +32,28 @@ class TestTracker(unittest.TestCase):
         self.running = os.path.join(self.tmp_dir, '141124_RUNNING_FCIDXX')
         self.to_start = os.path.join(self.tmp_dir, '141124_TOSTART_FCIDXX')
         self.in_progress = os.path.join(self.tmp_dir, '141124_IN_PROGRESS_FCIDXX')
-        self.finished = os.path.join(self.tmp_dir, '141124_FINISHED_FCIDXX')
-        self.finished_runs = [self.to_start, self.in_progress, self.finished]
+        self.completed = os.path.join(self.tmp_dir, '141124_COMPLETED_FCIDXX')
+        self.finished_runs = [self.to_start, self.in_progress, self.completed]
+        self.transfer_file = os.path.join(self.tmp_dir, 'transfer.tsv')
+
         # Create runs directory structure
         os.makedirs(self.tmp_dir)
         os.makedirs(self.running)
         os.makedirs(self.to_start)
         os.makedirs(os.path.join(self.in_progress, 'Demultiplexing'))
-        os.makedirs(os.path.join(self.finished, 'Demultiplexing', 'Stats'))
+        os.makedirs(os.path.join(self.completed, 'Demultiplexing', 'Stats'))
+
         # Create files indicating that the run is finished
         for run in self.finished_runs:
             open(os.path.join(run, 'RTAComplete.txt'), 'w').close()
+
         # Create files indicating that the preprocessing is done
-        open(os.path.join(self.finished, 'Demultiplexing', 'Stats', 'DemultiplexingStats.xml'), 'w').close()
+        open(os.path.join(self.completed, 'Demultiplexing', 'Stats', 'DemultiplexingStats.xml'), 'w').close()
+
+        # Create transfer file and add the completed run
+        with open(self.transfer_file, 'w') as f:
+            tsv_writer = csv.writer(f, delimiter='\t')
+            tsv_writer.writerow([os.path.basename(self.completed), str(datetime.now())])
 
     @classmethod
     def tearDownClass(self):
@@ -53,3 +64,19 @@ class TestTracker(unittest.TestCase):
         """
         self.assertFalse(is_finished(self.running))
         self.assertTrue(all(map(is_finished, self.finished_runs)))
+
+    def test_2_processing_status(self):
+        """ Status of the processing depends on the generated files
+        """
+        self.assertEqual('TO_START', processing_status(self.running))
+        self.assertEqual('TO_START', processing_status(self.to_start))
+        self.assertEqual('IN_PROGRESS', processing_status(self.in_progress))
+        self.assertEqual('COMPLETED', processing_status(self.completed))
+
+    def test_3_is_transfered(self):
+        """ is_transfered should rely on the info in transfer.tsv
+        """
+        self.assertTrue(is_transfered(os.path.basename(self.completed), self.transfer_file))
+        self.assertFalse(is_transfered(os.path.basename(self.running), self.transfer_file))
+        self.assertFalse(is_transfered(os.path.basename(self.to_start), self.transfer_file))
+        self.assertFalse(is_transfered(os.path.basename(self.in_progress), self.transfer_file))
