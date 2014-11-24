@@ -199,7 +199,9 @@ def analyze_sample(project, sample, exec_mode="local", config=None, config_file_
                     LOG.error(error_msg)
     else:
         LOG.info('Sample "{}" in project "{}" is not yet ready for '
-                 'processing.'.format(sample, project))
+                 'processing (coverage {}X is less than required '
+                 '{}X).'.format(sample, project, sample_total_autosomal_coverage,
+                                required_total_autosomal_coverage))
 
 
 @with_ngi_config
