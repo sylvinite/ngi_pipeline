@@ -190,9 +190,9 @@ def update_charon_with_local_jobs_status():
                         session.delete(sample_entry)
                     else: # Job still running
                         charon_status = charon_session.sample_get(projectid=project_id,
-                                                                  sampleid=sample_id)['status']
-                        if not charon_status == "RUNNING":
-                            set_status="RUNNING"
+                                                                  sampleid=sample_id)['analysis_status']
+                        if not charon_status == "UNDER_ANALYSIS":
+                            set_status="UNDER_ANALYSIS"
                             LOG.warn('Tracking inconsistency for {}: Charon status is "{}" but '
                                      'local process tracking database indicates it is running. '
                                      'Setting value in Charon to {}.'.format(label, charon_status,
@@ -432,13 +432,14 @@ def record_process_seqrun(project, sample, libprep, seqrun, workflow_subtask,
                                                                                  seqrun,
                                                                                  workflow_subtask))
     try:
+        set_status = "RUNNING"
         LOG.info(('Updating Charon status for project/sample/libprep/seqrun '
-                  '{}/{}/{}/{} to "RUNNING"').format(project, sample, libprep, seqrun))
+                  '{}/{}/{}/{} to {}').format(project, sample, libprep, seqrun, set_status))
         CharonSession().seqrun_update(projectid=project.project_id,
                                       sampleid=sample.name,
                                       libprepid=libprep.name,
                                       seqrunid=seqrun.name,
-                                      alignment_status="RUNNING")
+                                      alignment_status=set_status)
     except CharonError as e:
         LOG.warn('Could not update Charon status for project/sample/libprep/seqrun '
                  '{}/{}/{}/{} due to error: {}'.format(project, sample, libprep, seqrun, e))
@@ -475,11 +476,12 @@ def record_process_sample(project, sample, workflow_subtask, analysis_module_nam
             raise RuntimeError('Could not record slurm job id "{}" for project "{}", sample "{}", '
                                'workflow "{}"'.format(slurm_job_id, project, sample, workflow_subtask))
     try:
+        set_status = "UNDER_ANALYSIS"
         LOG.info(('Updating Charon status for project/sample '
-                  '{}/{} to "RUNNING"').format(project, sample))
+                  '{}/{} to {}').format(project, sample, set_status))
         CharonSession().sample_update(projectid=project.project_id,
                                       sampleid=sample.name,
-                                      status="RUNNING")
+                                      analysis_status=set_status)
     except CharonError as e:
         LOG.warn('Could not update Charon status for project/sample '
                  '{}/{} due to error: {}'.format(project, sample, e))
