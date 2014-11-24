@@ -1,5 +1,6 @@
 #!/usr/bin/env python
 import argparse
+import csv
 import glob
 import os
 
@@ -69,16 +70,32 @@ def is_transfered(run, config):
     :param str run: Run directory
     :param dict config: Parsed configuration
     """
-    pass
+    try:
+        with open(config['transfer_file'], 'r') as f:
+            t_f = csv.reader(f, delimiter='\t')
+            for row in t_f:
+                #Rows have two columns: run and transfer date
+                if row[0] == run:
+                    return True
+            return False
+    except IOError:
+        return False
 
 
 def transfer_run(run, config):
-    """ Transfer a run to the analysis server
+    """ Transfer a run to the analysis server. Will add group R/W permissions to
+    the run directory in the destination server so that the run can be processed
+    by any user/account in that group (i.e a functional account...)
 
     :param str run: Run directory
     :param dict config: Parsed configuration
     """
-    pass
+    cl = ['rsync', '-a', '--chmod=g+rw']
+    r_user = config['remote']['user']
+    r_host = config['remote']['host']
+    r_dir = config['remote']['data_archive']
+    remote = "{}@{}:{}".format(r_user, r_host, r_dir)
+    cl.extend([remote, run])
 
 
 if __name__=="__main__":
@@ -109,9 +126,10 @@ if __name__=="__main__":
             elif status == 'COMPLETED':
                 LOG.info(("Processing of run {} if finished, check if run has been "
                     "transfered and transfer it otherwise".format(run_name)))
-                transferred = is_transfered(run, config)
+                transferred = is_transfered(run_name, config)
                 if not transferred:
-                    LOG.info('Transferring run {} to {} in {}'.format(run_name,
+                    LOG.info("Run {} hasn't been transfered yet.".format(run_name))
+                    LOG.info('Transferring run {} to {} into {}'.format(run_name,
                         config['remote']['host'],
                         config['remote']['data_archive']))
                     transfer_run(run, config)
