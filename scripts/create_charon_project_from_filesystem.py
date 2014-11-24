@@ -17,6 +17,7 @@ LOG = minimal_logger(__name__)
 def main(demux_fcid_dirs, restrict_to_projects=None, restrict_to_samples=None,
          workflow="NGI", already_parsed=False,
          force_update=False, delete_existing=False,
+         force_create_project=False,
          config=None, config_file_path=None):
     if force_update: force_update = validate_force_update()
     if delete_existing: delete_existing = validate_delete_existing()
@@ -26,7 +27,8 @@ def main(demux_fcid_dirs, restrict_to_projects=None, restrict_to_samples=None,
     projects_to_analyze = dict()
     if already_parsed: # Starting from Project/Sample/Libprep/Seqrun tree format
         for demux_fcid_dir in demux_fcid_dirs_set:
-            p = recreate_project_from_filesystem(demux_fcid_dir)
+            p = recreate_project_from_filesystem(demux_fcid_dir,
+                                                 force_create_project=force_create_project)
             projects_to_analyze[p.name] = p
     else: # Raw illumina flowcell
         for demux_fcid_dir in demux_fcid_dirs_set:
@@ -83,6 +85,7 @@ if __name__=="__main__":
     parser.add_argument("-w", "--workflow", default="NGI", help="The workflow to run for this project.")
     parser.add_argument("-f", "--force", dest="force_update", action="store_true", help="Force updating Charon projects. Danger danger danger. This will overwrite things.")
     parser.add_argument("-d", "--delete", dest="delete_existing", action="store_true", help="Delete existing projects in Charon. Similarly dangerous.")
+    parser.add_argument("-c", "--force-create-project", action="store_true", help="Create the project if it does not exist in Charon using the project name as the project id. Generally used only in testing.")
 
     args_dict = vars(parser.parse_args())
     main(**args_dict)
