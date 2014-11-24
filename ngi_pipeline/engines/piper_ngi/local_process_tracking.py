@@ -73,14 +73,15 @@ def update_charon_with_local_jobs_status():
                     # Job is only deleted if the Charon update succeeds
                     session.delete(seqrun_entry)
                 elif piper_exit_code == 1:
-                    # 1 -> Job failed (DATA_FAILURE / COMPUTATION_FAILURE ?)
+                    # 1 -> Job failed
+                    alignment_status = "FAILED"
                     LOG.info('Workflow "{}" for {} failed. Recording status '
-                             '"FAILED" in Charon.'.format(workflow, label))
+                             '{} in Charon.'.format(workflow, label, alignment_status))
                     charon_session.seqrun_update(projectid=project_id,
                                                  sampleid=sample_id,
                                                  libprepid=libprep_id,
                                                  seqrunid=seqrun_id,
-                                                 alignment_status="FAILED")
+                                                 alignment_status=alignment_status)
                     # Job is only deleted if the Charon update succeeds
                     LOG.debug("Deleting local entry {}".format(seqrun_entry))
                     session.delete(seqrun_entry)
@@ -91,13 +92,14 @@ def update_charon_with_local_jobs_status():
                     except ValueError as e:
                         slurm_exit_code = 1
                     if slurm_exit_code is not None: # None indicates job is still running
+                        alignment_status = "FAILED"
                         LOG.warn('No exit code found but job not running for '
-                                '{}: setting status to "FAILED" in Charon'.format(label))
+                                '{}: setting status to {} in Charon'.format(label, alignment_status))
                         charon_session.seqrun_update(projectid=project_id,
                                                      sampleid=sample_id,
                                                      libprepid=libprep_id,
                                                      seqrunid=seqrun_id,
-                                                     alignment_status="FAILED")
+                                                     alignment_status=alignment_status)
                         # Job is only deleted if the Charon update succeeds
                         LOG.debug("Deleting local entry {}".format(seqrun_entry))
                         session.delete(seqrun_entry)
@@ -107,14 +109,16 @@ def update_charon_with_local_jobs_status():
                                                                   libprepid=libprep_id,
                                                                   seqrunid=seqrun_id)['alignment_status']
                         if not charon_status == "RUNNING":
+                            alignment_status = "RUNNING"
                             LOG.warn('Tracking inconsistency for {}: Charon status is "{}" but '
                                      'local process tracking database indicates it is running. '
-                                     'Setting value in Charon to RUNNING.'.format(label, charon_status))
+                                     'Setting value in Charon to {}.'.format(label, charon_status,
+                                                                             alignment_status))
                             charon_session.seqrun_update(projectid=project_id,
                                                          sampleid=sample_id,
                                                          libprepid=libprep_id,
                                                          seqrunid=seqrun_id,
-                                                         alignment_status="RUNNING")
+                                                         alignment_status=alignment_status)
             except CharonError as e:
                 LOG.error('Unable to update Charon status for "{}": {}'.format(label, e))
 
@@ -141,21 +145,23 @@ def update_charon_with_local_jobs_status():
             try:
                 if piper_exit_code == 0:
                     # 0 -> Job finished successfully
-                    LOG.info('Workflow "{}" for {} finished succesfully. '
-                             'Recording status "DONE" in Charon'.format(workflow, label))
                     set_status = "DONE"
+                    LOG.info('Workflow "{}" for {} finished succesfully. '
+                             'Recording status {} in Charon'.format(workflow, label,
+                                                                    set_status))
                     charon_session.sample_update(projectid=project_id,
                                                  sampleid=sample_id,
-                                                 status=set_status)
+                                                 analysis_status=set_status)
                     # Job is only deleted if the Charon update succeeds
                     session.delete(sample_entry)
                 elif piper_exit_code == 1:
-                    # 1 -> Job failed (DATA_FAILURE / COMPUTATION_FAILURE ?)
+                    # 1 -> Job failed
+                    set_status = "FAILED"
                     LOG.info('Workflow "{}" for {} failed. Recording status '
-                             '"COMPUTATION_FAILED" in Charon.'.format(workflow, label))
+                             '{} in Charon.'.format(workflow, label, set_status))
                     charon_session.sample_update(projectid=project_id,
                                                  sampleid=sample_id,
-                                                 status="COMPUTATION_FAILED")
+                                                 analysis_status=set_status)
                     # Job is only deleted if the Charon update succeeds
                     session.delete(sample_entry)
                 else:
@@ -173,11 +179,12 @@ def update_charon_with_local_jobs_status():
                             # Job did not write an exit code and is also not running
                             JOB_FAILED = True
                     if JOB_FAILED:
+                        set_status = "FAILED"
                         LOG.warn('No exit code found but job not running for '
-                                 '{}: setting status to "FAILED" in Charon'.format(label))
+                                 '{}: setting status to {} in Charon'.format(label, set_status))
                         charon_session.sample_update(projectid=project_id,
                                                      sampleid=sample_id,
-                                                     alignment_status="COMPUTATION_FAILED")
+                                                     status=set_status)
                         # Job is only deleted if the Charon update succeeds
                         LOG.debug("Deleting local entry {}".format(sample_entry))
                         session.delete(sample_entry)
@@ -185,12 +192,14 @@ def update_charon_with_local_jobs_status():
                         charon_status = charon_session.sample_get(projectid=project_id,
                                                                   sampleid=sample_id)['status']
                         if not charon_status == "RUNNING":
+                            set_status="RUNNING"
                             LOG.warn('Tracking inconsistency for {}: Charon status is "{}" but '
                                      'local process tracking database indicates it is running. '
-                                     'Setting value in Charon to RUNNING.'.format(label, charon_status))
+                                     'Setting value in Charon to {}.'.format(label, charon_status,
+                                                                             set_status))
                             charon_session.sample_update(projectid=project_id,
                                                          sampleid=sample_id,
-                                                         status="RUNNING")
+                                                         status=set_status)
             except CharonError as e:
                 LOG.error('Unable to update Charon status for "{}": {}'.format(label, e))
         session.commit()
