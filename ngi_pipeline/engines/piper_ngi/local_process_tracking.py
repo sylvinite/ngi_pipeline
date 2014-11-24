@@ -90,6 +90,7 @@ def update_charon_with_local_jobs_status():
                     try:
                         slurm_exit_code = get_slurm_job_status(slurm_job_id)
                     except ValueError as e:
+                        LOG.debug(e)
                         slurm_exit_code = 1
                     if slurm_exit_code is not None: # None indicates job is still running
                         alignment_status = "FAILED"

@@ -5,6 +5,7 @@ import os
 import re
 import shlex
 import subprocess
+import time
 import xml.etree.cElementTree as ET
 import xml.parsers.expat
 
@@ -60,7 +61,13 @@ def get_slurm_job_status(slurm_job_id):
         # actual sbatch command for the bash interpreter? Unclear.
     except ValueError:
         raise TypeError("SLURM Job ID not an integer: {}".format(slurm_job_id))
+    LOG.debug('Checking slurm job status with cl "{}"...'.format(check_cl))
     job_status = subprocess.check_output(shlex.split(check_cl))
+    LOG.debug('job status is "{}"'.format(job_status))
+    # If this isn't here, this command sometimes fails to get an accurate response
+    # and returns "" even though the job is running. I don't know why this happens.
+    # Feel free to investigate.
+    time.sleep(1)
     if not job_status:
         raise ValueError("No such slurm job found: {}".format(slurm_job_id))
     else:
