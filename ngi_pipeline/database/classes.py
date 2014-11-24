@@ -152,7 +152,7 @@ class CharonSession(requests.Session):
         url = self.construct_charon_url("seqrun", projectid, sampleid, libprepid, seqrunid)
         return self.get(url).json()
 
-    def seqrun_create(self, projectid, sampleid, libprepid, seqrunid,
+    def seqrun_update(self, projectid, sampleid, libprepid, seqrunid,
                       lane_sequencing_status=None, alignment_status=None,
                       runid=None, total_reads=None, mean_autosomal_coverage=None,
                       *args, **kwargs):
