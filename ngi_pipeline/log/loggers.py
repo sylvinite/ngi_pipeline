@@ -57,7 +57,7 @@ def minimal_logger(namespace, to_file=True, debug=False,
     # File logger
     if to_file:
         config_file_dir = config.get("logging", {}).get("log_dir") or \
-                          os.environ.get("NGI_CONFIG") or os.getcwd()
+                          os.environ.get("NGI_LOG") or os.getcwd()
         log_path = os.path.join(config_file_dir, "ngi_pipeline.log")
         fh = logging.FileHandler(log_path)
         fh.setLevel(log_level)
