@@ -27,6 +27,6 @@ supported_genomes:
 
 analysis:
     best_practice_analysis:
-        NGI:
+        whole_genome_reseq:
             analysis_engine: ngi_pipeline.engines.piper_ngi
     top_dir: /proj/a2010002/nobackup/NGI/analysis_ready
