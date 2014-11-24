@@ -43,7 +43,8 @@ class CharonSession(requests.Session):
         self.delete = validate_response(functools.partial(self.delete,
                     headers=self._api_token_dict, timeout=3))
 
-        self._project_params = ("projectid", "name", "status", "bpa", "sequencing_facility")
+        self._project_params = ("projectid", "name", "status", "best_practice_analysis",
+                                "sequencing_facility")
         self._sample_params = ("sampleid", "analysis_status", "qc_status", "genotyping_status",
                                "total_autosomal_coverage", "total_sequenced_reads")
         self._libprep_params = ("libprepid", "qc_analysis")
@@ -59,7 +60,7 @@ class CharonSession(requests.Session):
 
 
     # Project
-    def project_create(self, projectid, name=None, status=None, bpa=None, sequencing_facility=None):
+    def project_create(self, projectid, name=None, status=None, best_practice_analysis=None, sequencing_facility=None):
         l_dict = locals()
         data = { k: l_dict.get(k) for k in self._project_params }
         return self.post(self.construct_charon_url('project'),
@@ -72,7 +73,7 @@ class CharonSession(requests.Session):
     def project_get_samples(self, projectid):
         return self.get(self.construct_charon_url('samples', projectid)).json()
     
-    def project_update(self, projectid, name=None, status=None, bpa=None, sequencing_facility=None):
+    def project_update(self, projectid, name=None, status=None, best_practice_analysis=None, sequencing_facility=None):
         l_dict = locals()
         data = { k: l_dict.get(k) for k in self._project_params if l_dict.get(k)}
         return self.put(self.construct_charon_url('project', projectid),
