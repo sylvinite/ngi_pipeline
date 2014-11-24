@@ -50,8 +50,8 @@ class CharonSession(requests.Session):
         self._libprep_params = ("libprepid", "qc_analysis")
         self._seqrun_params = ('seqrunid', 'lane_sequencing_status', 'alignment_status',
                                'runid', "total_reads", "mean_autosomal_coverage")
-        self._seqrun_reset_params = tuple(set(self._seqrun_params - \
-                                          set(['lane_sequencing_status', 'total_reads'])))
+        self._seqrun_reset_params = tuple(set(self._seqrun_params) - \
+                                          set(['lane_sequencing_status', 'total_reads']))
 
     @memoized
     def construct_charon_url(self, *args):
