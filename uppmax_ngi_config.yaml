@@ -26,7 +26,7 @@ supported_genomes:
     "GRCh37": /proj/a2014205/piper_references/gatk_bundle/2.8/b37/human_g1k_v37.fasta
 
 analysis:
-    workflows:
-        NGI:
+    best_practice_analysis:
+        whole_genome_reseq:
             analysis_engine: ngi_pipeline.engines.piper_ngi
     top_dir: /proj/a2014205/nobackup/NGI/analysis_ready

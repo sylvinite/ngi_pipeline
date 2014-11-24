@@ -64,19 +64,6 @@ def create_database_populate_schema(location):
     return engine
 
 
-### USAGE ###
-
-## would be like this
-# session = get_db_session()
-# seqrun_db = SeqrunAnalysis(project=project.name, sample=sample.name, ...)
-# session.add(seqrun_db)
-# session.commit()
-
-## later we can query
-# session = get_db_session()
-
-# seqrun_processes = session.query(SeqrunAnalysis).filter_by(project=project.name, ...)
-
 class SeqrunAnalysis(Base):
     __tablename__ = 'seqrunanalysis'
 
@@ -85,25 +72,22 @@ class SeqrunAnalysis(Base):
     project_base_path = Column(String(100))
     sample_id = Column(String(50))
     libprep_id = Column(String(50))
-    seqrun_id = Column(String(100))
-    ## TODO re-enable the lane part
-    # I suppose one day we might have 16 lanes
-    #lane_num = Column(Integer)
-    workflow = Column(String(50))
+    seqrun_id = Column(String(100), primary_key=True)
+    workflow = Column(String(50), primary_key=True)
     engine = Column(String(50))
     analysis_dir = Column(String(100))
-    #process_id = Column(Integer, primary_key=True, unique=True)
-    slurm_job_id = Column(Integer, primary_key=True, unique=True)
+    # Only one of these is ever used
+    process_id = Column(Integer)
+    slurm_job_id = Column(Integer)
 
     def __repr__(self):
-        # locals() as a dict for str.format: nice-looking and easy but seems a little sneaky. Discuss!
         return ("<FlowcellRunAnalysis({project_id}/{sample_id}/{libprep_id}/{seqrun_id}: "
-                "slurm job id {slurm_job_id}, engine {engine}, "
+                "job id {job_id}, engine {engine}, "
                 "workflow {workflow})>".format(project_id=self.project_id,
                                                sample_id=self.sample_id,
                                                libprep_id=self.libprep_id,
                                                seqrun_id=self.seqrun_id,
-                                               slurm_job_id=self.slurm_job_id,
+                                               job_id=(self.slurm_job_id or self.process_id),
                                                engine=self.engine,
                                                workflow=self.workflow))
 
@@ -115,15 +99,18 @@ class SampleAnalysis(Base):
     project_name = Column(String(50))
     project_base_path = Column(String(100))
     sample_id = Column(String(50), primary_key=True)
-    workflow = Column(String(50))
+    workflow = Column(String(50), primary_key=True)
     engine = Column(String(50))
     analysis_dir = Column(String(100))
-    process_id = Column(Integer, unique=True)
-    slurm_job_id = Column(Integer, primary_key=True, unique=True)
+    # Only one of these is ever used
+    process_id = Column(Integer)
+    slurm_job_id = Column(Integer)
 
     def __repr__(self):
-        return ("<SampleRunAnalysis({project_id}/{sample_id}: slurm job id "
-                "{slurm_job_id}, engine {engine})>".format(project_id=self.project_id,
+        return ("<SampleRunAnalysis({project_id}/{sample_id}: job id "
+                "{job_id}, engine {engine}, "
+                "workflow {workflow})>".format(project_id=self.project_id,
                                                            sample_id=self.sample_id,
-                                                           slurm_job_id=slurm_job_id,
-                                                           engine=self.engine))
+                                                           job_id=(self.slurm_job_id or self.process_id),
+                                                           engine=self.engine,
+                                                           workflow=self.workflow))

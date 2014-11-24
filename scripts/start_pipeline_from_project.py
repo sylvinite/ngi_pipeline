@@ -28,14 +28,21 @@ if __name__ == '__main__':
             help=("Only process at the sample level."))
     parser.add_argument("project_dir", nargs=1, action="store",
             help=("The path to the project to be processed."))
+    parser.add_argument("-m", "--execution-mode", choices=("local", "sbatch"),
+                        default="sbatch", dest="exec_mode",
+            help=("How to execute the jobs (via sbatch or locally)."))
 
     args_dict = vars(parser.parse_args())
 
-    project = recreate_project_from_filesystem(args_dict['project_dir'].pop(),
-                                               args_dict['restrict_to_samples'])
+    project = recreate_project_from_filesystem(project_dir=args_dict['project_dir'].pop(),
+                                               restrict_to_samples=args_dict['restrict_to_samples'])
     if project and os.path.split(project.base_path)[1] == "DATA":
         project.base_path = os.path.split(project.base_path)[0]
     if not args_dict['sample_only']:
-        launch_analysis_for_seqruns([project], args_dict["restart_failed_jobs"])
+        launch_analysis_for_seqruns([project],
+                                    restart_failed_jobs=args_dict["restart_failed_jobs"],
+                                    exec_mode=args_dict["exec_mode"])
     if not args_dict['seqrun_only']:
-        launch_analysis_for_samples([project], args_dict["restart_failed_jobs"])
+        launch_analysis_for_samples([project],
+                                    restart_failed_jobs=args_dict["restart_failed_jobs"],
+                                    exec_mode=args_dict["exec_mode"])

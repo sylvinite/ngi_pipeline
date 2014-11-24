@@ -88,7 +88,7 @@ def process_demultiplexed_flowcells(demux_fcid_dirs, restrict_to_projects=None,
                                     fcid_dirs = ",".join(demux_fcid_dirs_set),
                                     restrict_to_projects = ",".join(restrict_to_projects))
         else:
-            error_message = ("No projects found to process in flowcells {}"
+            error_message = ("No projects found to process in flowcells {} "
                              "or there was an error gathering required "
                              "information.".format(",".join(demux_fcid_dirs_set)))
         LOG.info(error_message)
@@ -328,13 +328,14 @@ def parse_casava_directory(fc_dir):
     unaligned_dir_pattern = os.path.join(fc_dir,"Unaligned*")
     # e.g. 131030_SN7001362_0103_BC2PUYACXX/Unaligned_16bp/Project_J__Bjorkegren_13_02/
     project_dir_pattern = os.path.join(unaligned_dir_pattern,"Project_*")
+    samplesheet_path = None
     for project_dir in glob.glob(project_dir_pattern):
         LOG.info("Parsing project directory \"{}\"...".format(project_dir.split(os.path.split(fc_dir)[0] + "/")[1]))
         project_samples = []
         try:
             samplesheet_path = os.path.abspath(glob.glob(os.path.join(project_dir, "../../SampleSheet.csv"))[0])
         except IndexError:
-            samplesheet_path = None
+            LOG.warn("Could not find samplesheet in directory {}".format(os.path.realpath(os.path.join(project_dir, "../.."))))
         sample_dir_pattern = os.path.join(project_dir,"Sample_*")
         # e.g. <Project_dir>/Sample_P680_356F_dual56/
         for sample_dir in glob.glob(sample_dir_pattern):

@@ -13,7 +13,7 @@ from ngi_pipeline.utils.parsers import get_slurm_job_status, \
                                        parse_qualimap_results, \
                                        STHLM_UUSNP_SEQRUN_RE, \
                                        STHLM_UUSNP_SAMPLE_RE
-
+from sqlalchemy.exc import OperationalError
 
 LOG = minimal_logger(__name__)
 
@@ -25,6 +25,7 @@ def update_charon_with_local_jobs_status():
     with get_db_session() as session:
         charon_session = CharonSession()
 
+        ## TODO Make this work with both SLURM job IDs and local PIDs (see sample-level analysis)
         # Sequencing Run Analyses
         for seqrun_entry in session.query(SeqrunAnalysis).all():
 
@@ -72,14 +73,15 @@ def update_charon_with_local_jobs_status():
                     # Job is only deleted if the Charon update succeeds
                     session.delete(seqrun_entry)
                 elif piper_exit_code == 1:
-                    # 1 -> Job failed (DATA_FAILURE / COMPUTATION_FAILURE ?)
+                    # 1 -> Job failed
+                    alignment_status = "FAILED"
                     LOG.info('Workflow "{}" for {} failed. Recording status '
-                             '"FAILED" in Charon.'.format(workflow, label))
+                             '{} in Charon.'.format(workflow, label, alignment_status))
                     charon_session.seqrun_update(projectid=project_id,
                                                  sampleid=sample_id,
                                                  libprepid=libprep_id,
                                                  seqrunid=seqrun_id,
-                                                 alignment_status="FAILED")
+                                                 alignment_status=alignment_status)
                     # Job is only deleted if the Charon update succeeds
                     LOG.debug("Deleting local entry {}".format(seqrun_entry))
                     session.delete(seqrun_entry)
@@ -88,15 +90,17 @@ def update_charon_with_local_jobs_status():
                     try:
                         slurm_exit_code = get_slurm_job_status(slurm_job_id)
                     except ValueError as e:
+                        LOG.debug(e)
                         slurm_exit_code = 1
                     if slurm_exit_code is not None: # None indicates job is still running
+                        alignment_status = "FAILED"
                         LOG.warn('No exit code found but job not running for '
-                                '{}: setting status to "FAILED" in Charon'.format(label))
+                                '{}: setting status to {} in Charon'.format(label, alignment_status))
                         charon_session.seqrun_update(projectid=project_id,
                                                      sampleid=sample_id,
                                                      libprepid=libprep_id,
                                                      seqrunid=seqrun_id,
-                                                     alignment_status="FAILED")
+                                                     alignment_status=alignment_status)
                         # Job is only deleted if the Charon update succeeds
                         LOG.debug("Deleting local entry {}".format(seqrun_entry))
                         session.delete(seqrun_entry)
@@ -106,14 +110,16 @@ def update_charon_with_local_jobs_status():
                                                                   libprepid=libprep_id,
                                                                   seqrunid=seqrun_id)['alignment_status']
                         if not charon_status == "RUNNING":
+                            alignment_status = "RUNNING"
                             LOG.warn('Tracking inconsistency for {}: Charon status is "{}" but '
                                      'local process tracking database indicates it is running. '
-                                     'Setting value in Charon to RUNNING.'.format(label, charon_status))
+                                     'Setting value in Charon to {}.'.format(label, charon_status,
+                                                                             alignment_status))
                             charon_session.seqrun_update(projectid=project_id,
                                                          sampleid=sample_id,
                                                          libprepid=libprep_id,
                                                          seqrunid=seqrun_id,
-                                                         alignment_status="RUNNING")
+                                                         alignment_status=alignment_status)
             except CharonError as e:
                 LOG.error('Unable to update Charon status for "{}": {}'.format(label, e))
 
@@ -126,7 +132,9 @@ def update_charon_with_local_jobs_status():
             project_id = sample_entry.project_id
             project_base_path = sample_entry.project_base_path
             sample_id = sample_entry.sample_id
+            # Only one of these will have a value
             slurm_job_id = sample_entry.slurm_job_id
+            process_id = sample_entry.process_id
 
             piper_exit_code = get_exit_code(workflow_name=workflow,
                                             project_base_path=project_base_path,
@@ -138,48 +146,61 @@ def update_charon_with_local_jobs_status():
             try:
                 if piper_exit_code == 0:
                     # 0 -> Job finished successfully
-                    LOG.info('Workflow "{}" for {} finished succesfully. '
-                             'Recording status "DONE" in Charon'.format(workflow, label))
                     set_status = "DONE"
+                    LOG.info('Workflow "{}" for {} finished succesfully. '
+                             'Recording status {} in Charon'.format(workflow, label,
+                                                                    set_status))
                     charon_session.sample_update(projectid=project_id,
                                                  sampleid=sample_id,
-                                                 status=set_status)
+                                                 analysis_status=set_status)
                     # Job is only deleted if the Charon update succeeds
                     session.delete(sample_entry)
                 elif piper_exit_code == 1:
-                    # 1 -> Job failed (DATA_FAILURE / COMPUTATION_FAILURE ?)
+                    # 1 -> Job failed
+                    set_status = "FAILED"
                     LOG.info('Workflow "{}" for {} failed. Recording status '
-                             '"COMPUTATION_FAILED" in Charon.'.format(workflow, label))
+                             '{} in Charon.'.format(workflow, label, set_status))
                     charon_session.sample_update(projectid=project_id,
                                                  sampleid=sample_id,
-                                                 status="COMPUTATION_FAILED")
+                                                 analysis_status=set_status)
                     # Job is only deleted if the Charon update succeeds
                     session.delete(sample_entry)
                 else:
                     # None -> Job still running OR exit code was never written (failure)
-                    try:
-                        slurm_exit_code = get_slurm_job_status(slurm_job_id)
-                    except ValueError as e:
-                        slurm_exit_code = 1
-                    if slurm_exit_code is not None: # None indicates job is still running
+                    JOB_FAILED = None
+                    if slurm_job_id:
+                        try:
+                            slurm_exit_code = get_slurm_job_status(slurm_job_id)
+                        except ValueError as e:
+                            slurm_exit_code = 1
+                        if slurm_exit_code is not None: # "None" indicates job is still running
+                            JOB_FAILED = True
+                    else:
+                        if not psutil.pid_exists(process_id):
+                            # Job did not write an exit code and is also not running
+                            JOB_FAILED = True
+                    if JOB_FAILED:
+                        set_status = "FAILED"
                         LOG.warn('No exit code found but job not running for '
-                                 '{}: setting status to "FAILED" in Charon'.format(label))
+                                 '{}: setting status to {} in Charon'.format(label, set_status))
                         charon_session.sample_update(projectid=project_id,
                                                      sampleid=sample_id,
-                                                     alignment_status="COMPUTATION_FAILED")
+                                                     analysis_status=set_status)
                         # Job is only deleted if the Charon update succeeds
                         LOG.debug("Deleting local entry {}".format(sample_entry))
                         session.delete(sample_entry)
-                    else:
+                    else: # Job still running
                         charon_status = charon_session.sample_get(projectid=project_id,
-                                                              sampleid=sample_id)['status']
-                        if not charon_status == "RUNNING":
+                                                                  sampleid=sample_id)['analysis_status']
+                        if not charon_status == "UNDER_ANALYSIS":
+                            set_status="UNDER_ANALYSIS"
                             LOG.warn('Tracking inconsistency for {}: Charon status is "{}" but '
                                      'local process tracking database indicates it is running. '
-                                     'Setting value in Charon to RUNNING.'.format(label, charon_status))
+                                     'Setting value in Charon to {}.'.format(label, charon_status,
+                                                                             set_status))
                             charon_session.sample_update(projectid=project_id,
                                                          sampleid=sample_id,
-                                                         status="RUNNING")
+                                                         analysis_status=set_status)
             except CharonError as e:
                 LOG.error('Unable to update Charon status for "{}": {}'.format(label, e))
         session.commit()
@@ -371,9 +392,9 @@ def update_seq_run_for_lane(seqrun_dict, lane_alignment_metrics):
 
 ## TODO This can be moved to a more generic local_process_tracking submodule
 def record_process_seqrun(project, sample, libprep, seqrun, workflow_subtask,
-                          analysis_module_name, analysis_dir, slurm_job_id):
-    LOG.info('Recording slurm job id "{}" for project "{}", sample "{}", libprep "{}", '
-             'seqrun "{}", workflow "{}"'.format(slurm_job_id, project, sample, libprep,
+                          analysis_module_name, analysis_dir, process_id=None, slurm_job_id=None):
+    LOG.info('Recording job id "{}" for project "{}", sample "{}", libprep "{}", '
+             'seqrun "{}", workflow "{}"'.format((slurm_job_id or process_id), project, sample, libprep,
                                                  seqrun, workflow_subtask))
     with get_db_session() as session:
         seqrun_db_obj = SeqrunAnalysis(project_id=project.project_id,
@@ -385,39 +406,41 @@ def record_process_seqrun(project, sample, libprep, seqrun, workflow_subtask,
                                        engine=analysis_module_name,
                                        workflow=workflow_subtask,
                                        analysis_dir=analysis_dir,
+                                       process_id=process_id,
                                        slurm_job_id=slurm_job_id)
         ## FIXME We must make sure that an entry for this doesn't already exist!
         session.add(seqrun_db_obj)
         for attempts in range(3):
             try:
                 session.commit()
-                LOG.info('Successfully recorded slurm job ID "{}" for project "{}", sample "{}", '
-                         'libprep "{}", seqrun "{}", workflow "{}"'.format(slurm_job_id,
+                LOG.info('Successfully recorded job ID "{}" for project "{}", sample "{}", '
+                         'libprep "{}", seqrun "{}", workflow "{}"'.format((slurm_job_id or process_id),
                                                                            project,
                                                                            sample,
                                                                            libprep,
                                                                            seqrun,
                                                                            workflow_subtask))
                 break
-            except sqlalchemy.exc.OperationalError:
-                LOG.warn("Database is locked. Waiting...")
+            except OperationalError as e:
+                LOG.warn('Database is locked ("{}"). Waiting...'.format(e))
                 time.sleep(15)
         else:
             raise RuntimeError('Could not record slurm job id "{}" for project "{}", sample "{}", '
-                               'libprep "{}", seqrun "{}", workflow "{}"'.format(slurm_job_id,
+                               'libprep "{}", seqrun "{}", workflow "{}"'.format((slurm_job_id or process_id),
                                                                                  project,
                                                                                  sample,
                                                                                  libprep,
                                                                                  seqrun,
                                                                                  workflow_subtask))
     try:
+        set_status = "RUNNING"
         LOG.info(('Updating Charon status for project/sample/libprep/seqrun '
-                  '{}/{}/{}/{} to "RUNNING"').format(project, sample, libprep, seqrun))
+                  '{}/{}/{}/{} to {}').format(project, sample, libprep, seqrun, set_status))
         CharonSession().seqrun_update(projectid=project.project_id,
                                       sampleid=sample.name,
                                       libprepid=libprep.name,
                                       seqrunid=seqrun.name,
-                                      alignment_status="RUNNING")
+                                      alignment_status=set_status)
     except CharonError as e:
         LOG.warn('Could not update Charon status for project/sample/libprep/seqrun '
                  '{}/{}/{}/{} due to error: {}'.format(project, sample, libprep, seqrun, e))
@@ -426,7 +449,7 @@ def record_process_seqrun(project, sample, libprep, seqrun, workflow_subtask,
 ## TODO This can be moved to a more generic local_process_tracking submodule
 # FIXME change to use strings maybe
 def record_process_sample(project, sample, workflow_subtask, analysis_module_name,
-                          analysis_dir, slurm_job_id, config=None):
+                          analysis_dir, process_id=None, slurm_job_id=None, config=None):
     LOG.info('Recording slurm job id "{}" for project "{}", sample "{}", '
              'workflow "{}"'.format(slurm_job_id, project, sample, workflow_subtask))
     with get_db_session() as session:
@@ -437,6 +460,7 @@ def record_process_sample(project, sample, workflow_subtask, analysis_module_nam
                                        engine=analysis_module_name,
                                        workflow=workflow_subtask,
                                        analysis_dir=analysis_dir,
+                                       process_id=process_id,
                                        slurm_job_id=slurm_job_id)
         ## FIXME We must make sure that an entry for this doesn't already exist!
         session.add(seqrun_db_obj)
@@ -446,18 +470,19 @@ def record_process_sample(project, sample, workflow_subtask, analysis_module_nam
                 LOG.info('Successfully recorded slurm job id "{}" for project "{}", sample "{}", '
                          'workflow "{}"'.format(slurm_job_id, project, sample, workflow_subtask))
                 break
-            except sqlalchemy.exc.OperationalError:
-                LOG.warn("Database locked. Waiting...")
+            except OperationalError as e:
+                LOG.warn('Database locked ("{}"). Waiting...'.format(e))
                 time.sleep(15)
         else:
             raise RuntimeError('Could not record slurm job id "{}" for project "{}", sample "{}", '
                                'workflow "{}"'.format(slurm_job_id, project, sample, workflow_subtask))
     try:
+        set_status = "UNDER_ANALYSIS"
         LOG.info(('Updating Charon status for project/sample '
-                  '{}/{} to "RUNNING"').format(project, sample))
-        CharonSession().seqrun_update(projectid=project.project_id,
+                  '{}/{} to {}').format(project, sample, set_status))
+        CharonSession().sample_update(projectid=project.project_id,
                                       sampleid=sample.name,
-                                      status="RUNNING")
+                                      analysis_status=set_status)
     except CharonError as e:
         LOG.warn('Could not update Charon status for project/sample '
                  '{}/{} due to error: {}'.format(project, sample, e))

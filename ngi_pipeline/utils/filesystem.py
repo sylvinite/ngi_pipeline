@@ -198,6 +198,7 @@ def recreate_project_from_filesystem(project_dir,
                                      restrict_to_samples=None,
                                      restrict_to_libpreps=None,
                                      restrict_to_seqruns=None,
+                                     force_create_project=False,
                                      config=None, config_file_path=None):
     """Recreates the full project/sample/libprep/seqrun set of
     NGIObjects using the directory tree structure."""
@@ -213,11 +214,15 @@ def recreate_project_from_filesystem(project_dir,
     try:
         # This requires Charon access -- maps e.g. "Y.Mom_14_01" to "P123"
         project_id = get_project_id_from_name(project_name)
-    # Should handle requests.exceptions.Timeout in Charon classes
     except (CharonError, ValueError, Timeout) as e:
-        error_msg = ('Cannot proceed with project "{}" due to '
-                     'Charon-related error: {}'.format(project_name, e))
-        raise CharonError(error_msg)
+        if hasattr(e, "status_code") and e.status_code == 404:
+            LOG.info(('Creating new project {project} with project '
+                      'id "{project}"'.format(project=project_name)))
+            project_id = project_name
+        else:
+            error_msg = ('Cannot proceed with project "{}" due to '
+                         'Charon-related error: {}'.format(project_name, e))
+            raise CharonError(error_msg)
     project_obj = NGIProject(name=project_name,
                              dirname=project_name,
                              project_id=project_id,
