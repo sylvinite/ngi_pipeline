@@ -88,7 +88,7 @@ if __name__=="__main__":
 			help="Restrict processing to these projects. Use flag multiple times for multiple projects.")
     parser.add_argument("-s", "--sample", dest="restrict_to_samples", action="append",
 			help="Restrict processing to these samples. Use flag multiple times for multiple samples.")
-    parser.add_argument("-b", "--best_practice_analysis", default="variant_calling",
+    parser.add_argument("-b", "--best_practice_analysis", default="whole_genome_reseq",
 			help="The best practice analysis to run for this project.")
     parser.add_argument("--sequencing-facility", default="NGI-S", choices=('NGI-S', 'NGI-U'),
             help="The facility where sequencing was performed.")
