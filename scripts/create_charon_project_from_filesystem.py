@@ -15,7 +15,8 @@ LOG = minimal_logger(__name__)
 
 @with_ngi_config
 def main(demux_fcid_dirs, restrict_to_projects=None, restrict_to_samples=None,
-         workflow="NGI", already_parsed=False,
+         best_practice_analysis=None, sequencing_facility=None,
+         already_parsed=False,
          force_update=False, delete_existing=False,
          force_create_project=False,
          config=None, config_file_path=None):
@@ -46,7 +47,8 @@ def main(demux_fcid_dirs, restrict_to_projects=None, restrict_to_samples=None,
         projects_to_analyze = projects_to_analyze.values()
         for project in projects_to_analyze:
             try:
-                create_charon_entries_from_project(project, workflow=workflow,
+                create_charon_entries_from_project(project, best_practice_analysis=best_practice_analysis,
+                                                   sequencing_facility=sequencing_facility,
                                                    force_overwrite=force_update,
                                                    delete_existing=delete_existing)
             except Exception as e:
@@ -78,14 +80,24 @@ def _validate_dangerous_user_thing(action="do SOMETHING that Mario thinks you sh
 
 if __name__=="__main__":
     parser = argparse.ArgumentParser("Populate a Charon project with data gleaned from the filesystem.")
-    parser.add_argument("demux_fcid_dirs", nargs="*", help="The path to the fcid containing the project of interest.")
-    parser.add_argument("-a", "--already-parsed", action="store_true", help="Set this flag if the input path is an already-parsed Project/Sample/Libprep/Seqrun tree, as opposed to a raw flowcell.")
-    parser.add_argument("-p", "--project", dest="restrict_to_projects", action="append", help="Restrict processing to these projects. Use flag multiple times for multiple projects.")
-    parser.add_argument("-s", "--sample", dest="restrict_to_samples", action="append", help="Restrict processing to these samples. Use flag multiple times for multiple samples.")
-    parser.add_argument("-w", "--workflow", default="NGI", help="The workflow to run for this project.")
-    parser.add_argument("-f", "--force", dest="force_update", action="store_true", help="Force updating Charon projects. Danger danger danger. This will overwrite things.")
-    parser.add_argument("-d", "--delete", dest="delete_existing", action="store_true", help="Delete existing projects in Charon. Similarly dangerous.")
-    parser.add_argument("-c", "--force-create-project", action="store_true", help="Create the project if it does not exist in Charon using the project name as the project id. Generally used only in testing.")
+    parser.add_argument("demux_fcid_dirs", nargs="*",
+            help="The path to the fcid containing the project of interest.")
+    parser.add_argument("-a", "--already-parsed", action="store_true",
+			help="Set this flag if the input path is an already-parsed Project/Sample/Libprep/Seqrun tree, as opposed to a raw flowcell.")
+    parser.add_argument("-p", "--project", dest="restrict_to_projects", action="append",
+			help="Restrict processing to these projects. Use flag multiple times for multiple projects.")
+    parser.add_argument("-s", "--sample", dest="restrict_to_samples", action="append",
+			help="Restrict processing to these samples. Use flag multiple times for multiple samples.")
+    parser.add_argument("-b", "--best_practice_analysis", default="variant_calling",
+			help="The best practice analysis to run for this project.")
+    parser.add_argument("--sequencing-facility", default="NGI-S", choices=('NGI-S', 'NGI-U'),
+            help="The facility where sequencing was performed.")
+    parser.add_argument("-f", "--force", dest="force_update", action="store_true",
+			help="Force updating Charon projects. Danger danger danger. This will overwrite things.")
+    parser.add_argument("-d", "--delete", dest="delete_existing", action="store_true",
+			help="Delete existing projects in Charon. Similarly dangerous.")
+    parser.add_argument("-c", "--force-create-project", action="store_true",
+			help="Create the project if it does not exist in Charon using the project name as the project id. Generally used only in testing.")
 
     args_dict = vars(parser.parse_args())
     main(**args_dict)
