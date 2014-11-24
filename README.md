@@ -82,6 +82,32 @@ Project a2014205 contains all resources necessary to execute ngi_pipeline and Pi
 `piper_resources` contains tools and other resources used by piper
 
 
+Pre-processing data
+============
+Before any analysis, data needs to be pre-processed. This process consists on the
+conversion from BCL files to FASTQ files, as well as demultiplexing of the data.
+
+The script `run_tracker.py` serves this purpose. The script will track finished runs
+and start BCL conversion and demultiplexing on them. Once the process is dome, data
+will be transfered to the analysis server/HPC. 
+
+The script requires these options in the configuration file:
+
+```yaml
+preprocessing:
+    hiseq_data_dir: /path/to/hiseq/data
+    miseq_dat_dir: /path/to/miseq/data
+    # MFS server to put metadata in
+    mfs: /path/to/mfs/partition
+    bcl2fastq: /path/to/bcl2fastq
+    # File with info about already transfered runs
+    transfer_file: /path/to/transfer/file
+    remote:
+        user: remote_user_analysis_server
+        host: analysis_server
+        data_archive: /path/where/to/transfer/data
+```
+
 Running the pipeline
 ============
 
