@@ -8,6 +8,7 @@ import requests
 
 from ngi_pipeline.log.loggers import minimal_logger
 from ngi_pipeline.utils.classes import memoized
+from requests.exceptions import Timeout
 
 # Need a better way to log
 LOG = minimal_logger(__name__)
@@ -200,13 +201,19 @@ class validate_response(object):
                                     "allowed (reason '{response.reason}' / "
                                     "code {response.status_code} / "
                                     "url '{response.url}')")),
+                408: (CharonError, ("Charon access failure: connection timed out")),
                 409: (CharonError, ("Charon access failure: document "
                                     "revision conflict (reason '{response.reason}' / "
                                     "code {response.status_code} / "
                                     "url '{response.url}')")),}
 
     def __call__(self, *args, **kwargs):
-        response = self.f(*args, **kwargs)
+        try:
+            response = self.f(*args, **kwargs)
+        except Timeout as e:
+            c_e = CharonError(e)
+            c_e.status_code = 408
+            raise c_e
         if response.status_code not in self.SUCCESS_CODES:
             try:
                 err_type, err_msg = self.FAILURE_CODES[response.status_code]
