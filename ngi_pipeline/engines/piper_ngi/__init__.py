@@ -238,6 +238,8 @@ def sbatch_piper_seqrun(command_line_list, workflow_name, project, sample, libpr
     scratch_analysis_dir = os.path.join("$SNIC_TMP/ANALYSIS/", project_dirname)
     # ANALYSIS / alignment data / permanent storage
     perm_aln_dir = os.path.join(perm_analysis_dir, "01_raw_alignments")
+    # ANALYSIS / alignment data / scratch storage
+    scratch_aln_dir = os.path.join(scratch_analysis_dir, "01_raw_alignments")
     # ANALYSIS / qc data / scratch storage
     scratch_qc_dir = os.path.join(scratch_analysis_dir, "02_preliminary_alignment_qc")
     # ANALYSIS / qc data / permanent storage
@@ -310,6 +312,8 @@ def sbatch_piper_seqrun(command_line_list, workflow_name, project, sample, libpr
         bash_conditional = \
         ('source activate {conda_environment}\n'
          'if [[ $(python {scripts_dir}/check_coverage_filesystem.py -p {perm_qc_dir} -s {sample_id} -c {req_coverage} && echo $?) ]]; then\n'
+         '   rsync -a {perm_aln_dir}/ {scratch_aln_dir}/'
+         '   rsync -a {perm_qc_dir}/ {scratch_qc_dir}/'
          '   python {scripts_dir}/start_pipeline_from_project.py \\ \n'
          '          --sample-only \\ \n'
          '          --sample {sample_id} \\ \n'
@@ -319,7 +323,9 @@ def sbatch_piper_seqrun(command_line_list, workflow_name, project, sample, libpr
                      project_id=project.project_id,
                      req_coverage=required_total_autosomal_coverage,
                      sample_id=sample.name,
+                     perm_aln_dir=perm_aln_dir,
                      perm_qc_dir=perm_qc_dir,
+                     scratch_aln_dir=scratch_aln_dir,
                      scratch_analysis_dir=scratch_analysis_dir,
                      scripts_dir=ngi_pipeline_scripts_dir))
         sbatch_text_list.extend(bash_conditional.split("\n"))
