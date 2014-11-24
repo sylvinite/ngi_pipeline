@@ -184,7 +184,7 @@ def update_charon_with_local_jobs_status():
                                  '{}: setting status to {} in Charon'.format(label, set_status))
                         charon_session.sample_update(projectid=project_id,
                                                      sampleid=sample_id,
-                                                     status=set_status)
+                                                     analysis_status=set_status)
                         # Job is only deleted if the Charon update succeeds
                         LOG.debug("Deleting local entry {}".format(sample_entry))
                         session.delete(sample_entry)
@@ -199,7 +199,7 @@ def update_charon_with_local_jobs_status():
                                                                              set_status))
                             charon_session.sample_update(projectid=project_id,
                                                          sampleid=sample_id,
-                                                         status=set_status)
+                                                         analysis_status=set_status)
             except CharonError as e:
                 LOG.error('Unable to update Charon status for "{}": {}'.format(label, e))
         session.commit()
