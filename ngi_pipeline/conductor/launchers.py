@@ -86,7 +86,7 @@ def launch_analysis(level, projects_to_analyze, restart_failed_jobs=False,
             analysis_engine_module_name = config["analysis"]["best_practice_analysis"][best_practice_analysis]["analysis_engine"]
         except KeyError:
             error_msg = ('No analysis engine for best practice analysis "{}" '
-                         'specified in configuration file. Skipping this BPA '
+                         'specified in configuration file. Skipping this analysis '
                          'for project {}'.format(best_practice_analysis, project))
             LOG.error(error_msg)
             raise RuntimeError(error_msg)
