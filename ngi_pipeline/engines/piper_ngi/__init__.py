@@ -95,6 +95,8 @@ def analyze_seqrun(project, sample, libprep, seqrun, exec_mode="sbatch",
                 piper_cl = build_piper_cl(project, workflow_subtask, exit_code_path, config)
                 slurm_job_id = sbatch_piper_seqrun([setup_xml_cl, piper_cl], workflow_subtask,
                                                    project, sample, libprep, seqrun)
+                # Time delay to let sbatch get its act together (takes a few seconds to be visible with sacct)
+                time.sleep(10)
                 try:
                     record_process_seqrun(project=project,
                                           sample=sample,
@@ -174,6 +176,8 @@ def analyze_sample(project, sample, exec_mode="local", config=None, config_file_
                         slurm_job_id = sbatch_piper_sample([setup_xml_cl, piper_cl],
                                                            workflow_subtask,
                                                            project, sample)
+                        # Time delay to let sbatch get its act together (takes a few seconds to be visible with sacct)
+                        time.sleep(10)
                         process_id = None
                     else:
                         launch_piper_job(setup_xml_cl, project)
@@ -545,6 +549,7 @@ def build_piper_cl(project, workflow_name, exit_code_path, config):
                                           global_config_path=piper_global_config_path,
                                           output_dir=project.analysis_dir)
     # Blank out the file if it already exists
+    safe_makedir(os.path.dirname(exit_code_path))
     open(exit_code_path, 'w').close()
     return add_exit_code_recording(cl, exit_code_path)
 

@@ -408,8 +408,7 @@ def record_process_seqrun(project, sample, libprep, seqrun, workflow_subtask,
                                        analysis_dir=analysis_dir,
                                        process_id=process_id,
                                        slurm_job_id=slurm_job_id)
-        ## FIXME The rest wont be done if the object already exists in the DB. Should I update it in the local DB ? In charon ?  
-        if not session.query(SeqrunAnalysis).filter(SeqrunAnalysis.project_id==project.project_id, SeqrunAnalysis.workflow==workflow_subtask).all():
+        try:
             session.add(seqrun_db_obj)
             for attempts in range(3):
                 try:
@@ -426,13 +425,16 @@ def record_process_seqrun(project, sample, libprep, seqrun, workflow_subtask,
                     LOG.warn('Database is locked ("{}"). Waiting...'.format(e))
                     time.sleep(15)
             else:
-                raise RuntimeError('Could not record slurm job id "{}" for project "{}", sample "{}", '
-                                   'libprep "{}", seqrun "{}", workflow "{}"'.format((slurm_job_id or process_id),
-                                                                                     project,
-                                                                                     sample,
-                                                                                     libprep,
-                                                                                     seqrun,
-                                                                                     workflow_subtask))
+                raise RuntimeError("Could not write to database after three attempts (locked?)")
+        except (IntegrityError, RuntimeError) as e:
+            raise RuntimeError('Could not record slurm job id "{}" for project "{}", sample "{}", '
+                               'libprep "{}", seqrun "{}", workflow "{}": {}'.format((slurm_job_id or process_id),
+                                                                                 project,
+                                                                                 sample,
+                                                                                 libprep,
+                                                                                 seqrun,
+                                                                                 workflow_subtask,
+                                                                                 e))
         try:
             set_status = "RUNNING"
             LOG.info(('Updating Charon status for project/sample/libprep/seqrun '
@@ -464,19 +466,22 @@ def record_process_sample(project, sample, workflow_subtask, analysis_module_nam
                                        process_id=process_id,
                                        slurm_job_id=slurm_job_id)
         ## FIXME We must make sure that an entry for this doesn't already exist!
-        session.add(seqrun_db_obj)
-        for attempts in range(3):
-            try:
-                session.commit()
-                LOG.info('Successfully recorded slurm job id "{}" for project "{}", sample "{}", '
-                         'workflow "{}"'.format(slurm_job_id, project, sample, workflow_subtask))
-                break
-            except OperationalError as e:
-                LOG.warn('Database locked ("{}"). Waiting...'.format(e))
-                time.sleep(15)
-        else:
+        try:
+            session.add(seqrun_db_obj)
+            for attempts in range(3):
+                try:
+                    session.commit()
+                    LOG.info('Successfully recorded slurm job id "{}" for project "{}", sample "{}", '
+                             'workflow "{}"'.format(slurm_job_id, project, sample, workflow_subtask))
+                    break
+                except OperationalError as e:
+                    LOG.warn('Database locked ("{}"). Waiting...'.format(e))
+                    time.sleep(15)
+            else:
+                raise RuntimeError("Could not write to database after three attempts (locked?)")
+        except (IntegrityError, RuntimeError):
             raise RuntimeError('Could not record slurm job id "{}" for project "{}", sample "{}", '
-                               'workflow "{}"'.format(slurm_job_id, project, sample, workflow_subtask))
+                               'workflow "{}": {}'.format(slurm_job_id, project, sample, workflow_subtask, e))
     try:
         set_status = "UNDER_ANALYSIS"
         LOG.info(('Updating Charon status for project/sample '
