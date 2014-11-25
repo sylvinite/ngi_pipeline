@@ -100,7 +100,7 @@ def transfer_run(run, config):
     r_host = config['remote']['host']
     r_dir = config['remote']['data_archive']
     remote = "{}@{}:{}".format(r_user, r_host, r_dir)
-    cl.extend([remote, run])
+    cl.extend([run, remote])
 
 
 def run_bcl2fastq(run, config):
