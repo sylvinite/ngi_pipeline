@@ -120,10 +120,10 @@ def determine_library_prep_from_fcid(project_id, sample_name, fcid):
                         seqrun_runid = seqrun["seqrunid"]
                         if seqrun_runid == fcid:
                             return libprep['libprepid']
-                    else:
-                        raise CharonError("No match", 404)
                 else:
                     raise CharonError("No seqruns found!", 404)
+            else:
+                raise CharonError("No match", 404)
         else:
             raise CharonError("No libpreps found!", 404)
     except CharonError as e:
