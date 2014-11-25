@@ -549,6 +549,7 @@ def build_piper_cl(project, workflow_name, exit_code_path, config):
                                           global_config_path=piper_global_config_path,
                                           output_dir=project.analysis_dir)
     # Blank out the file if it already exists
+    safe_makedir(os.path.dirname(exit_code_path))
     open(exit_code_path, 'w').close()
     return add_exit_code_recording(cl, exit_code_path)
 
