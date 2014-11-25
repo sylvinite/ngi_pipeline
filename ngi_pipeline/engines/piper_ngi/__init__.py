@@ -143,7 +143,7 @@ def analyze_sample(project, sample, exec_mode="local", config=None, config_file_
         required_total_autosomal_coverage = int(config.get("piper", {}).get("sample", {}).get("required_autosomal_coverage"))
     except (TypeError, ValueError) as e:
         LOG.error('Unable to parse required total autosomal coverage value from '
-                  'config file (value was "{}"); using 30 instead.'.format(required_total_autosomal_coverage))
+                  'config file, using 30 instead.')
         required_total_autosomal_coverage = 30
     if sample_total_autosomal_coverage >= required_total_autosomal_coverage:
         LOG.info('Sample "{}" in project "{}" is ready for processing.'.format(sample, project))
