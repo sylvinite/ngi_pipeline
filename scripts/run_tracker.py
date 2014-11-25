@@ -118,8 +118,7 @@ def run_bcl2fastq(run, config):
         # Main options
         if cl_options.get('runfolder'):
             cl.extend(['--runfolder', cl_options.get('runfolder')])
-        if cl_options.get('output-dir', 'Demultiplexing'):
-            cl.extend(['--output-dir', cl_options.get('output-dir')])
+        cl.extend(['--output-dir', cl_options.get('output-dir', 'Demultiplexing')])
 
         # Advanced options
         if cl_options.get('input-dir'):
