@@ -408,42 +408,43 @@ def record_process_seqrun(project, sample, libprep, seqrun, workflow_subtask,
                                        analysis_dir=analysis_dir,
                                        process_id=process_id,
                                        slurm_job_id=slurm_job_id)
-        ## FIXME We must make sure that an entry for this doesn't already exist!
-        session.add(seqrun_db_obj)
-        for attempts in range(3):
-            try:
-                session.commit()
-                LOG.info('Successfully recorded job ID "{}" for project "{}", sample "{}", '
-                         'libprep "{}", seqrun "{}", workflow "{}"'.format((slurm_job_id or process_id),
-                                                                           project,
-                                                                           sample,
-                                                                           libprep,
-                                                                           seqrun,
-                                                                           workflow_subtask))
-                break
-            except OperationalError as e:
-                LOG.warn('Database is locked ("{}"). Waiting...'.format(e))
-                time.sleep(15)
-        else:
-            raise RuntimeError('Could not record slurm job id "{}" for project "{}", sample "{}", '
-                               'libprep "{}", seqrun "{}", workflow "{}"'.format((slurm_job_id or process_id),
-                                                                                 project,
-                                                                                 sample,
-                                                                                 libprep,
-                                                                                 seqrun,
-                                                                                 workflow_subtask))
-    try:
-        set_status = "RUNNING"
-        LOG.info(('Updating Charon status for project/sample/libprep/seqrun '
-                  '{}/{}/{}/{} to {}').format(project, sample, libprep, seqrun, set_status))
-        CharonSession().seqrun_update(projectid=project.project_id,
-                                      sampleid=sample.name,
-                                      libprepid=libprep.name,
-                                      seqrunid=seqrun.name,
-                                      alignment_status=set_status)
-    except CharonError as e:
-        LOG.warn('Could not update Charon status for project/sample/libprep/seqrun '
-                 '{}/{}/{}/{} due to error: {}'.format(project, sample, libprep, seqrun, e))
+        ## FIXME The rest wont be done if the object already exists in the DB. Should I update it in the local DB ? In charon ?  
+        if not session.query(SeqrunAnalysis).filter(SeqrunAnalysis.project_id==project.project_id, SeqrunAnalysis.workflow==workflow_subtask).all():
+            session.add(seqrun_db_obj)
+            for attempts in range(3):
+                try:
+                    session.commit()
+                    LOG.info('Successfully recorded job ID "{}" for project "{}", sample "{}", '
+                             'libprep "{}", seqrun "{}", workflow "{}"'.format((slurm_job_id or process_id),
+                                                                               project,
+                                                                               sample,
+                                                                               libprep,
+                                                                               seqrun,
+                                                                               workflow_subtask))
+                    break
+                except OperationalError as e:
+                    LOG.warn('Database is locked ("{}"). Waiting...'.format(e))
+                    time.sleep(15)
+            else:
+                raise RuntimeError('Could not record slurm job id "{}" for project "{}", sample "{}", '
+                                   'libprep "{}", seqrun "{}", workflow "{}"'.format((slurm_job_id or process_id),
+                                                                                     project,
+                                                                                     sample,
+                                                                                     libprep,
+                                                                                     seqrun,
+                                                                                     workflow_subtask))
+        try:
+            set_status = "RUNNING"
+            LOG.info(('Updating Charon status for project/sample/libprep/seqrun '
+                      '{}/{}/{}/{} to {}').format(project, sample, libprep, seqrun, set_status))
+            CharonSession().seqrun_update(projectid=project.project_id,
+                                          sampleid=sample.name,
+                                          libprepid=libprep.name,
+                                          seqrunid=seqrun.name,
+                                          alignment_status=set_status)
+        except CharonError as e:
+            LOG.warn('Could not update Charon status for project/sample/libprep/seqrun '
+                     '{}/{}/{}/{} due to error: {}'.format(project, sample, libprep, seqrun, e))
 
 
 ## TODO This can be moved to a more generic local_process_tracking submodule
