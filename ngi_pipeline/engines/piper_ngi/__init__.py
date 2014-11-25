@@ -23,7 +23,7 @@ from ngi_pipeline.log.loggers import log_process_non_blocking, minimal_logger
 from ngi_pipeline.utils.filesystem import load_modules, execute_command_line, rotate_file, safe_makedir
 from ngi_pipeline.utils.classes import with_ngi_config
 from ngi_pipeline.utils.parsers import parse_lane_from_filename, find_fastq_read_pairs_from_dir, \
-                                       get_flowcell_id_from_dirtree
+                                       get_flowcell_id_from_dirtree, get_slurm_job_status
 
 LOG = minimal_logger(__name__)
 
@@ -96,7 +96,16 @@ def analyze_seqrun(project, sample, libprep, seqrun, exec_mode="sbatch",
                 slurm_job_id = sbatch_piper_seqrun([setup_xml_cl, piper_cl], workflow_subtask,
                                                    project, sample, libprep, seqrun)
                 # Time delay to let sbatch get its act together (takes a few seconds to be visible with sacct)
-                time.sleep(10)
+                for x in xrange(5):
+                    try:
+                        get_slurm_job_status(slurm_job_id)
+                        break
+                    except ValueError:
+                        time.sleep(5)
+                else:
+                    LOG.error('sbatch file for seqrun {}/{}/{}/{} did not '
+                              'queue properly! Job ID {} cannot be '
+                              'found.'.format(project, sample, libprep, seqrun, slurm_job_id))
                 try:
                     record_process_seqrun(project=project,
                                           sample=sample,
@@ -177,7 +186,17 @@ def analyze_sample(project, sample, exec_mode="local", config=None, config_file_
                                                            workflow_subtask,
                                                            project, sample)
                         # Time delay to let sbatch get its act together (takes a few seconds to be visible with sacct)
-                        time.sleep(10)
+                        for x in xrange(5):
+                            try:
+                                get_slurm_job_status(slurm_job_id)
+                                break
+                            except ValueError:
+                                time.sleep(5)
+                        else:
+                            LOG.error('sbatch file for sample {}/{} did not '
+                                      'queue properly! Job ID {} cannot be '
+                                      'found.'.format(project, sample, slurm_job_id))
+
                         process_id = None
                     else:
                         launch_piper_job(setup_xml_cl, project)
