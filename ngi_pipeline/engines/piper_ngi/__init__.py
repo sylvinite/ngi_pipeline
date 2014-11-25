@@ -95,6 +95,8 @@ def analyze_seqrun(project, sample, libprep, seqrun, exec_mode="sbatch",
                 piper_cl = build_piper_cl(project, workflow_subtask, exit_code_path, config)
                 slurm_job_id = sbatch_piper_seqrun([setup_xml_cl, piper_cl], workflow_subtask,
                                                    project, sample, libprep, seqrun)
+                # Time delay to let sbatch get its act together (takes a few seconds to be visible with sacct)
+                time.sleep(10)
                 try:
                     record_process_seqrun(project=project,
                                           sample=sample,
