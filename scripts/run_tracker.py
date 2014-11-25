@@ -3,9 +3,13 @@ import argparse
 import csv
 import glob
 import os
+import subprocess
+
+from datetime import datetime
 
 from ngi_pipeline.log import loggers
 from ngi_pipeline.utils import config as cf
+from ngi_pipeline.utils import chdir
 
 DESCRIPTION =(" Script to keep track and pre-process Illumina X Ten runs. "
 
@@ -28,7 +32,7 @@ def check_config_options(config):
         config['preprocessing']['hiseq_data']
         config['preprocessing']['miseq_data']
         config['preprocessing']['mfs']
-        config['preprocessing']['bcl2fastq']
+        config['preprocessing']['bcl2fastq']['path']
         config['preprocessing']['remote']
         config['preprocessing']['remote']['user']
         config['preprocessing']['remote']['host']
@@ -64,11 +68,11 @@ def processing_status(run):
         return 'IN_PROGRESS'
 
 
-def is_transfered(run, transfer_file):
+def is_transferred(run, transfer_file):
     """ Checks wether a run has been transferred to the analysis server or not
 
     :param str run: Run directory
-    :param str transfer_file: Path to file with information about transfered runs
+    :param str transfer_file: Path to file with information about transferred runs
     """
     try:
         with open(transfer_file, 'r') as f:
@@ -90,12 +94,113 @@ def transfer_run(run, config):
     :param str run: Run directory
     :param dict config: Parsed configuration
     """
+    #XXX What needs to be transferred exactly
     cl = ['rsync', '-a', '--chmod=g+rw']
     r_user = config['remote']['user']
     r_host = config['remote']['host']
     r_dir = config['remote']['data_archive']
     remote = "{}@{}:{}".format(r_user, r_host, r_dir)
     cl.extend([remote, run])
+
+
+def run_bcl2fastq(run, config):
+    """ Runs bcl2fast with the parameters found in the configuration file. After
+    that, demultiplexed FASTQ files are sent to the analysis server.
+
+    :param str run: Run directory
+    :param dict config: Parset configuration file
+    """
+    LOG.info('Building bcl2fastq command')
+    with chdir(run):
+        cl_options = config['bcl2fastq']
+        cl = [cl_options.get('path')]
+
+        # Main options
+        if cl_options.get('runfolder'):
+            cl.extend(['--runfolder', cl_options.get('runfolder')])
+        if cl_options.get('output-dir', 'Demultiplexing'):
+            cl.extend(['--output-dir', cl_options.get('output-dir')])
+
+        # Advanced options
+        if cl_options.get('input-dir'):
+            cl.extend(['--input-dir', cl_options.get('input-dir')])
+        if cl_options.get('intensities-dir'):
+            cl.extend(['--intensities-dir', cl_options.get('intensities-dir')])
+        if cl_options.get('interop-dir'):
+            cl.extend(['--interop-dir', cl_options.get('interop-dir')])
+        if cl_options.get('stats-dir'):
+            cl.extend(['--stats-dir', cl_options.get('stats-dir')])
+        if cl_options.get('reports-dir'):
+            cl.extend(['--reports-dir', cl_options.get('reports-dir')])
+
+        # Processing cl_options
+        threads = cl_options.get('loading-threads')
+        if threads and type(threads) is int:
+            cl.extend(['--loading-threads', threads])
+        threads = cl_options.get('demultiplexing-threads')
+        if threads and type(threads) is int:
+            cl.extend(['--demultiplexing-threads', threads])
+        threads = cl_options.get('processing-threads')
+        if threads and type(threads) is int:
+            cl.extend(['--processing-threads', threads])
+        threads = cl_options.get('writing-threads')
+        if threads and type(threads) is int:
+            cl.extend(['--writing-threads', threads])
+
+        # Behavioral options
+        adapter_stringency = cl_options.get('adapter-stringency')
+        if adapter_stringency and type(adapter_stringency) is float:
+            cl.extend(['--adapter-stringency', adapter_stringency])
+        aggregated_tiles = cl_options.get('aggregated-tiles')
+        if aggregated_tiles and aggregated_tiles in ['AUTO', 'YES', 'NO']:
+            cl.etend(['--aggregated-tiles', aggregated_tiles])
+        barcode_missmatches = cl_options.get('barcode-missmatches')
+        if barcode_missmatches and type(barcode_missmatches) is int \
+                and barcode_missmatches in range(3):
+            cl.extend(['--barcode-missmatches', barcode_missmatches])
+        if cl_options.get('create-fastq-for-index-reads'):
+            cl.append('--create-fastq-for-index-reads')
+        if cl_options.get('ignore-missing-bcls'):
+            cl.append('--ignore-missing-bcls')
+        if cl_options.get('ignore-missing-filter'):
+            cl.append('--ignore-missing-filter')
+        if cl_options.get('ignore-missing-locs'):
+            cl.append('--ignore-missing-locs')
+        mask = cl_options.get('mask-short-adapter-reads')
+        if mask and type(mask) is int:
+            cl.extend(['--mask-short-adapter-reads', mask])
+        minimum = cl_options.get('minimum-trimmed-reads')
+        if minimum and type(minimum) is int:
+            cl.extend(['--minimum-trimmed-reads', minimum])
+        if cl_options.get('tiles')
+            cl.extend(['--tiles', cl_options.get('tiles')])
+        #XXX I guess that this one will be deduced from the Samplesheet
+        if cl_options.get('use-base-mask'):
+            cl.extend(['--use-base-mask', cl_options.get('use-base-mask')])
+        if cl_options.get('with-failed-reads'):
+            cl.append('--with-failed-reads')
+        if cl_options.get('write-fastq-reverse-complement'):
+            cl.append('--write-fastq-reverse-complement')
+
+        # Execute bcl conversion and demultiplexing
+        # XXX detach so that more runs can be demultiplexed at the same time
+        with open('bcl2fastq.out', 'w') as bcl_out and open('bcl2fastq.err') as bcl_err:
+            try:
+                started = ("BCL to FASTQ conversion and demultiplexing started for "
+                           " run {} on {}".format(os.path.basename(run), datetime.now()))
+                LOG.info(started)
+                bcl_out.write(started + '\n')
+                bcl_out.write('Command: {}\n'.format(' '.join(cl)))
+                bcl_out.write(['=']*len(cl) + '\n')
+                subprocess.check_call(cl, stdout=bcl_out, stderr=bcl_err)
+            except subprocess.CalledProcessError, e:
+                error_msg = ("BCL to Fastq conversion for {} FAILED (exit code {}), "
+                             "please check log files bcl2fastq.log and bcl2fastq.err".format(
+                                                        os.path.basename(run), str(e.returncode)))
+                raise e
+
+        # Transfer the processed data to the analysis server
+        transfer_run(run)
 
 
 if __name__=="__main__":
@@ -120,15 +225,16 @@ if __name__=="__main__":
             if  status == 'TO_START':
                 LOG.info(("Starting BCL to FASTQ conversion and demultiplexing for "
                     "run {}".format(run_name)))
+                run_bcl2fastq(run, config)
             elif status == 'IN_PROGRESS':
                 LOG.info(("BCL conversion and demultiplexing process in progress for "
                     "run {}, skipping it".format(run_name)))
             elif status == 'COMPLETED':
                 LOG.info(("Processing of run {} if finished, check if run has been "
-                    "transfered and transfer it otherwise".format(run_name)))
-                transferred = is_transfered(run_name, config['transfer_file'])
+                    "transferred and transfer it otherwise".format(run_name)))
+                transferred = is_transferred(run_name, config['transfer_file'])
                 if not transferred:
-                    LOG.info("Run {} hasn't been transfered yet.".format(run_name))
+                    LOG.info("Run {} hasn't been transferred yet.".format(run_name))
                     LOG.info('Transferring run {} to {} into {}'.format(run_name,
                         config['remote']['host'],
                         config['remote']['data_archive']))

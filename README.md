@@ -99,9 +99,11 @@ preprocessing:
     miseq_dat_dir: /path/to/miseq/data
     # MFS server to put metadata in
     mfs: /path/to/mfs/partition
-    bcl2fastq: /path/to/bcl2fastq
     # File with info about already transfered runs
     transfer_file: /path/to/transfer/file
+    bcl2fastq: 
+        path: /path/to/bcl2fastq
+        - all command line options of bcl2fastq , i.e runfolder, input-dir, etc.
     remote:
         user: remote_user_analysis_server
         host: analysis_server
