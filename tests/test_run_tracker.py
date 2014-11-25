@@ -73,10 +73,10 @@ class TestTracker(unittest.TestCase):
         self.assertEqual('IN_PROGRESS', processing_status(self.in_progress))
         self.assertEqual('COMPLETED', processing_status(self.completed))
 
-    def test_3_is_transfered(self):
-        """ is_transfered should rely on the info in transfer.tsv
+    def test_3_is_transferred(self):
+        """ is_transferred should rely on the info in transfer.tsv
         """
-        self.assertTrue(is_transfered(os.path.basename(self.completed), self.transfer_file))
-        self.assertFalse(is_transfered(os.path.basename(self.running), self.transfer_file))
-        self.assertFalse(is_transfered(os.path.basename(self.to_start), self.transfer_file))
-        self.assertFalse(is_transfered(os.path.basename(self.in_progress), self.transfer_file))
+        self.assertTrue(is_transferred(os.path.basename(self.completed), self.transfer_file))
+        self.assertFalse(is_transferred(os.path.basename(self.running), self.transfer_file))
+        self.assertFalse(is_transferred(os.path.basename(self.to_start), self.transfer_file))
+        self.assertFalse(is_transferred(os.path.basename(self.in_progress), self.transfer_file))
