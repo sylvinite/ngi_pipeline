@@ -572,13 +572,13 @@ def build_setup_xml(project, config, sample=None, libprep_id=None, seqrun_id=Non
     :raises ValueError: If a required configuration file value is missing
     :raises RuntimeError: If the setupFileCreator returns non-zero
     """
-    if not seqrun_id:
-        LOG.info('Building Piper setup.xml file for project "{}" '
-                 'sample "{}"'.format(project, sample.name))
-    else:
+    if seqrun_id:
         LOG.info('Building Piper setup.xml file for project "{}" '
                  'sample "{}", libprep "{}", seqrun "{}"'.format(project, sample,
                                                                  libprep_id, seqrun_id))
+    else:
+        LOG.info('Building Piper setup.xml file for project "{}" '
+                 'sample "{}"'.format(project, sample.name))
 
     if local_scratch_mode:
         project_top_level_dir = os.path.join("$SNIC_TMP/DATA/", project.dirname)
@@ -627,18 +627,19 @@ def build_setup_xml(project, config, sample=None, libprep_id=None, seqrun_id=Non
                            "--uppnex_project_id {uppmax_proj} "
                            "--reference {reference_path} "
                            "--qos {qos}").format(**cl_args)
-    if not seqrun_id:
-        for libprep in sample:
-            for seqrun in libprep:
-                sample_run_directory = os.path.join(project_top_level_dir, sample.dirname, libprep.name, seqrun.name )
-                for fastq_file_name in os.listdir(sample_run_directory):
-                    fastq_file = os.path.join(sample_run_directory, fastq_file_name)
-                    setupfilecreator_cl += " --input_fastq {}".format(fastq_file)
-    else:
+    if seqrun_id: # This is seqrun-level analysis - get fastq files for one specific seqrun
         sample_run_directory = os.path.join(project_top_level_dir, sample.dirname, libprep_id, seqrun_id )
         for fastq_file_name in sample.libpreps[libprep_id].seqruns[seqrun_id].fastq_files:
             fastq_file = os.path.join(sample_run_directory, fastq_file_name)
             setupfilecreator_cl += " --input_fastq {}".format(fastq_file)
+    else: # This is sample-level analysis - get all fastq files beneath this sample
+        for libprep in sample:
+            for seqrun in libprep:
+                sample_run_directory = os.path.join(project_top_level_dir, sample.dirname, libprep.name, seqrun.name )
+                for fastq_file_name in seqrun.fastq_files:
+                    fastq_file = os.path.join(sample_run_directory, fastq_file_name)
+                    setupfilecreator_cl += " --input_fastq {}".format(fastq_file)
+
 
     project.setup_xml_path = output_xml_filepath
     project.analysis_dir = analysis_dir
