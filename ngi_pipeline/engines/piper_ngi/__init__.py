@@ -176,6 +176,8 @@ def analyze_sample(project, sample, exec_mode="local", config=None, config_file_
                         slurm_job_id = sbatch_piper_sample([setup_xml_cl, piper_cl],
                                                            workflow_subtask,
                                                            project, sample)
+                        # Time delay to let sbatch get its act together (takes a few seconds to be visible with sacct)
+                        time.sleep(10)
                         process_id = None
                     else:
                         launch_piper_job(setup_xml_cl, project)
