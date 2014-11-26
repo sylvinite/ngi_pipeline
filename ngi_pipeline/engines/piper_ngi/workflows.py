@@ -78,20 +78,22 @@ def workflow_dna_variantcalling(qscripts_dir_path, setup_xml_path, global_config
     :returns: The Piper command to be executed.
     :rtype: str
     """
+    ## TODO need to add -jobNative arguments (--qos=seqver)
     workflow_qscript_path = os.path.join(qscripts_dir_path, "DNABestPracticeVariantCalling.scala")
     job_walltime = slurm_time_to_seconds(config.get("slurm", {}).get("time") or "3-00:00:00")
-    num_threads = int(config.get("piper", {}).get("threads")) or 16
-    cl_string = ("piper -S {workflow_qscript_path} "
-                 "--xml_input {setup_xml_path} "
-                 "--global_config {global_config_path} "
-                 "--number_of_threads {num_threads} "
-                 "--scatter_gather {scatter_gather} "
-                 "-jobRunner {job_runner} "
-                 "--job_walltime {job_walltime} "
-                 "-run")
+    cl_string = ("piper -S {workflow_qscript_path}"
+                 " --xml_input {setup_xml_path}"
+                 " --global_config {global_config_path}"
+                 " --number_of_threads {num_threads}"
+                 " --scatter_gather {scatter_gather}"
+                 " -jobRunner {job_runner}"
+                 " --job_walltime {job_walltime}"
+                 " -run")
     if output_dir:
-        cl_string += " --output_directory {output_dir} "
+        cl_string += " --output_directory {output_dir}"
     if exec_mode == "local":
+        num_threads = int(config.get("piper", {}).get("threads")) or 16
+        cl_string += " --number_of_threads {num_threads}"
         job_runner = "Shell"
         scatter_gather = 1
     else: # exec_mode == "sbatch"
