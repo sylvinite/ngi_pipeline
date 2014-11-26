@@ -184,12 +184,15 @@ def setup_analysis_directory_structure(fc_dir, projects_to_analyze,
         LOG.info("Setting up project {}".format(project.get("project_name")))
         # Create a project directory if it doesn't already exist, including
         # intervening "DATA" directory
-        project_dir = os.path.join(analysis_top_dir, "DATA", project_name)
-        if create_files: safe_makedir(project_dir, 0770)
+        project_dir = os.path.join(analysis_top_dir, "DATA", project_id)
+        project_sl_dir = os.path.join(analysis_top_dir, "DATA", project_name)
+        if create_files:
+            safe_makedir(project_dir, 0770)
+            do_symlink(project_dir, project_sl_dir)
         try:
             project_obj = projects_to_analyze[project_dir]
         except KeyError:
-            project_obj = NGIProject(name=project_name, dirname=project_name,
+            project_obj = NGIProject(name=project_name, dirname=project_id,
                                      project_id=project_id,
                                      base_path=analysis_top_dir)
             projects_to_analyze[project_dir] = project_obj
