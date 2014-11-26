@@ -75,7 +75,7 @@ def analyze_seqrun(project, sample, libprep, seqrun, exec_mode="sbatch",
                 ## Temporarily logging to a file until we get ELK set up
                 log_file_path = create_log_file_path(workflow_subtask=workflow_subtask,
                                                      project_base_path=project.base_path,
-                                                     project_name=project.name,
+                                                     project_name=project.dirname,
                                                      sample_id=sample.name,
                                                      libprep_id=libprep.name,
                                                      seqrun_id=seqrun.name)
@@ -85,7 +85,7 @@ def analyze_seqrun(project, sample, libprep, seqrun, exec_mode="sbatch",
                 ## Exit code does not go to scratch -- keep on /apus
                 exit_code_path = create_exit_code_file_path(workflow_subtask=workflow_subtask,
                                                             project_base_path=project.base_path,
-                                                            project_name=project.name,
+                                                            project_name=project.dirname,
                                                             sample_id=sample.name,
                                                             libprep_id=libprep.name,
                                                             seqrun_id=seqrun.name)
@@ -167,13 +167,13 @@ def analyze_sample(project, sample, exec_mode="local", config=None, config_file_
                     ## Temporarily logging to a file until we get ELK set up
                     log_file_path = create_log_file_path(workflow_subtask=workflow_subtask,
                                                          project_base_path=project.base_path,
-                                                         project_name=project.name,
+                                                         project_name=project.dirname,
                                                          sample_id=sample.name)
                     rotate_file(log_file_path)
                     # Store the exit code of detached processes
                     exit_code_path = create_exit_code_file_path(workflow_subtask=workflow_subtask,
                                                                 project_base_path=project.base_path,
-                                                                project_name=project.name,
+                                                                project_name=project.dirname,
                                                                 sample_id=sample.name)
 
                     # These must be run in this order; build_setup_xml modifies the project object.
@@ -604,10 +604,10 @@ def build_setup_xml(project, config, sample=None, libprep_id=None, seqrun_id=Non
         analysis_dir = os.path.join(project.base_path, "ANALYSIS", project.dirname)
         safe_makedir(analysis_dir, 0770)
         safe_makedir(os.path.join(analysis_dir, "logs"))
-    cl_args = {'project': project.name}
+    cl_args = {'project': project.dirname}
     cl_args["sequencing_center"] = "NGI"
 
-    # Load needed data from configuration file
+    # Load needed data from configuration file / Charon
     reference_genome = 'GRCh37'
     try:
         cl_args["reference_path"] = config['supported_genomes'][reference_genome]
