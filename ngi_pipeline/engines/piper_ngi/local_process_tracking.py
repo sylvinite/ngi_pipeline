@@ -13,7 +13,7 @@ from ngi_pipeline.utils.parsers import get_slurm_job_status, \
                                        parse_qualimap_results, \
                                        STHLM_UUSNP_SEQRUN_RE, \
                                        STHLM_UUSNP_SAMPLE_RE
-from sqlalchemy.exc import OperationalError
+from sqlalchemy.exc import IntegrityError, OperationalError
 
 LOG = minimal_logger(__name__)
 
