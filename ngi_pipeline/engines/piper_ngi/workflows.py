@@ -12,13 +12,15 @@ LOG = minimal_logger(__name__)
 
 @with_ngi_config
 def return_cl_for_workflow(workflow_name, qscripts_dir_path, setup_xml_path, global_config_path,
-                           output_dir=None, config=None, config_file_path=None):
+                           output_dir=None, exec_mode="local", config=None, config_file_path=None):
     """Return an executable-ready Piper command line.
 
     :param str workflow_name: The name of the Piper workflow to be run.
     :param str qscripts_dir_path: The path to the directory containing the qscripts
     :param str setup_xml_path: The path to the project-level setup XML file
     :param dict global_config_path: The parsed Piper-specific globalConfig file.
+    :param str output_dir: The directory to which to write output files
+    :param str exec_mode: "local" or "sbatch"
 
     :returns: The Piper command line to be executed.
     :rtype: str
@@ -33,7 +35,8 @@ def return_cl_for_workflow(workflow_name, qscripts_dir_path, setup_xml_path, glo
         LOG.error(error_msg)
         raise NotImplementedError(error_msg)
     LOG.info('Building command line for workflow "{}"'.format(workflow_name))
-    return workflow_function(qscripts_dir_path, setup_xml_path, global_config_path, config, output_dir)
+    return workflow_function(qscripts_dir_path, setup_xml_path, global_config_path,
+                             config, exec_mode, output_dir) 
 
 
 def workflow_dna_alignonly(*args, **kwargs):
@@ -64,7 +67,8 @@ def workflow_merge_process_variantcall(*args, **kwargs):
     return workflow_dna_variantcalling(*args, **kwargs) +  " --merge_alignments --data_processing --variant_calling --analyze_separately --retry_failed 1"
 
 
-def workflow_dna_variantcalling(qscripts_dir_path, setup_xml_path, global_config_path, config, output_dir=None):
+def workflow_dna_variantcalling(qscripts_dir_path, setup_xml_path, global_config_path,
+                                config, exec_mode, output_dir=None):
     """Return the command line for DNA Variant Calling.
 
     :param strs qscripts_dir_path: The path to the Piper qscripts directory.
@@ -75,36 +79,22 @@ def workflow_dna_variantcalling(qscripts_dir_path, setup_xml_path, global_config
     :rtype: str
     """
     workflow_qscript_path = os.path.join(qscripts_dir_path, "DNABestPracticeVariantCalling.scala")
-
     job_walltime = slurm_time_to_seconds(config.get("slurm", {}).get("time") or "3-00:00:00")
-    # Pull from config file
-    num_threads = 16
-
-            #piper -S ${SCRIPTS_DIR}/DNABestPracticeVariantCalling.scala \
-            #--xml_input ${PIPELINE_SETUP} \
-            #--global_config uppmax_global_config.xml \
-            #--number_of_threads 8 \
-            #--scatter_Gather 23 \
-            #-jobRunner ${JOB_RUNNER} \
-            #-jobNative "${JOB_NATIVE_ARGS}" \
-            #--job_walltime 345600 \
-            #${RUN} ${ONLY_ALIGMENTS} ${DEBUG} 2>&1 | tee -a ${LOGS}/wholeGenome.log
-    if output_dir == None:
-        return  "piper -S {workflow_qscript_path} " \
-            "--xml_input {setup_xml_path} " \
-            "--global_config {global_config_path} " \
-            "--number_of_threads {num_threads} " \
-            "--scatter_gather 23 " \
-            "-jobRunner Drmaa " \
-            "--job_walltime {job_walltime} " \
-            "-run".format(**locals())
-    else:
-        return  "piper -S {workflow_qscript_path} " \
-            "--xml_input {setup_xml_path} " \
-            "--global_config {global_config_path} " \
-            "--number_of_threads {num_threads} " \
-            "--scatter_gather 23 " \
-            "-jobRunner Drmaa " \
-            "--job_walltime {job_walltime} " \
-            "--output_directory {output_dir} " \
-            "-run".format(**locals())
+    num_threads = int(config.get("piper", {}).get("threads")) or 16
+    cl_string = ("piper -S {workflow_qscript_path} "
+                 "--xml_input {setup_xml_path} "
+                 "--global_config {global_config_path} "
+                 "--number_of_threads {num_threads} "
+                 "--scatter_gather {scatter_gather} "
+                 "-jobRunner {job_runner} "
+                 "--job_walltime {job_walltime} "
+                 "-run")
+    if output_dir:
+        cl_string += " --output_directory {output_dir} "
+    if exec_mode == "local":
+        job_runner = "Shell"
+        scatter_gather = 1
+    else: # exec_mode == "sbatch"
+        job_runner = "Drmaa"
+        scatter_gather = 23
+    return cl_string.format(**locals())

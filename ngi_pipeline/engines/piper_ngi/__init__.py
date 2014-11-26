@@ -92,7 +92,8 @@ def analyze_seqrun(project, sample, libprep, seqrun, exec_mode="sbatch",
 
                 setup_xml_cl = build_setup_xml(project, config, sample, libprep.name, seqrun.name,
                                                local_scratch_mode=True)
-                piper_cl = build_piper_cl(project, workflow_subtask, exit_code_path, config)
+                piper_cl = build_piper_cl(project, workflow_subtask, exit_code_path,
+                                          config, exec_mode=exec_mode)
                 slurm_job_id = sbatch_piper_seqrun([setup_xml_cl, piper_cl], workflow_subtask,
                                                    project, sample, libprep, seqrun)
                 # Time delay to let sbatch get its act together (takes a few seconds to be visible with sacct)
@@ -179,7 +180,9 @@ def analyze_sample(project, sample, exec_mode="local", config=None, config_file_
                     # At some point remove this hidden behavior
                     setup_xml_cl = build_setup_xml(project, config, sample,
                                                    local_scratch_mode=(exec_mode == "sbatch"))
-                    piper_cl = build_piper_cl(project, workflow_subtask, exit_code_path, config)
+                    piper_cl = build_piper_cl(project, workflow_subtask,
+                                              exit_code_path, config,
+                                              exec_mode=exec_mode)
 
                     if exec_mode == "sbatch":
                         slurm_job_id = sbatch_piper_sample([setup_xml_cl, piper_cl],
@@ -514,22 +517,18 @@ def launch_piper_job(command_line, project, log_file_path=None):
     return popen_object
 
 
-def build_piper_cl(project, workflow_name, exit_code_path, config):
+def build_piper_cl(project, workflow_name, exit_code_path, config, exec_mode="local"):
     """Determine which workflow to run for a project and build the appropriate command line.
     :param NGIProject project: The project object to analyze.
     :param str workflow_name: The name of the workflow to execute (e.g. "dna_alignonly")
     :param str exit_code_path: The path to the file to which the exit code for this cl will be written
     :param dict config: The (parsed) configuration file for this machine/environment.
+    :param str exec_mode: "local" or "sbatch"
 
     :returns: A list of Project objects with command lines to execute attached.
     :rtype: list
     :raises ValueError: If a required configuration value is missing.
     """
-    # Find Piper global configuration:
-    #   Check environmental variable PIPER_GLOB_CONF_XML
-    #   then the config file
-    #   then the file globalConfig.xml in the piper root dir
-
     piper_rootdir = config.get("piper", {}).get("path_to_piper_rootdir")
     piper_global_config_path = (os.environ.get("PIPER_GLOB_CONF_XML") or
                                 config.get("piper", {}).get("path_to_piper_globalconfig") or
@@ -540,33 +539,26 @@ def build_piper_cl(project, workflow_name, exit_code_path, config):
                      "as environmental variable (\"PIPER_GLOB_CONF_XML\"), "
                      "or in Piper root directory.")
         raise ValueError(error_msg)
-
-    # Find Piper QScripts dir:
-    #   Check environmental variable PIPER_QSCRIPTS_DIR
-    #   then the config file
     piper_qscripts_dir = (os.environ.get("PIPER_QSCRIPTS_DIR") or
                           config['piper']['path_to_piper_qscripts'])
     if not piper_qscripts_dir:
         error_msg = ("Could not find Piper QScripts directory in config file or "
                     "as environmental variable (\"PIPER_QSCRIPTS_DIR\").")
         raise ValueError(error_msg)
-
-    LOG.info('Building workflow command line(s) for '
-             'project "{}" / workflow "{}"'.format(project, workflow_name))
-    ## NOTE This key will probably exist on the project level, and may have multiple values.
-    ##      Workflows may imply a number of substeps (e.g. basic = qc, alignment, etc.) ?
+    LOG.info('Building workflow command line(s) for project "{}" / workflow '
+             '"{}"'.format(project, workflow_name))
     try:
         setup_xml_path = project.setup_xml_path
     except AttributeError:
         error_msg = ('Project "{}" has no setup.xml file. Skipping project '
                      'command-line generation.'.format(project))
         raise ValueError(error_msg)
-
     cl = workflows.return_cl_for_workflow(workflow_name=workflow_name,
                                           qscripts_dir_path=piper_qscripts_dir,
                                           setup_xml_path=setup_xml_path,
                                           global_config_path=piper_global_config_path,
-                                          output_dir=project.analysis_dir)
+                                          output_dir=project.analysis_dir,
+                                          exec_mode=exec_mode)
     # Blank out the file if it already exists
     safe_makedir(os.path.dirname(exit_code_path))
     open(exit_code_path, 'w').close()
