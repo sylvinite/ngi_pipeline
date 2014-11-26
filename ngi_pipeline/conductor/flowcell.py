@@ -188,7 +188,9 @@ def setup_analysis_directory_structure(fc_dir, projects_to_analyze,
         project_sl_dir = os.path.join(analysis_top_dir, "DATA", project_name)
         if create_files:
             safe_makedir(project_dir, 0770)
-            do_symlink(project_dir, project_sl_dir)
+            if not project_dir == project_sl_dir and \
+               not os.path.exists(project_sl_dir):
+                os.symlink(project_dir, project_sl_dir)
         try:
             project_obj = projects_to_analyze[project_dir]
         except KeyError:
