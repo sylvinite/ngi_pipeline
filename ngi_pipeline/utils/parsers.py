@@ -61,13 +61,9 @@ def get_slurm_job_status(slurm_job_id):
         # actual sbatch command for the bash interpreter? Unclear.
     except ValueError:
         raise TypeError("SLURM Job ID not an integer: {}".format(slurm_job_id))
-    for x in xrange(3):
-        LOG.info('Checking slurm job status with cl "{}"...'.format(check_cl))
-        job_status = subprocess.check_output(shlex.split(check_cl))
-        LOG.info('job status is for job {} "{}"'.format(slurm_job_id, job_status.strip()))
-        if job_status: break
-        LOG.info("Waiting 5 seconds to verify null job status...")
-        time.sleep(5)
+    LOG.info('Checking slurm job status with cl "{}"...'.format(check_cl))
+    job_status = subprocess.check_output(shlex.split(check_cl))
+    LOG.info('job status is for job {} "{}"'.format(slurm_job_id, job_status.strip()))
     if not job_status:
         raise ValueError("No such slurm job found: {}".format(slurm_job_id))
     else:
@@ -124,10 +120,10 @@ def determine_library_prep_from_fcid(project_id, sample_name, fcid):
                         seqrun_runid = seqrun["seqrunid"]
                         if seqrun_runid == fcid:
                             return libprep['libprepid']
-                    else:
-                        raise CharonError("No match", 404)
                 else:
                     raise CharonError("No seqruns found!", 404)
+            else:
+                raise CharonError("No match", 404)
         else:
             raise CharonError("No libpreps found!", 404)
     except CharonError as e:
