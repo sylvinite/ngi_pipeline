@@ -23,7 +23,7 @@ from ngi_pipeline.log.loggers import log_process_non_blocking, minimal_logger
 from ngi_pipeline.utils.filesystem import load_modules, execute_command_line, rotate_file, safe_makedir
 from ngi_pipeline.utils.classes import with_ngi_config
 from ngi_pipeline.utils.parsers import parse_lane_from_filename, find_fastq_read_pairs_from_dir, \
-                                       get_flowcell_id_from_dirtree
+                                       get_flowcell_id_from_dirtree, get_slurm_job_status
 
 LOG = minimal_logger(__name__)
 
@@ -95,6 +95,17 @@ def analyze_seqrun(project, sample, libprep, seqrun, exec_mode="sbatch",
                 piper_cl = build_piper_cl(project, workflow_subtask, exit_code_path, config)
                 slurm_job_id = sbatch_piper_seqrun([setup_xml_cl, piper_cl], workflow_subtask,
                                                    project, sample, libprep, seqrun)
+                # Time delay to let sbatch get its act together (takes a few seconds to be visible with sacct)
+                for x in xrange(5):
+                    try:
+                        get_slurm_job_status(slurm_job_id)
+                        break
+                    except ValueError:
+                        time.sleep(5)
+                else:
+                    LOG.error('sbatch file for seqrun {}/{}/{}/{} did not '
+                              'queue properly! Job ID {} cannot be '
+                              'found.'.format(project, sample, libprep, seqrun, slurm_job_id))
                 try:
                     record_process_seqrun(project=project,
                                           sample=sample,
@@ -174,6 +185,18 @@ def analyze_sample(project, sample, exec_mode="local", config=None, config_file_
                         slurm_job_id = sbatch_piper_sample([setup_xml_cl, piper_cl],
                                                            workflow_subtask,
                                                            project, sample)
+                        # Time delay to let sbatch get its act together (takes a few seconds to be visible with sacct)
+                        for x in xrange(5):
+                            try:
+                                get_slurm_job_status(slurm_job_id)
+                                break
+                            except ValueError:
+                                time.sleep(5)
+                        else:
+                            LOG.error('sbatch file for sample {}/{} did not '
+                                      'queue properly! Job ID {} cannot be '
+                                      'found.'.format(project, sample, slurm_job_id))
+
                         process_id = None
                     else:
                         launch_piper_job(setup_xml_cl, project)
@@ -311,7 +334,7 @@ def sbatch_piper_seqrun(command_line_list, workflow_name, project, sample, libpr
         relevant_alignment_files = glob.glob(os.path.join(perm_aln_dir, relevant_alignment_files_pattern))
         bash_conditional = \
         ('source activate {conda_environment}\n'
-         'if [[ $(python {scripts_dir}/check_coverage_filesystem.py -p {perm_qc_dir} -s {sample_id} -c {req_coverage} && echo $?) ]]; then\n'
+         'if [[ $(python {scripts_dir}/check_coverage_filesystem.py -p {perm_qc_dir} -s {sample_id} -c {req_coverage}) ]]; then\n'
          '   rsync -a {perm_aln_dir}/ {scratch_aln_dir}/\n'
          '   rsync -a {perm_qc_dir}/ {scratch_qc_dir}/\n'
          '   python {scripts_dir}/start_pipeline_from_project.py \\ \n'
@@ -545,6 +568,7 @@ def build_piper_cl(project, workflow_name, exit_code_path, config):
                                           global_config_path=piper_global_config_path,
                                           output_dir=project.analysis_dir)
     # Blank out the file if it already exists
+    safe_makedir(os.path.dirname(exit_code_path))
     open(exit_code_path, 'w').close()
     return add_exit_code_recording(cl, exit_code_path)
 
@@ -572,13 +596,13 @@ def build_setup_xml(project, config, sample=None, libprep_id=None, seqrun_id=Non
     :raises ValueError: If a required configuration file value is missing
     :raises RuntimeError: If the setupFileCreator returns non-zero
     """
-    if not seqrun_id:
-        LOG.info('Building Piper setup.xml file for project "{}" '
-                 'sample "{}"'.format(project, sample.name))
-    else:
+    if seqrun_id:
         LOG.info('Building Piper setup.xml file for project "{}" '
                  'sample "{}", libprep "{}", seqrun "{}"'.format(project, sample,
                                                                  libprep_id, seqrun_id))
+    else:
+        LOG.info('Building Piper setup.xml file for project "{}" '
+                 'sample "{}"'.format(project, sample.name))
 
     if local_scratch_mode:
         project_top_level_dir = os.path.join("$SNIC_TMP/DATA/", project.dirname)
@@ -627,18 +651,19 @@ def build_setup_xml(project, config, sample=None, libprep_id=None, seqrun_id=Non
                            "--uppnex_project_id {uppmax_proj} "
                            "--reference {reference_path} "
                            "--qos {qos}").format(**cl_args)
-    if not seqrun_id:
-        for libprep in sample:
-            for seqrun in libprep:
-                sample_run_directory = os.path.join(project_top_level_dir, sample.dirname, libprep.name, seqrun.name )
-                for fastq_file_name in os.listdir(sample_run_directory):
-                    fastq_file = os.path.join(sample_run_directory, fastq_file_name)
-                    setupfilecreator_cl += " --input_fastq {}".format(fastq_file)
-    else:
+    if seqrun_id: # This is seqrun-level analysis - get fastq files for one specific seqrun
         sample_run_directory = os.path.join(project_top_level_dir, sample.dirname, libprep_id, seqrun_id )
         for fastq_file_name in sample.libpreps[libprep_id].seqruns[seqrun_id].fastq_files:
             fastq_file = os.path.join(sample_run_directory, fastq_file_name)
             setupfilecreator_cl += " --input_fastq {}".format(fastq_file)
+    else: # This is sample-level analysis - get all fastq files beneath this sample
+        for libprep in sample:
+            for seqrun in libprep:
+                sample_run_directory = os.path.join(project_top_level_dir, sample.dirname, libprep.name, seqrun.name )
+                for fastq_file_name in seqrun.fastq_files:
+                    fastq_file = os.path.join(sample_run_directory, fastq_file_name)
+                    setupfilecreator_cl += " --input_fastq {}".format(fastq_file)
+
 
     project.setup_xml_path = output_xml_filepath
     project.analysis_dir = analysis_dir

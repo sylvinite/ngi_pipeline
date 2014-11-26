@@ -67,11 +67,11 @@ def create_database_populate_schema(location):
 class SeqrunAnalysis(Base):
     __tablename__ = 'seqrunanalysis'
 
-    project_id = Column(String(50))
+    project_id = Column(String(50), primary_key=True)
     project_name = Column(String(50))
     project_base_path = Column(String(100))
-    sample_id = Column(String(50))
-    libprep_id = Column(String(50))
+    sample_id = Column(String(50), primary_key=True)
+    libprep_id = Column(String(50), primary_key=True)
     seqrun_id = Column(String(100), primary_key=True)
     workflow = Column(String(50), primary_key=True)
     engine = Column(String(50))
@@ -95,7 +95,7 @@ class SeqrunAnalysis(Base):
 class SampleAnalysis(Base):
     __tablename__ = 'sampleanalysis'
 
-    project_id = Column(String(50))
+    project_id = Column(String(50), primary_key=True)
     project_name = Column(String(50))
     project_base_path = Column(String(100))
     sample_id = Column(String(50), primary_key=True)
