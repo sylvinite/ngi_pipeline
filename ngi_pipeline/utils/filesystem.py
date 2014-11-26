@@ -199,6 +199,7 @@ def recreate_project_from_filesystem(project_dir,
                                      restrict_to_libpreps=None,
                                      restrict_to_seqruns=None,
                                      force_create_project=False,
+                                     charon_access=True,
                                      config=None, config_file_path=None):
     """Recreates the full project/sample/libprep/seqrun set of
     NGIObjects using the directory tree structure."""
@@ -207,28 +208,28 @@ def recreate_project_from_filesystem(project_dir,
     if not restrict_to_libpreps: restrict_to_libpreps = []
     if not restrict_to_seqruns: restrict_to_seqruns = []
 
-    base_path, project_name = os.path.split(project_dir)
-    if not project_name:
-        base_path, project_name = os.path.split(base_path)
-    LOG.info('Setting up project "{}"'.format(project_name))
-    try:
-        # This requires Charon access -- maps e.g. "Y.Mom_14_01" to "P123"
-        project_id = get_project_id_from_name(project_name)
-    except (CharonError, ValueError, Timeout) as e:
-        if hasattr(e, "status_code") and e.status_code == 404:
-            LOG.info(('Creating new project {project} with project '
-                      'id "{project}"'.format(project=project_name)))
-            project_id = project_name
+    if os.path.islink(project_dir):
+        real_project_dir = os.path.abspath(project_dir)
+        syml_project_dir = os.path.abspath(project_dir)
+    else:
+        real_project_dir = os.path.abspath(project_dir)
+        search_dir = os.path.join(os.path.dirname(project_dir), "*")
+        sym_files =  filter(os.path.islink, glob.glob(search_dir))
+        for sym_file in sym_files:
+            if os.path.realpath(sym_file) == os.path.realpath(real_project_dir):
+                syml_project_dir = os.path.abspath(sym_file)
+                break
         else:
-            error_msg = ('Cannot proceed with project "{}" due to '
-                         'Charon-related error: {}'.format(project_name, e))
-            raise CharonError(error_msg)
+            syml_project_dir = None
+
+    base_path, project_id = os.path.split(real_project_dir)
+    base_path, project_name = os.path.split(syml_project_dir)
+    LOG.info('Setting up project "{}"'.format(project_id))
     project_obj = NGIProject(name=project_name,
-                             dirname=project_name,
+                             dirname=project_id,
                              project_id=project_id,
                              base_path=config["analysis"]["top_dir"])
-
-    samples_pattern = os.path.join(project_dir, "*")
+    samples_pattern = os.path.join(real_project_dir, "*")
     samples = filter(os.path.isdir, glob.glob(samples_pattern))
     if not samples:
         LOG.warn('No samples found for project "{}"'.format(project_obj))
