@@ -36,6 +36,9 @@ class NGIProject(NGIObject):
         self.project_id = project_id
         self.command_lines = []
 
+    def __unicode__(self):
+        return unicode("{}/{}".format(self.project_id, self.name))
+
 
 class NGISample(NGIObject):
     def __init__(self, *args, **kwargs):
