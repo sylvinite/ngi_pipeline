@@ -25,33 +25,6 @@ class TestSqlAlchemyDB(unittest.TestCase):
     def setUp(self):
         self.process_id = random.randint(2,65536)
 
-#    def test_add_seqrun_analysis(self):
-#        seqrun_analysis = sql_db.SeqrunAnalysis(project_id=self.project_id,
-#                                                sample_id=self.sample_id,
-#                                                libprep_id=self.libprep_id,
-#                                                seqrun_id=self.seqrun_id,
-#                                                lane_num=random.randint(1,8),
-#                                                engine=self.engine,
-#                                                process_id=self.process_id)
-#        self.session.add(seqrun_analysis)
-#        self.session.commit()
-#        # There can be only one()
-#        query = self.session.query(sql_db.SeqrunAnalysis).filter_by(
-#                                        process_id=self.process_id).one()
-#        self.assertEqual(query, seqrun_analysis)
-#
-#        # We should be unable to add another seqrun with the same pid
-#        seqrun_analysis = sql_db.SeqrunAnalysis(project_id="123",
-#                                                sample_id="456",
-#                                                libprep_id="789",
-#                                                seqrun_id="012",
-#                                                lane_num=random.randint(1,8),
-#                                                engine=self.engine,
-#                                                process_id=self.process_id)
-#        self.session.add(seqrun_analysis)
-#        with self.assertRaises(sqlalchemy.orm.exc.FlushError):
-#            self.session.commit()
-
     def test_add_sample_analysis(self):
         sample_analysis = sql_db.SampleAnalysis(project_id=self.project_id,
                                                 sample_id=self.sample_id,
