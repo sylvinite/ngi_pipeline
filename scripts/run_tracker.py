@@ -115,7 +115,7 @@ def transfer_run(run, config):
             LOG.info("Starting transfer of run {} on {}".format(os.path.basename(run), datetime.now()))
             rsync_out.write(started + '\n')
             rsync_out.write('Command: {}\n'.format(' '.join(cl)))
-            rsync_out.write(['=']*len(cl) + '\n')
+            rsync_out.write(''.join(['=']*len(cl)) + '\n')
             subprocess.check_call(cl, stdout=rsync_out, stderr=rsync_err)
         except subprocess.CalledProcessError, e:
             error_msg = ("Transfer for run {} FAILED (exit code {}), "
@@ -215,7 +215,7 @@ def run_bcl2fastq(run, config):
                 LOG.info(started)
                 bcl_out.write(started + '\n')
                 bcl_out.write('Command: {}\n'.format(' '.join(cl)))
-                bcl_out.write(['=']*len(cl) + '\n')
+                bcl_out.write(''.join(['=']*len(cl)) + '\n')
                 subprocess.check_call(cl, stdout=bcl_out, stderr=bcl_err)
             except subprocess.CalledProcessError, e:
                 error_msg = ("BCL to Fastq conversion for {} FAILED (exit code {}), "
