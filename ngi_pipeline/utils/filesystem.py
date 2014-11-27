@@ -306,7 +306,8 @@ def match_files_under_dir(dirname, pattern, pt_style="regex", realpath=True):
                 else:
                     matches.append(os.path.abspath(file_path))
         else: # regex-style
-            file_paths = filter(pt_comp.search, filenames)
+            file_matches = filter(pt_comp.search, filenames)
+            file_paths = [ os.path.join(root, filename) for filename in file_matches ]
             if file_paths:
                 if realpath:
                     matches.extend(map(os.path.realpath, file_paths))

@@ -69,12 +69,12 @@ def analyze(project, sample, exec_mode="sbatch", config=None, config_file_path=N
                     slurm_job_id = sbatch_piper_sample([setup_xml_cl, piper_cl],
                                                        workflow_subtask,
                                                        project, sample)
-                    for x in xrange(5): # Time delay to let sbatch get its act together (takes a few seconds to be visible with sacct)
+                    for x in xrange(10): # Time delay to let sbatch get its act together (takes a few seconds to be visible with sacct)
                         try:
                             get_slurm_job_status(slurm_job_id)
                             break
                         except ValueError:
-                            time.sleep(5)
+                            time.sleep(2)
                     else:
                         LOG.error('sbatch file for sample {}/{} did not '
                                   'queue properly! Job ID {} cannot be '
@@ -169,8 +169,11 @@ def sbatch_piper_sample(command_line_list, workflow_name, project, sample, libpr
     sbatch_extra_params = config.get("slurm", {}).get("extra_params", {})
     for param, value in sbatch_extra_params.iteritems():
         sbatch_text_list.append("#SBATCH {} {}\n\n".format(param, value))
-    for module_name in config.get("piper", {}).get("load_modules", []):
-        sbatch_text_list.append("module load {}".format(module_name))
+    modules_to_load = config.get("piper", {}).get("load_modules", [])
+    if modules_to_load:
+        sbatch_text_list.append("\n# Load requires modules for Piper")
+        for module_name in modules_to_load:
+            sbatch_text_list.append("module load {}".format(module_name))
     # Fastq files to copy
     sample_fq_file_pattern = "^{}.*\.(fastq|fq)(\.gz|\.gzip|\.bz2)?$".format(sample.name)
     fq_files_to_copy = match_files_under_dir(dirname=perm_data_dir,
@@ -182,14 +185,20 @@ def sbatch_piper_sample(command_line_list, workflow_name, project, sample, libpr
     qc_files_to_copy = glob.glob(os.path.join(perm_qc_dir, sample_analysis_file_pattern))
     input_files_list = [ fq_files_to_copy, aln_files_to_copy, qc_files_to_copy ]
     output_dirs_list = [ scratch_data_dir, scratch_aln_dir, scratch_qc_dir ]
-    for input_files, output_dir in zip(input_files_list, output_dirs_list):
-        sbatch_text_list.append("mkdir -p {}".format(output_dir))
-        sbatch_text_list.append(("rsync -a {input_files} "
-                                 "{output_directory}").format(input_files=" ".join(input_files),
-                                                              output_directory=output_dir))
+    comment_txt_list = ["\n# Copy fastq files for sample",
+                        "\n# Copy any pre-existing alignment files",
+                        "\n# Copy any pre-existing alignment qc files"]
+    for comment_text, input_files, output_dir in zip(comment_txt_list, input_files_list, output_dirs_list):
+        if input_files:
+            sbatch_text_list.append(comment_text)
+            sbatch_text_list.append("mkdir -p {}".format(output_dir))
+            sbatch_text_list.append(("rsync -a {input_files} "
+                                     "{output_directory}/").format(input_files=" ".join(input_files),
+                                                                  output_directory=output_dir))
+    sbatch_text_list.append("\n# Run the actual commands")
     for command_line in command_line_list:
         sbatch_text_list.append(command_line)
-    # Copy new analysis data back when finished
+    sbatch_text_list.append("\n#Copy back the resulting analysis files")
     sbatch_text_list.append("rsync -a {}/ {}/\n".format(scratch_analysis_dir, perm_analysis_dir))
 
     # Write the sbatch file

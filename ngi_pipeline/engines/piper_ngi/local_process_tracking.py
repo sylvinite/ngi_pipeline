@@ -47,6 +47,12 @@ def update_charon_with_local_jobs_status():
                     LOG.info('Workflow "{}" for {} finished succesfully. '
                              'Recording status {} in Charon'.format(workflow, label,
                                                                     set_status))
+                    # Parse seqrun output results
+                    piper_qc_dir = os.path.join(project_base_path, "ANALYSIS",
+                                                sample_id, "02_preliminary_alignment_qc")
+                    ## TODO make this so it updates all the seqruns individually too
+                    ##      this is just for testing
+                    parse_mean_autosomal_coverage_for_sample(piper_qc_dir, sample_id)
                     charon_session.sample_update(projectid=project_id,
                                                  sampleid=sample_id,
                                                  analysis_status=set_status)
