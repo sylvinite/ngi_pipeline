@@ -3,6 +3,7 @@ from __future__ import print_function
 import collections
 import contextlib
 import datetime
+import fnmatch
 import functools
 import glob
 import os
@@ -220,9 +221,11 @@ def recreate_project_from_filesystem(project_dir,
                 break
         else:
             syml_project_dir = None
-
-    base_path, project_id = os.path.split(real_project_dir)
-    base_path, project_name = os.path.split(syml_project_dir)
+    project_id = os.path.split(real_project_dir)[1]
+    if syml_project_dir:
+        project_name = os.path.split(syml_project_dir)[1]
+    else: # project name is the same as project id (Uppsala perhaps)
+        project_name = project_id
     LOG.info('Setting up project "{}"'.format(project_id))
     project_obj = NGIProject(name=project_name,
                              dirname=project_id,
@@ -265,11 +268,48 @@ def recreate_project_from_filesystem(project_dir,
                 LOG.info('Setting up seqrun "{}"'.format(seqrun_name))
                 seqrun_obj = libprep_obj.add_seqrun(name=seqrun_name,
                                                           dirname=seqrun_name)
-                pattern = re.compile(".*\.(fastq|fq)(\.gz|\.gzip|\.bz2)?$")
-                all_files = glob.glob(os.path.join(seqrun_dir, "*"))
-                fastq_files = filter(os.path.isfile, filter(pattern.match, all_files))
-                for fq_file in fastq_files:
+                for fq_file in fastq_files_under_dir(seqrun_dir):
                     fq_name = os.path.basename(fq_file)
                     LOG.info('Adding fastq file "{}" to seqrun "{}"'.format(fq_name, seqrun_obj))
                     seqrun_obj.add_fastq_files([fq_name])
     return project_obj
+
+
+def fastq_files_under_dir(dirname, realpath=True):
+    return match_files_under_dir(dirname,
+                                 pattern=".*\.(fastq|fq)(\.gz|\.gzip|\.bz2)?$",
+                                 pt_style="regex",
+                                 realpath=realpath)
+
+
+def match_files_under_dir(dirname, pattern, pt_style="regex", realpath=True):
+    """Find all the files under a directory that match pattern.
+
+    :parm str dirname: The directory under which to search
+    :param str pattern: The pattern against which to match
+    :param str pt_style: pattern style, "regex" or "shell"
+    :param bool realpath: If true, dereferences symbolic links
+    """
+    if pt_style not in ("regex", "shell"):
+        LOG.warn('Chosen pattern style "{}" invalid (must be "regex" or "shell"); '
+                 'falling back to "regex".')
+        pt_style = "regex"
+    if pt_style == "regex": pt_comp = re.compile(pattern)
+    matches = []
+    for root, dirnames, filenames in os.walk(dirname):
+        if pt_style == "shell":
+            for filename in fnmatch.filter(filenames, pattern):
+                match = os.path.abspath(os.path.join(root, filename))
+                file_path = os.path.join(root, filename)
+                if realpath:
+                    matches.append(os.path.realpath(file_path))
+                else:
+                    matches.append(os.path.abspath(file_path))
+        else: # regex-style
+            file_paths = filter(pt_comp.search, filenames)
+            if file_paths:
+                if realpath:
+                    matches.extend(map(os.path.realpath, file_paths))
+                else:
+                    matches.extend(map(os.path.abspath, file_paths))
+    return matches

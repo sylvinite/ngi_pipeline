@@ -91,12 +91,14 @@ def workflow_dna_variantcalling(qscripts_dir_path, setup_xml_path, global_config
                  " -run")
     if output_dir:
         cl_string += " --output_directory {output_dir}"
-    if exec_mode == "local":
-        num_threads = int(config.get("piper", {}).get("threads")) or 16
-        cl_string += " --number_of_threads {num_threads}"
+    if exec_mode == "sbatch":
+        # Execute from within an sbatch file (run jobs on the local node)
+        num_threads = int(config.get("piper", {}).get("threads") or 16)
         job_runner = "Shell"
         scatter_gather = 1
-    else: # exec_mode == "sbatch"
+    else: # exec_mode == "local"
+        # Start a local process that sbatches jobs
         job_runner = "Drmaa"
         scatter_gather = 23
+        num_threads = 1
     return cl_string.format(**locals())
