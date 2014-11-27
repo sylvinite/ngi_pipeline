@@ -110,7 +110,7 @@ def transfer_run(run, config):
     remote = "{}@{}:{}".format(r_user, r_host, r_dir)
     cl.extend([run, remote])
 
-    with open('rsync.out', 'w') as rsync_out and open('rsync.err') as rsync_err:
+    with open('rsync.out', 'w') as rsync_out, open('rsync.err', 'w') as rsync_err:
         try:
             LOG.info("Starting transfer of run {} on {}".format(os.path.basename(run), datetime.now()))
             rsync_out.write(started + '\n')
@@ -197,7 +197,7 @@ def run_bcl2fastq(run, config):
         minimum = cl_options.get('minimum-trimmed-reads')
         if minimum and type(minimum) is int:
             cl.extend(['--minimum-trimmed-reads', minimum])
-        if cl_options.get('tiles')
+        if cl_options.get('tiles'):
             cl.extend(['--tiles', cl_options.get('tiles')])
         #XXX I guess that this one will be deduced from the Samplesheet
         if cl_options.get('use-base-mask'):
@@ -208,7 +208,7 @@ def run_bcl2fastq(run, config):
             cl.append('--write-fastq-reverse-complement')
 
         # Execute bcl conversion and demultiplexing
-        with open('bcl2fastq.out', 'w') as bcl_out and open('bcl2fastq.err') as bcl_err:
+        with open('bcl2fastq.out', 'w') as bcl_out, open('bcl2fastq.err', 'w') as bcl_err:
             try:
                 started = ("BCL to FASTQ conversion and demultiplexing started for "
                            " run {} on {}".format(os.path.basename(run), datetime.now()))
