@@ -125,7 +125,7 @@ def transfer_run(run, config):
             raise e
 
     LOG.info('Adding run {} to {}'.format(os.path.basename(run), config['transfer_file']))
-    with open(config['transfer_file'], 'wa') as tf:
+    with open(config['transfer_file'], 'a') as tf:
         tsv_writer = csv.writer(tf, delimiter='\t')
         tsv_writer.writerow([os.path.basename(run), str(datetime.now())])
 
