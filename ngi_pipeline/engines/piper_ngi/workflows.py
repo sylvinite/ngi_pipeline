@@ -39,18 +39,18 @@ def return_cl_for_workflow(workflow_name, qscripts_dir_path, setup_xml_path, glo
                              config, exec_mode, output_dir) 
 
 
-def workflow_dna_alignonly(*args, **kwargs):
-    """Return the command line for basic DNA Alignment.
-
-    :param strs qscripts_dir_path: The path to the Piper qscripts directory.
-    :param str setup_xml_path: The path to the setup.xml file.
-    :param dict global_config_path: The path to the Piper-specific globalConfig file.
-
-    :returns: The Piper command to be executed.
-    :rtype: str
-    """
-    # Same command line but with one additional option
-    return workflow_dna_variantcalling(*args, **kwargs) + " --alignment_and_qc" + " --retry_failed 1"
+#def workflow_dna_alignonly(*args, **kwargs):
+#    """Return the command line for basic DNA Alignment.
+#
+#    :param strs qscripts_dir_path: The path to the Piper qscripts directory.
+#    :param str setup_xml_path: The path to the setup.xml file.
+#    :param dict global_config_path: The path to the Piper-specific globalConfig file.
+#
+#    :returns: The Piper command to be executed.
+#    :rtype: str
+#    """
+#    # Same command line but with one additional option
+#    return workflow_dna_variantcalling(*args, **kwargs) + " --alignment_and_qc" + " --retry_failed 1"
 
 
 def workflow_merge_process_variantcall(*args, **kwargs):
