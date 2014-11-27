@@ -112,7 +112,8 @@ def transfer_run(run, config):
 
     with open('rsync.out', 'w') as rsync_out, open('rsync.err', 'w') as rsync_err:
         try:
-            LOG.info("Starting transfer of run {} on {}".format(os.path.basename(run), datetime.now()))
+            started = ("Started transfer of run {} on {}".format(os.path.basename(run), datetime.now()))
+            LOG.info(started)
             rsync_out.write(started + '\n')
             rsync_out.write('Command: {}\n'.format(' '.join(cl)))
             rsync_out.write(''.join(['=']*len(cl)) + '\n')
@@ -223,8 +224,10 @@ def run_bcl2fastq(run, config):
                                                         os.path.basename(run), str(e.returncode)))
                 raise e
 
+        LOG.info(("BCL to FASTQ conversion and demultiplexing finished for "
+                  "run {} on {}".format(os.path.basename(run), datetime.now())))
         # Transfer the processed data to the analysis server
-        transfer_run(run)
+        transfer_run(run, config)
 
 
 if __name__=="__main__":
