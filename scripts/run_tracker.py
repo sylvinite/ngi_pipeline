@@ -100,10 +100,10 @@ def transfer_run(run, config):
     cl.append('--chmod=g+rw')
     # rsync works in a really funny way, if you don't understand this, refer to 
     # this note: http://silentorbit.com/notes/2013/08/rsync-by-extension/
-    cl.append("--include '*/'")
+    cl.append("--include=*/")
     for to_include in config['sync']['include']:
-        cl.append("--include '{}'".format(to_include))
-    cl.append("--exclude '*'")
+        cl.append("--include={}".format(to_include))
+    cl.extend(["--exclude=*", "--prune-empty-dirs"])
     r_user = config['sync']['user']
     r_host = config['sync']['host']
     r_dir = config['sync']['data_archive']
