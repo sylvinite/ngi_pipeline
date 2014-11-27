@@ -109,29 +109,6 @@ def update_charon_with_local_jobs_status():
         session.commit()
 
 
-#def parse_mean_autosomal_coverage_for_seqrun(piper_qc_dir, sample_id, seqrun_id=None, fcid=None):
-#    """This will return an integer value representing the total autosomal coverage
-#    for a particular seqrun as gleaned from the qualimapReport.html present in
-#    piper_qc_dir.
-#
-#    :param str piper_qc_dir: The path to the Piper qc dir (02_preliminary_alignment_qc at time of writing)
-#    :param str sample_id: The sample name (e.g. P1170_105)
-#    :param str seqrun_id: The run id (e.g. 140821_D00458_0029_AC45JGANXX) (optional) (specify either this or fcid)
-#    :param str fcid: The FCID (optional) (specify either this or seqrun_id)
-#
-#    :returns: The mean autosomal coverage
-#    :rtype: int
-#
-#    :raises OSError: If the qc path specified is missing or otherwise inaccessible
-#    :raises RuntimeError: If you specify both the seqrun_id and fcid and they don't match
-#    :raises ValueError: If arguments are incorrect
-#    :raises TypeError: If you don't pass one of seqrun_id or fcid
-#    """
-#    if not (seqrun_id or fcid):
-#        raise TypeError('{}() requires a value for either "seqrun_id" or "fcid"'.format(inspect.stack()[0][3]))
-#    return _parse_mean_coverage_from_qualimap(piper_qc_dir, sample_id, seqrun_id, fcid)
-
-
 def parse_mean_autosomal_coverage_for_sample(piper_qc_dir, sample_id):
     """This will return an integer value representing the total autosomal coverage
     for a particular sample as gleaned from the qualimapReport.html present in
@@ -290,64 +267,6 @@ def update_seq_run_for_lane(seqrun_dict, lane_alignment_metrics):
             seqrun_dict[field][current_lane] =  lane_alignment_metrics[field]
     seqrun_dict["mean_autosomal_coverage"] = seqrun_dict.get("mean_autosomal_coverage", 0) + lane_alignment_metrics["mean_autosomal_coverage"]
 
-
-#def record_process_seqrun(project, sample, libprep, seqrun, workflow_subtask,
-#                          analysis_module_name, analysis_dir, process_id=None, slurm_job_id=None):
-#    LOG.info('Recording job id "{}" for project "{}", sample "{}", libprep "{}", '
-#             'seqrun "{}", workflow "{}"'.format((slurm_job_id or process_id), project, sample, libprep,
-#                                                 seqrun, workflow_subtask))
-#    with get_db_session() as session:
-#        seqrun_db_obj = SeqrunAnalysis(project_id=project.project_id,
-#                                       project_name=project.name,
-#                                       project_base_path=project.base_path,
-#                                       sample_id=sample.name,
-#                                       libprep_id=libprep.name,
-#                                       seqrun_id=seqrun.name,
-#                                       engine=analysis_module_name,
-#                                       workflow=workflow_subtask,
-#                                       analysis_dir=analysis_dir,
-#                                       process_id=process_id,
-#                                       slurm_job_id=slurm_job_id)
-#        try:
-#            session.add(seqrun_db_obj)
-#            for attempts in range(3):
-#                try:
-#                    session.commit()
-#                    LOG.info('Successfully recorded job ID "{}" for project "{}", sample "{}", '
-#                             'libprep "{}", seqrun "{}", workflow "{}"'.format((slurm_job_id or process_id),
-#                                                                               project,
-#                                                                               sample,
-#                                                                               libprep,
-#                                                                               seqrun,
-#                                                                               workflow_subtask))
-#                    break
-#                except OperationalError as e:
-#                    LOG.warn('Database is locked ("{}"). Waiting...'.format(e))
-#                    time.sleep(15)
-#            else:
-#                raise RuntimeError("Could not write to database after three attempts (locked?)")
-#        except (IntegrityError, RuntimeError) as e:
-#            raise RuntimeError('Could not record slurm job id "{}" for project "{}", sample "{}", '
-#                               'libprep "{}", seqrun "{}", workflow "{}": {}'.format((slurm_job_id or process_id),
-#                                                                                 project,
-#                                                                                 sample,
-#                                                                                 libprep,
-#                                                                                 seqrun,
-#                                                                                 workflow_subtask,
-#                                                                                 e))
-#        try:
-#            set_status = "RUNNING"
-#            LOG.info(('Updating Charon status for project/sample/libprep/seqrun '
-#                      '{}/{}/{}/{} to {}').format(project, sample, libprep, seqrun, set_status))
-#            CharonSession().seqrun_update(projectid=project.project_id,
-#                                          sampleid=sample.name,
-#                                          libprepid=libprep.name,
-#                                          seqrunid=seqrun.name,
-#                                          alignment_status=set_status)
-#        except CharonError as e:
-#            LOG.warn('Could not update Charon status for project/sample/libprep/seqrun '
-#                     '{}/{}/{}/{} due to error: {}'.format(project, sample, libprep, seqrun, e))
-#
 
 def record_process_sample(project, sample, workflow_subtask, analysis_module_name,
                           analysis_dir, process_id=None, slurm_job_id=None, config=None):
