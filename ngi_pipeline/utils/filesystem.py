@@ -208,8 +208,8 @@ def recreate_project_from_filesystem(project_dir,
     if not restrict_to_libpreps: restrict_to_libpreps = []
     if not restrict_to_seqruns: restrict_to_seqruns = []
 
-    if os.path.islink(project_dir):
-        real_project_dir = os.path.abspath(project_dir)
+    if os.path.islink(os.path.abspath(project_dir)):
+        real_project_dir = os.path.realpath(project_dir)
         syml_project_dir = os.path.abspath(project_dir)
     else:
         real_project_dir = os.path.abspath(project_dir)
