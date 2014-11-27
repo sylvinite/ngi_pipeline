@@ -64,34 +64,6 @@ def create_database_populate_schema(location):
     return engine
 
 
-class SeqrunAnalysis(Base):
-    __tablename__ = 'seqrunanalysis'
-
-    project_id = Column(String(50), primary_key=True)
-    project_name = Column(String(50))
-    project_base_path = Column(String(100))
-    sample_id = Column(String(50), primary_key=True)
-    libprep_id = Column(String(50), primary_key=True)
-    seqrun_id = Column(String(100), primary_key=True)
-    workflow = Column(String(50), primary_key=True)
-    engine = Column(String(50))
-    analysis_dir = Column(String(100))
-    # Only one of these is ever used
-    process_id = Column(Integer)
-    slurm_job_id = Column(Integer)
-
-    def __repr__(self):
-        return ("<FlowcellRunAnalysis({project_id}/{sample_id}/{libprep_id}/{seqrun_id}: "
-                "job id {job_id}, engine {engine}, "
-                "workflow {workflow})>".format(project_id=self.project_id,
-                                               sample_id=self.sample_id,
-                                               libprep_id=self.libprep_id,
-                                               seqrun_id=self.seqrun_id,
-                                               job_id=(self.slurm_job_id or self.process_id),
-                                               engine=self.engine,
-                                               workflow=self.workflow))
-
-
 class SampleAnalysis(Base):
     __tablename__ = 'sampleanalysis'
 

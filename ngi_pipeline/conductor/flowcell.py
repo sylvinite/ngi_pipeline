@@ -9,7 +9,7 @@ import re
 import sys
 
 from ngi_pipeline.conductor.classes import NGIProject
-from ngi_pipeline.conductor.launchers import launch_analysis_for_seqruns
+from ngi_pipeline.conductor.launchers import launch_analysis
 from ngi_pipeline.database.classes import CharonSession, CharonError
 from ngi_pipeline.database.communicate import get_project_id_from_name
 from ngi_pipeline.database.filesystem import create_charon_entries_from_project
@@ -24,9 +24,7 @@ LOG = minimal_logger(__name__)
 
 UPPSALA_PROJECT_RE = re.compile(r'\w{2}-\d{4}')
 
-## NOTE
-## This is called the key function that needs to be called by Celery when  a new flowcell is delivered
-## from Sthlm or Uppsala
+
 def process_demultiplexed_flowcell(demux_fcid_dir_path, restrict_to_projects=None,
                                    restrict_to_samples=None, restart_failed_jobs=False,
                                    config_file_path=None):
@@ -94,20 +92,15 @@ def process_demultiplexed_flowcells(demux_fcid_dirs, restrict_to_projects=None,
         LOG.info(error_message)
         sys.exit("Quitting: " + error_message)
     else:
-        # Don't need the dict functionality anymore; revert to list
-        projects_to_analyze = projects_to_analyze.values()
+        projects_to_analyze = projects_to_analyze.values() # Don't need the dict functionality anymore; revert to list
     for project in projects_to_analyze:
         if UPPSALA_PROJECT_RE.match(project.project_id):
             LOG.info('Creating Charon records for Uppsala project "{}" if they are missing'.format(project))
             create_charon_entries_from_project(project)
-    # The automatic analysis that occurs after flowcells are delivered is
-    # only at the flowcell level. Another intermittent check determines if
-    # conditions are met for sample-level analysis to proceed and launches
-    # that if so.
-    launch_analysis_for_seqruns(projects_to_analyze, restart_failed_jobs)
+    launch_analysis(projects_to_analyze, restart_failed_jobs)
 
 
-### FIXME rework so that the creation of the NGIObjects and the actual creation of files are different functions?
+### TODO rework so that the creation of the NGIObjects and the actual creation of files are different functions?
 @with_ngi_config
 def setup_analysis_directory_structure(fc_dir, projects_to_analyze,
                                        restrict_to_projects=None, restrict_to_samples=None,
