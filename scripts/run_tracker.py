@@ -95,39 +95,40 @@ def transfer_run(run, config):
     :param dict config: Parsed configuration
     """
 
-    cl = ['rsync', '-a']
-    # Add R/W permissions to the group
-    cl.append('--chmod=g+rw')
-    # rsync works in a really funny way, if you don't understand this, refer to 
-    # this note: http://silentorbit.com/notes/2013/08/rsync-by-extension/
-    cl.append("--include=*/")
-    for to_include in config['sync']['include']:
-        cl.append("--include={}".format(to_include))
-    cl.extend(["--exclude=*", "--prune-empty-dirs"])
-    r_user = config['sync']['user']
-    r_host = config['sync']['host']
-    r_dir = config['sync']['data_archive']
-    remote = "{}@{}:{}".format(r_user, r_host, r_dir)
-    cl.extend([run, remote])
+    with chdir(run):
+        cl = ['rsync', '-av']
+        # Add R/W permissions to the group
+        cl.append('--chmod=g+rw')
+        # rsync works in a really funny way, if you don't understand this, refer to 
+        # this note: http://silentorbit.com/notes/2013/08/rsync-by-extension/
+        cl.append("--include=*/")
+        for to_include in config['sync']['include']:
+            cl.append("--include={}".format(to_include))
+        cl.extend(["--exclude=*", "--prune-empty-dirs"])
+        r_user = config['sync']['user']
+        r_host = config['sync']['host']
+        r_dir = config['sync']['data_archive']
+        remote = "{}@{}:{}".format(r_user, r_host, r_dir)
+        cl.extend([run, remote])
 
-    with open('rsync.out', 'w') as rsync_out, open('rsync.err', 'w') as rsync_err:
-        try:
-            started = ("Started transfer of run {} on {}".format(os.path.basename(run), datetime.now()))
-            LOG.info(started)
-            rsync_out.write(started + '\n')
-            rsync_out.write('Command: {}\n'.format(' '.join(cl)))
-            rsync_out.write(''.join(['=']*len(cl)) + '\n')
-            subprocess.check_call(cl, stdout=rsync_out, stderr=rsync_err)
-        except subprocess.CalledProcessError, e:
-            error_msg = ("Transfer for run {} FAILED (exit code {}), "
-                         "please check log files rsync.out and rsync.err".format(
-                                                    os.path.basename(run), str(e.returncode)))
-            raise e
+        with open('rsync.out', 'w') as rsync_out, open('rsync.err', 'w') as rsync_err:
+            try:
+                started = ("Started transfer of run {} on {}".format(os.path.basename(run), datetime.now()))
+                LOG.info(started)
+                rsync_out.write(started + '\n')
+                rsync_out.write('Command: {}\n'.format(' '.join(cl)))
+                rsync_out.write(''.join(['=']*len(cl)) + '\n')
+                subprocess.check_call(cl, stdout=rsync_out, stderr=rsync_err)
+            except subprocess.CalledProcessError, e:
+                error_msg = ("Transfer for run {} FAILED (exit code {}), "
+                             "please check log files rsync.out and rsync.err".format(
+                                                        os.path.basename(run), str(e.returncode)))
+                raise e
 
-    LOG.info('Adding run {} to {}'.format(os.path.basename(run), config['transfer_file']))
-    with open(config['transfer_file'], 'a') as tf:
-        tsv_writer = csv.writer(tf, delimiter='\t')
-        tsv_writer.writerow([os.path.basename(run), str(datetime.now())])
+        LOG.info('Adding run {} to {}'.format(os.path.basename(run), config['transfer_file']))
+        with open(config['transfer_file'], 'a') as tf:
+            tsv_writer = csv.writer(tf, delimiter='\t')
+            tsv_writer.writerow([os.path.basename(run), str(datetime.now())])
 
 
 def run_bcl2fastq(run, config):
