@@ -21,6 +21,7 @@ piper:
         - R/2.15.0
     sample:
         required_autosomal_coverage: 28.4
+    threads: 16
 
 supported_genomes:
     "GRCh37": /proj/a2014205/piper_references/gatk_bundle/2.8/b37/human_g1k_v37.fasta

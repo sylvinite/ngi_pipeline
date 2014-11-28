@@ -3,6 +3,7 @@ from __future__ import print_function
 import collections
 import contextlib
 import datetime
+import fnmatch
 import functools
 import glob
 import os
@@ -208,28 +209,30 @@ def recreate_project_from_filesystem(project_dir,
     if not restrict_to_libpreps: restrict_to_libpreps = []
     if not restrict_to_seqruns: restrict_to_seqruns = []
 
-    base_path, project_name = os.path.split(project_dir)
-    if not project_name:
-        base_path, project_name = os.path.split(base_path)
-    LOG.info('Setting up project "{}"'.format(project_name))
-    try:
-        # This requires Charon access -- maps e.g. "Y.Mom_14_01" to "P123"
-        project_id = get_project_id_from_name(project_name)
-    except (CharonError, ValueError, Timeout) as e:
-        if hasattr(e, "status_code") and e.status_code == 404:
-            LOG.info(('Creating new project {project} with project '
-                      'id "{project}"'.format(project=project_name)))
-            project_id = project_name
+    if os.path.islink(os.path.abspath(project_dir)):
+        real_project_dir = os.path.realpath(project_dir)
+        syml_project_dir = os.path.abspath(project_dir)
+    else:
+        real_project_dir = os.path.abspath(project_dir)
+        search_dir = os.path.join(os.path.dirname(project_dir), "*")
+        sym_files =  filter(os.path.islink, glob.glob(search_dir))
+        for sym_file in sym_files:
+            if os.path.realpath(sym_file) == os.path.realpath(real_project_dir):
+                syml_project_dir = os.path.abspath(sym_file)
+                break
         else:
-            error_msg = ('Cannot proceed with project "{}" due to '
-                         'Charon-related error: {}'.format(project_name, e))
-            raise CharonError(error_msg)
+            syml_project_dir = None
+    project_id = os.path.split(real_project_dir)[1]
+    if syml_project_dir:
+        project_name = os.path.split(syml_project_dir)[1]
+    else: # project name is the same as project id (Uppsala perhaps)
+        project_name = project_id
+    LOG.info('Setting up project "{}"'.format(project_id))
     project_obj = NGIProject(name=project_name,
-                             dirname=project_name,
+                             dirname=project_id,
                              project_id=project_id,
                              base_path=config["analysis"]["top_dir"])
-
-    samples_pattern = os.path.join(project_dir, "*")
+    samples_pattern = os.path.join(real_project_dir, "*")
     samples = filter(os.path.isdir, glob.glob(samples_pattern))
     if not samples:
         LOG.warn('No samples found for project "{}"'.format(project_obj))
@@ -266,11 +269,49 @@ def recreate_project_from_filesystem(project_dir,
                 LOG.info('Setting up seqrun "{}"'.format(seqrun_name))
                 seqrun_obj = libprep_obj.add_seqrun(name=seqrun_name,
                                                           dirname=seqrun_name)
-                pattern = re.compile(".*\.(fastq|fq)(\.gz|\.gzip|\.bz2)?$")
-                all_files = glob.glob(os.path.join(seqrun_dir, "*"))
-                fastq_files = filter(os.path.isfile, filter(pattern.match, all_files))
-                for fq_file in fastq_files:
+                for fq_file in fastq_files_under_dir(seqrun_dir):
                     fq_name = os.path.basename(fq_file)
                     LOG.info('Adding fastq file "{}" to seqrun "{}"'.format(fq_name, seqrun_obj))
                     seqrun_obj.add_fastq_files([fq_name])
     return project_obj
+
+
+def fastq_files_under_dir(dirname, realpath=True):
+    return match_files_under_dir(dirname,
+                                 pattern=".*\.(fastq|fq)(\.gz|\.gzip|\.bz2)?$",
+                                 pt_style="regex",
+                                 realpath=realpath)
+
+
+def match_files_under_dir(dirname, pattern, pt_style="regex", realpath=True):
+    """Find all the files under a directory that match pattern.
+
+    :parm str dirname: The directory under which to search
+    :param str pattern: The pattern against which to match
+    :param str pt_style: pattern style, "regex" or "shell"
+    :param bool realpath: If true, dereferences symbolic links
+    """
+    if pt_style not in ("regex", "shell"):
+        LOG.warn('Chosen pattern style "{}" invalid (must be "regex" or "shell"); '
+                 'falling back to "regex".')
+        pt_style = "regex"
+    if pt_style == "regex": pt_comp = re.compile(pattern)
+    matches = []
+    for root, dirnames, filenames in os.walk(dirname):
+        if pt_style == "shell":
+            for filename in fnmatch.filter(filenames, pattern):
+                match = os.path.abspath(os.path.join(root, filename))
+                file_path = os.path.join(root, filename)
+                if realpath:
+                    matches.append(os.path.realpath(file_path))
+                else:
+                    matches.append(os.path.abspath(file_path))
+        else: # regex-style
+            file_matches = filter(pt_comp.search, filenames)
+            file_paths = [ os.path.join(root, filename) for filename in file_matches ]
+            if file_paths:
+                if realpath:
+                    matches.extend(map(os.path.realpath, file_paths))
+                else:
+                    matches.extend(map(os.path.abspath, file_paths))
+    return matches
