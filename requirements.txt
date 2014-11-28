@@ -19,6 +19,6 @@ psutil==2.1.1
 python-dateutil==1.5
 redis==2.10.3
 requests==2.3.0
-tornado==4.0.2
+tornado
 wsgiref==0.1.2
 xmltodict==0.9.0

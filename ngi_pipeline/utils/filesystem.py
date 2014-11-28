@@ -15,8 +15,6 @@ import subprocess
 import tempfile
 
 from ngi_pipeline.conductor.classes import NGIProject
-from ngi_pipeline.database.classes import CharonError
-from ngi_pipeline.database.communicate import get_project_id_from_name
 from ngi_pipeline.log.loggers import minimal_logger
 from ngi_pipeline.utils.classes import with_ngi_config
 
@@ -204,12 +202,15 @@ def recreate_project_from_filesystem(project_dir,
     """Recreates the full project/sample/libprep/seqrun set of
     NGIObjects using the directory tree structure."""
 
+    from ngi_pipeline.database.classes import CharonError
+    from ngi_pipeline.database.communicate import get_project_id_from_name
+
     if not restrict_to_samples: restrict_to_samples = []
     if not restrict_to_libpreps: restrict_to_libpreps = []
     if not restrict_to_seqruns: restrict_to_seqruns = []
 
-    if os.path.islink(project_dir):
-        real_project_dir = os.path.abspath(project_dir)
+    if os.path.islink(os.path.abspath(project_dir)):
+        real_project_dir = os.path.realpath(project_dir)
         syml_project_dir = os.path.abspath(project_dir)
     else:
         real_project_dir = os.path.abspath(project_dir)
