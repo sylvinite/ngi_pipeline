@@ -104,10 +104,17 @@ preprocessing:
     bcl2fastq: 
         path: /path/to/bcl2fastq
         - all command line options of bcl2fastq , i.e runfolder, input-dir, etc.
-    remote:
+    sync:
         user: remote_user_analysis_server
         host: analysis_server
         data_archive: /path/where/to/transfer/data
+        include:
+            - "files"
+            - "to"
+            - "include"
+            - "in"
+            - "the"
+            - "transfer"
 ```
 
 Running the pipeline

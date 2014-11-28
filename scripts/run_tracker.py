@@ -33,10 +33,10 @@ def check_config_options(config):
         config['preprocessing']['miseq_data']
         config['preprocessing']['mfs']
         config['preprocessing']['bcl2fastq']['path']
-        config['preprocessing']['remote']
-        config['preprocessing']['remote']['user']
-        config['preprocessing']['remote']['host']
-        config['preprocessing']['remote']['data_archive']
+        config['preprocessing']['sync']
+        config['preprocessing']['sync']['user']
+        config['preprocessing']['sync']['host']
+        config['preprocessing']['sync']['data_archive']
     except KeyError:
         raise RuntimeError(("Required configuration config not found, please "
             "refer to the README file."))
@@ -94,13 +94,41 @@ def transfer_run(run, config):
     :param str run: Run directory
     :param dict config: Parsed configuration
     """
-    #XXX What needs to be transferred exactly
-    cl = ['rsync', '-a', '--chmod=g+rw']
-    r_user = config['remote']['user']
-    r_host = config['remote']['host']
-    r_dir = config['remote']['data_archive']
-    remote = "{}@{}:{}".format(r_user, r_host, r_dir)
-    cl.extend([run, remote])
+
+    with chdir(run):
+        cl = ['rsync', '-av']
+        # Add R/W permissions to the group
+        cl.append('--chmod=g+rw')
+        # rsync works in a really funny way, if you don't understand this, refer to 
+        # this note: http://silentorbit.com/notes/2013/08/rsync-by-extension/
+        cl.append("--include=*/")
+        for to_include in config['sync']['include']:
+            cl.append("--include={}".format(to_include))
+        cl.extend(["--exclude=*", "--prune-empty-dirs"])
+        r_user = config['sync']['user']
+        r_host = config['sync']['host']
+        r_dir = config['sync']['data_archive']
+        remote = "{}@{}:{}".format(r_user, r_host, r_dir)
+        cl.extend([run, remote])
+
+        with open('rsync.out', 'w') as rsync_out, open('rsync.err', 'w') as rsync_err:
+            try:
+                started = ("Started transfer of run {} on {}".format(os.path.basename(run), datetime.now()))
+                LOG.info(started)
+                rsync_out.write(started + '\n')
+                rsync_out.write('Command: {}\n'.format(' '.join(cl)))
+                rsync_out.write(''.join(['=']*len(cl)) + '\n')
+                subprocess.check_call(cl, stdout=rsync_out, stderr=rsync_err)
+            except subprocess.CalledProcessError, e:
+                error_msg = ("Transfer for run {} FAILED (exit code {}), "
+                             "please check log files rsync.out and rsync.err".format(
+                                                        os.path.basename(run), str(e.returncode)))
+                raise e
+
+        LOG.info('Adding run {} to {}'.format(os.path.basename(run), config['transfer_file']))
+        with open(config['transfer_file'], 'a') as tf:
+            tsv_writer = csv.writer(tf, delimiter='\t')
+            tsv_writer.writerow([os.path.basename(run), str(datetime.now())])
 
 
 def run_bcl2fastq(run, config):
@@ -171,7 +199,7 @@ def run_bcl2fastq(run, config):
         minimum = cl_options.get('minimum-trimmed-reads')
         if minimum and type(minimum) is int:
             cl.extend(['--minimum-trimmed-reads', minimum])
-        if cl_options.get('tiles')
+        if cl_options.get('tiles'):
             cl.extend(['--tiles', cl_options.get('tiles')])
         #XXX I guess that this one will be deduced from the Samplesheet
         if cl_options.get('use-base-mask'):
@@ -182,24 +210,25 @@ def run_bcl2fastq(run, config):
             cl.append('--write-fastq-reverse-complement')
 
         # Execute bcl conversion and demultiplexing
-        # XXX detach so that more runs can be demultiplexed at the same time
-        with open('bcl2fastq.out', 'w') as bcl_out and open('bcl2fastq.err') as bcl_err:
+        with open('bcl2fastq.out', 'w') as bcl_out, open('bcl2fastq.err', 'w') as bcl_err:
             try:
                 started = ("BCL to FASTQ conversion and demultiplexing started for "
                            " run {} on {}".format(os.path.basename(run), datetime.now()))
                 LOG.info(started)
                 bcl_out.write(started + '\n')
                 bcl_out.write('Command: {}\n'.format(' '.join(cl)))
-                bcl_out.write(['=']*len(cl) + '\n')
+                bcl_out.write(''.join(['=']*len(cl)) + '\n')
                 subprocess.check_call(cl, stdout=bcl_out, stderr=bcl_err)
             except subprocess.CalledProcessError, e:
                 error_msg = ("BCL to Fastq conversion for {} FAILED (exit code {}), "
-                             "please check log files bcl2fastq.log and bcl2fastq.err".format(
+                             "please check log files bcl2fastq.out and bcl2fastq.err".format(
                                                         os.path.basename(run), str(e.returncode)))
                 raise e
 
+        LOG.info(("BCL to FASTQ conversion and demultiplexing finished for "
+                  "run {} on {}".format(os.path.basename(run), datetime.now())))
         # Transfer the processed data to the analysis server
-        transfer_run(run)
+        transfer_run(run, config)
 
 
 if __name__=="__main__":
@@ -235,8 +264,8 @@ if __name__=="__main__":
                 if not transferred:
                     LOG.info("Run {} hasn't been transferred yet.".format(run_name))
                     LOG.info('Transferring run {} to {} into {}'.format(run_name,
-                        config['remote']['host'],
-                        config['remote']['data_archive']))
+                        config['sync']['host'],
+                        config['sync']['data_archive']))
                     transfer_run(run, config)
                 else:
                     LOG.info('Run {} already transferred to analysis server, skipping it'.format(run_name))
