@@ -192,14 +192,14 @@ def sbatch_piper_sample(command_line_list, workflow_name, project, sample, libpr
         if input_files:
             sbatch_text_list.append(comment_text)
             sbatch_text_list.append("mkdir -p {}".format(output_dir))
-            sbatch_text_list.append(("rsync -a {input_files} "
+            sbatch_text_list.append(("rsync -rlptoDv {input_files} "
                                      "{output_directory}/").format(input_files=" ".join(input_files),
                                                                   output_directory=output_dir))
     sbatch_text_list.append("\n# Run the actual commands")
     for command_line in command_line_list:
         sbatch_text_list.append(command_line)
     sbatch_text_list.append("\n#Copy back the resulting analysis files")
-    sbatch_text_list.append("rsync -a {}/ {}/\n".format(scratch_analysis_dir, perm_analysis_dir))
+    sbatch_text_list.append("rsync -rlptoDv {}/ {}/\n".format(scratch_analysis_dir, perm_analysis_dir))
 
     # Write the sbatch file
     sbatch_dir = os.path.join(perm_analysis_dir, "sbatch")
