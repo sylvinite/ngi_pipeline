@@ -20,7 +20,7 @@ environment:
 
 
 logging:
-    log_dir: /proj/a2014205/ngi_resources
+    log_file: /proj/a2014205/ngi_resources/ngi_pipeline.log
 
 
 piper:

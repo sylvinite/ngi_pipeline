@@ -1,6 +1,9 @@
 """
 log module
 """
+from __future__ import print_function
+
+
 import logging
 import os
 import sys
@@ -56,12 +59,18 @@ def minimal_logger(namespace, to_file=True, debug=False,
 
     # File logger
     if to_file:
-        config_file_dir = config.get("logging", {}).get("log_dir") or \
-                          os.environ.get("NGI_LOG") or os.getcwd()
-        log_path = os.path.join(config_file_dir, "ngi_pipeline.log")
-        fh = logging.FileHandler(log_path)
-        fh.setLevel(log_level)
-        fh.setFormatter(formatter)
-        log.addHandler(fh)
-
+        log_path = config.get("logging", {}).get("log_file") or \
+                   os.environ.get("NGI_LOGFILE") or \
+                   os.path.join(os.getcwd(), "ngi_pipeline.log")
+        if not os.path.exists(os.path.dirname(log_path)):
+            try:
+                os.makedirs(os.path.dirname(log_path))
+            except OSError:
+                # Can't open log file. Can't log it. Hm.
+                print('ERROR: Cannot open log file "{}".'.format(log_path), file=sys.stderr)
+        else:
+            fh = logging.FileHandler(log_path)
+            fh.setLevel(log_level)
+            fh.setFormatter(formatter)
+            log.addHandler(fh)
     return log
