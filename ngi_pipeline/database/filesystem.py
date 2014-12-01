@@ -8,7 +8,7 @@ from ngi_pipeline.log.loggers import minimal_logger
 LOG = minimal_logger(__name__)
 
 
-def create_charon_entries_from_project(project, best_practice_analysis="variant_calling",
+def create_charon_entries_from_project(project, best_practice_analysis="whole_genome_reseq",
                                        sequencing_facility="NGI-S",
                                        force_overwrite=False, delete_existing=False):
     """Given a project object, creates the relevant entries
