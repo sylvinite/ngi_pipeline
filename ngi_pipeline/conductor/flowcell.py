@@ -97,7 +97,6 @@ def process_demultiplexed_flowcells(demux_fcid_dirs, restrict_to_projects=None,
         if UPPSALA_PROJECT_RE.match(project.project_id):
             LOG.info('Creating Charon records for Uppsala project "{}" if they are missing'.format(project))
             create_charon_entries_from_project(project, sequencing_facility="NGI-U")
-            break
         else:
             # I hate this
             for sample in project:
