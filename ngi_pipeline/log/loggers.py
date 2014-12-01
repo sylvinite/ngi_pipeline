@@ -68,7 +68,8 @@ def minimal_logger(namespace, to_file=True, debug=False,
             except OSError:
                 # Can't open log file. Can't log it. Hm.
                 print('ERROR: Cannot open log file "{}".'.format(log_path), file=sys.stderr)
-        else:
+                log_path = None
+        if log_path:
             fh = logging.FileHandler(log_path)
             fh.setLevel(log_level)
             fh.setFormatter(formatter)
