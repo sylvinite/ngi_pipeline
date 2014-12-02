@@ -269,7 +269,7 @@ def update_seq_run_for_lane(seqrun_dict, lane_alignment_metrics):
 
 
 def record_process_sample(project, sample, workflow_subtask, analysis_module_name,
-                          analysis_dir, process_id=None, slurm_job_id=None, config=None):
+                          process_id=None, slurm_job_id=None, config=None):
     LOG.info('Recording slurm job id "{}" for project "{}", sample "{}", '
              'workflow "{}"'.format(slurm_job_id, project, sample, workflow_subtask))
     with get_db_session() as session:
@@ -279,7 +279,6 @@ def record_process_sample(project, sample, workflow_subtask, analysis_module_nam
                                        sample_id=sample.name,
                                        engine=analysis_module_name,
                                        workflow=workflow_subtask,
-                                       analysis_dir=analysis_dir,
                                        process_id=process_id,
                                        slurm_job_id=slurm_job_id)
         try:
