@@ -187,22 +187,22 @@ def sbatch_piper_sample(command_line_list, workflow_name, project, sample, libpr
     qc_files_to_copy = glob.glob(os.path.join(perm_qc_dir, sample_analysis_file_pattern))
     input_files_list = [ fq_files_to_copy, aln_files_to_copy, qc_files_to_copy ]
     output_dirs_list = [ scratch_data_dir, scratch_aln_dir, scratch_qc_dir ]
-    comment_txt_list = ["\n# Copy fastq files for sample",
-                        "\n# Copy any pre-existing alignment files",
-                        "\n# Copy any pre-existing alignment qc files"]
-    for comment_text, input_files, output_dir in zip(comment_txt_list, input_files_list, output_dirs_list):
+    echo_text_list = ["Copying fastq files for sample",
+                      "Copying any pre-existing alignment files",
+                      "Copying any pre-existing alignment qc files"]
+    for echo_text, input_files, output_dir in zip(echo_text_list, input_files_list, output_dirs_list):
         if input_files:
-            sbatch_text_list.append(comment_text)
+            sbatch_text_list.append("\necho -e '\\n\\n{}'".format(echo_text))
             sbatch_text_list.append("mkdir -p {}".format(output_dir))
-            sbatch_text_list.append(("rsync -rlptoDv {input_files} "
+            sbatch_text_list.append(("rsync -rptoDv {input_files} "
                                      "{output_directory}/").format(input_files=" ".join(input_files),
                                                                   output_directory=output_dir))
     sbatch_text_list.append("\n# Run the actual commands")
     for command_line in command_line_list:
         sbatch_text_list.append(command_line)
-    sbatch_text_list.append("\n#Copy back the resulting analysis files")
+    sbatch_text_list.append("\necho -e '\\n\\nCopying back the resulting analysis files'")
     sbatch_text_list.append("mkdir -p {}".format(perm_analysis_dir))
-    sbatch_text_list.append("rsync -rlptoDv {}/ {}/\n".format(scratch_analysis_dir, perm_analysis_dir))
+    sbatch_text_list.append("rsync -rptoDv {}/ {}/\n".format(scratch_analysis_dir, perm_analysis_dir))
 
     # Write the sbatch file
     sbatch_dir = os.path.join(perm_analysis_dir, "sbatch")
