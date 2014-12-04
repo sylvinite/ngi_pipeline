@@ -4,9 +4,14 @@ ngi_pipeline.log package
 Submodules
 ----------
 
-.. toctree::
+ngi_pipeline.log.loggers module
+-------------------------------
 
-   ngi_pipeline.log.loggers
+.. automodule:: ngi_pipeline.log.loggers
+    :members:
+    :undoc-members:
+    :show-inheritance:
+
 
 Module contents
 ---------------

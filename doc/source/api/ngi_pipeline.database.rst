@@ -4,16 +4,70 @@ ngi_pipeline.database package
 Submodules
 ----------
 
-.. toctree::
+ngi_pipeline.database.classes module
+------------------------------------
 
-   ngi_pipeline.database.classes
-   ngi_pipeline.database.communicate
-   ngi_pipeline.database.filesystem
-   ngi_pipeline.database.local_process_tracking
-   ngi_pipeline.database.test_classes
-   ngi_pipeline.database.test_communicate
-   ngi_pipeline.database.test_filesystem
-   ngi_pipeline.database.test_local_process_tracking
+.. automodule:: ngi_pipeline.database.classes
+    :members:
+    :undoc-members:
+    :show-inheritance:
+
+ngi_pipeline.database.communicate module
+----------------------------------------
+
+.. automodule:: ngi_pipeline.database.communicate
+    :members:
+    :undoc-members:
+    :show-inheritance:
+
+ngi_pipeline.database.filesystem module
+---------------------------------------
+
+.. automodule:: ngi_pipeline.database.filesystem
+    :members:
+    :undoc-members:
+    :show-inheritance:
+
+ngi_pipeline.database.local_process_tracking module
+---------------------------------------------------
+
+.. automodule:: ngi_pipeline.database.local_process_tracking
+    :members:
+    :undoc-members:
+    :show-inheritance:
+
+ngi_pipeline.database.test_classes module
+-----------------------------------------
+
+.. automodule:: ngi_pipeline.database.test_classes
+    :members:
+    :undoc-members:
+    :show-inheritance:
+
+ngi_pipeline.database.test_communicate module
+---------------------------------------------
+
+.. automodule:: ngi_pipeline.database.test_communicate
+    :members:
+    :undoc-members:
+    :show-inheritance:
+
+ngi_pipeline.database.test_filesystem module
+--------------------------------------------
+
+.. automodule:: ngi_pipeline.database.test_filesystem
+    :members:
+    :undoc-members:
+    :show-inheritance:
+
+ngi_pipeline.database.test_local_process_tracking module
+--------------------------------------------------------
+
+.. automodule:: ngi_pipeline.database.test_local_process_tracking
+    :members:
+    :undoc-members:
+    :show-inheritance:
+
 
 Module contents
 ---------------

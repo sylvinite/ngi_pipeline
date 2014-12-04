@@ -8,9 +8,9 @@ Subpackages
 
     ngi_pipeline.conductor
     ngi_pipeline.database
-    ngi_pipeline.distributed
     ngi_pipeline.engines
     ngi_pipeline.log
+    ngi_pipeline.server
     ngi_pipeline.tests
     ngi_pipeline.utils
 

@@ -4,11 +4,30 @@ ngi_pipeline.conductor package
 Submodules
 ----------
 
-.. toctree::
+ngi_pipeline.conductor.classes module
+-------------------------------------
 
-   ngi_pipeline.conductor.classes
-   ngi_pipeline.conductor.flowcell
-   ngi_pipeline.conductor.launchers
+.. automodule:: ngi_pipeline.conductor.classes
+    :members:
+    :undoc-members:
+    :show-inheritance:
+
+ngi_pipeline.conductor.flowcell module
+--------------------------------------
+
+.. automodule:: ngi_pipeline.conductor.flowcell
+    :members:
+    :undoc-members:
+    :show-inheritance:
+
+ngi_pipeline.conductor.launchers module
+---------------------------------------
+
+.. automodule:: ngi_pipeline.conductor.launchers
+    :members:
+    :undoc-members:
+    :show-inheritance:
+
 
 Module contents
 ---------------
