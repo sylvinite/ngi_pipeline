@@ -221,6 +221,7 @@ def sbatch_piper_sample(command_line_list, workflow_name, project, sample, libpr
                               '"DONE"').format(project, sample, libprep, seqrun))
         else:
             LOG.info('Library prep "{}" failed QC, excluding from analysis.'.format(libprep))
+    sbatch_text_list.append("date")
     sbatch_text_list.append("\necho -e '\\n\\nCopying fastq files'")
     if fastq_src_dst_list:
         for src_file, dst_file in fastq_src_dst_list:
@@ -240,6 +241,7 @@ def sbatch_piper_sample(command_line_list, workflow_name, project, sample, libpr
                       "Copying any pre-existing alignment qc files"]
     for echo_text, input_files, output_dir in zip(echo_text_list, input_files_list, output_dirs_list):
         if input_files:
+            sbatch_text_list.append("date")
             sbatch_text_list.append("\necho -e '\\n\\n{}'".format(echo_text))
             sbatch_text_list.append("mkdir -p {}".format(output_dir))
             sbatch_text_list.append(("rsync -rptoDv {input_files} "
@@ -248,6 +250,7 @@ def sbatch_piper_sample(command_line_list, workflow_name, project, sample, libpr
     sbatch_text_list.append("\n# Run the actual commands")
     for command_line in command_line_list:
         sbatch_text_list.append(command_line)
+    sbatch_text_list.append("date")
     sbatch_text_list.append("\necho -e '\\n\\nCopying back the resulting analysis files'")
     sbatch_text_list.append("mkdir -p {}".format(perm_analysis_dir))
     sbatch_text_list.append("rsync -rptoDv {}/ {}/\n".format(scratch_analysis_dir, perm_analysis_dir))
