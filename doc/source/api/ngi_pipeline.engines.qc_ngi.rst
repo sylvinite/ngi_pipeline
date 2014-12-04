@@ -4,9 +4,14 @@ ngi_pipeline.engines.qc_ngi package
 Submodules
 ----------
 
-.. toctree::
+ngi_pipeline.engines.qc_ngi.workflows module
+--------------------------------------------
 
-   ngi_pipeline.engines.qc_ngi.workflows
+.. automodule:: ngi_pipeline.engines.qc_ngi.workflows
+    :members:
+    :undoc-members:
+    :show-inheritance:
+
 
 Module contents
 ---------------
