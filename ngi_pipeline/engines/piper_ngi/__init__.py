@@ -10,6 +10,7 @@ import shutil
 import subprocess
 import time
 
+from ngi_pipeline.database.classes import CharonSession, CharonError
 from ngi_pipeline.engines.piper_ngi import workflows
 from ngi_pipeline.engines.piper_ngi.local_process_tracking import is_sample_analysis_running_local, \
                                                                   record_process_sample
@@ -141,12 +142,12 @@ def sbatch_piper_sample(command_line_list, workflow_name, project, sample, libpr
     # Paths to the various data directories
     project_dirname = project.dirname
     sample_dirname = sample.dirname
-    perm_data_dir = os.path.join(project.base_path, "DATA", os.path.join(project_dirname, sample_dirname))
+    perm_data_dir = os.path.join(project.base_path, "DATA", project_dirname, sample_dirname)
     perm_data_topdir = os.path.join(project.base_path, "DATA", project_dirname)
     perm_analysis_dir = os.path.join(project.base_path, "ANALYSIS", project_dirname)
     perm_aln_dir = os.path.join(perm_analysis_dir, "01_raw_alignments")
     perm_qc_dir = os.path.join(perm_analysis_dir, "02_preliminary_alignment_qc")
-    scratch_data_dir = os.path.join("$SNIC_TMP/DATA/", os.path.join(project_dirname, sample_dirname))
+    scratch_data_dir = os.path.join("$SNIC_TMP/DATA/", project_dirname)
     scratch_analysis_dir = os.path.join("$SNIC_TMP/ANALYSIS/", project_dirname)
     scratch_aln_dir = os.path.join(scratch_analysis_dir, "01_raw_alignments")
     scratch_qc_dir = os.path.join(scratch_analysis_dir, "02_preliminary_alignment_qc")
@@ -160,6 +161,8 @@ def sbatch_piper_sample(command_line_list, workflow_name, project, sample, libpr
     slurm_time = config.get("piper", {}).get("job_walltime", {}).get("workflow_name") or "4-00:00:00"
     slurm_out_log = os.path.join(perm_analysis_dir, "logs", "{}_sbatch.out".format(job_identifier))
     slurm_err_log = os.path.join(perm_analysis_dir, "logs", "{}_sbatch.err".format(job_identifier))
+    for log_file in slurm_out_log, slurm_err_log:
+        rotate_file(log_file)
     sbatch_text = create_sbatch_header(slurm_project_id=slurm_project_id,
                                        slurm_queue=slurm_queue,
                                        num_cores=num_cores,
@@ -176,19 +179,64 @@ def sbatch_piper_sample(command_line_list, workflow_name, project, sample, libpr
         sbatch_text_list.append("\n# Load requires modules for Piper")
         for module_name in modules_to_load:
             sbatch_text_list.append("module load {}".format(module_name))
+
     # Fastq files to copy
-    sample_fq_file_pattern = "^{}.*\.(fastq|fq)(\.gz|\.gzip|\.bz2)?$".format(sample.name)
-    fq_files_to_copy = match_files_under_dir(dirname=perm_data_dir,
-                                             pattern=sample_fq_file_pattern)
+    try:
+        charon_session = CharonSession()
+    except CharonError as e:
+        LOG.warn("Unable to connecto Charon and cannot verify library preps; "
+                 "using all fastq files for analysis ({}).format(e)")
+        charon_session = None
+    fastq_src_dst_list = []
+    for libprep in sample:
+        if charon_session:
+            try:
+                libprep_valid = charon_session.libprep_get(projectid=project.project_id,
+                                                           sampleid=sample.name,
+                                                           libprepid=libprep.name).get("qc") == "PASSED"
+            except CharonError as e:
+                LOG.warn('Cannot verify library prep {} due to Charon error; proceeding '
+                         'with analysis for this libprep (error: {})'.format(libprep, e))
+                libprep_valid = True
+        else: # Cannot connect to Charon; use all libpreps
+            libprep_valid = True
+        if libprep_valid:
+            for seqrun in libprep:
+                aln_status =  charon_session.seqrun_get(projectid=project.project_id,
+                                                        sampleid=sample.name,
+                                                        libprepid=libprep.name,
+                                                        seqrunid=seqrun.name)['alignment_status'] 
+                if aln_status != "DONE":
+                    for fastq in seqrun:
+                        src_file = os.path.join(project.base_path, "DATA", project.dirname,
+                                                sample.dirname, libprep.dirname,
+                                                seqrun.dirname, fastq)
+                        dst_file = os.path.join(scratch_data_dir, sample.dirname,
+                                                libprep.dirname, seqrun.dirname,
+                                                fastq)
+                        fastq_src_dst_list.append([src_file, dst_file])
+                else:
+                    LOG.info(('Skipping project/sample/libprep/seqrun '
+                              '{}/{}/{}/{} because alignment status is '
+                              '"DONE"').format(project, sample, libprep, seqrun))
+        else:
+            LOG.info('Library prep "{}" failed QC, excluding from analysis.'.format(libprep))
+    sbatch_text_list.append("\necho -e '\\n\\nCopying fastq files'")
+    if fastq_src_dst_list:
+        for src_file, dst_file in fastq_src_dst_list:
+            safe_makedir(os.path.dirname(dst_file))
+            sbatch_text_list.append("rsync -rptoDv {} {}".format(src_file, dst_file))
+    else:
+        raise ValueError(('No valid fastq files available to process for '
+                          'project/sample {}/{}'.format(project, sample)))
+
+    # BAM files / Alignment QC files
     sample_analysis_file_pattern = "{sample_name}.*.{sample_name}.*".format(sample_name=sample.name)
-    # BAM files
     aln_files_to_copy = glob.glob(os.path.join(perm_aln_dir, sample_analysis_file_pattern))
-    # Alignment QC files
     qc_files_to_copy = glob.glob(os.path.join(perm_qc_dir, sample_analysis_file_pattern))
-    input_files_list = [ fq_files_to_copy, aln_files_to_copy, qc_files_to_copy ]
-    output_dirs_list = [ scratch_data_dir, scratch_aln_dir, scratch_qc_dir ]
-    echo_text_list = ["Copying fastq files for sample",
-                      "Copying any pre-existing alignment files",
+    input_files_list = [ aln_files_to_copy, qc_files_to_copy ]
+    output_dirs_list = [ scratch_aln_dir, scratch_qc_dir ]
+    echo_text_list = ["Copying any pre-existing alignment files",
                       "Copying any pre-existing alignment qc files"]
     for echo_text, input_files, output_dir in zip(echo_text_list, input_files_list, output_dirs_list):
         if input_files:
@@ -197,6 +245,16 @@ def sbatch_piper_sample(command_line_list, workflow_name, project, sample, libpr
             sbatch_text_list.append(("rsync -rptoDv {input_files} "
                                      "{output_directory}/").format(input_files=" ".join(input_files),
                                                                   output_directory=output_dir))
+
+    ### DEBUG CODE
+    sbatch_text_list.append("\necho -e '\\n\\nTesting file transfer'")
+    sbatch_text_list.append("\necho -e '\\nscratch data directory:'")
+    sbatch_text_list.append("tree {}".format(scratch_data_dir))
+    sbatch_text_list.append(("\nif [[ -e {0} ]]; then\n"
+                             "  echo -e '\\nscratch analysis directory:'\n"
+                             "  tree {0}\nfi").format(scratch_analysis_dir))
+    ###
+
     sbatch_text_list.append("\n# Run the actual commands")
     for command_line in command_line_list:
         sbatch_text_list.append(command_line)
@@ -208,8 +266,7 @@ def sbatch_piper_sample(command_line_list, workflow_name, project, sample, libpr
     sbatch_dir = os.path.join(perm_analysis_dir, "sbatch")
     safe_makedir(sbatch_dir)
     sbatch_outfile = os.path.join(sbatch_dir, "{}.sbatch".format(job_identifier))
-    if os.path.exists(sbatch_outfile):
-        rotate_file(sbatch_outfile)
+    rotate_file(sbatch_outfile)
     with open(sbatch_outfile, 'w') as f:
         f.write("\n".join(sbatch_text_list))
     LOG.info("Queueing sbatch file {} for job {}".format(sbatch_outfile, job_identifier))
@@ -386,7 +443,8 @@ def build_setup_xml(project, sample, local_scratch_mode, config):
                            "--qos {qos}").format(**cl_args)
     for libprep in sample:
         for seqrun in libprep:
-            sample_run_directory = os.path.join(project_top_level_dir, sample.dirname, libprep.name, seqrun.name )
+            sample_run_directory = os.path.join(project_top_level_dir, sample.dirname,
+                                                libprep.dirname, seqrun.dirname)
             for fastq_file_name in seqrun.fastq_files:
                 fastq_file = os.path.join(sample_run_directory, fastq_file_name)
                 setupfilecreator_cl += " --input_fastq {}".format(fastq_file)
