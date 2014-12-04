@@ -224,7 +224,7 @@ def sbatch_piper_sample(command_line_list, workflow_name, project, sample, libpr
     sbatch_text_list.append("\necho -e '\\n\\nCopying fastq files'")
     if fastq_src_dst_list:
         for src_file, dst_file in fastq_src_dst_list:
-            safe_makedir(os.path.dirname(dst_file))
+            sbatch_text_list.append("mkdir -p {}".format(os.path.dirname(dst_file)))
             sbatch_text_list.append("rsync -rptoDv {} {}".format(src_file, dst_file))
     else:
         raise ValueError(('No valid fastq files available to process for '
