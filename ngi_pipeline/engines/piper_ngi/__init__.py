@@ -245,16 +245,6 @@ def sbatch_piper_sample(command_line_list, workflow_name, project, sample, libpr
             sbatch_text_list.append(("rsync -rptoDv {input_files} "
                                      "{output_directory}/").format(input_files=" ".join(input_files),
                                                                   output_directory=output_dir))
-
-    ### DEBUG CODE
-    sbatch_text_list.append("\necho -e '\\n\\nTesting file transfer'")
-    sbatch_text_list.append("\necho -e '\\nscratch data directory:'")
-    sbatch_text_list.append("tree {}".format(scratch_data_dir))
-    sbatch_text_list.append(("\nif [[ -e {0} ]]; then\n"
-                             "  echo -e '\\nscratch analysis directory:'\n"
-                             "  tree {0}\nfi").format(scratch_analysis_dir))
-    ###
-
     sbatch_text_list.append("\n# Run the actual commands")
     for command_line in command_line_list:
         sbatch_text_list.append(command_line)
