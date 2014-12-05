@@ -41,13 +41,13 @@ class NGIHandler(tornado.web.RequestHandler):
 class FlowcellHandler(NGIHandler):
     """ Handler to manage flowcell processing
 
-    GET /flowcell_analysis/(fc_dir)?restrict_to_projects=False&restrict_to_samples=False&restart_failed_jobs=False
+    GET /flowcell_analysis/(fc_dir)?project=False&sample=False&restart_failed=False
     """
     @tornado.web.asynchronous
     @tornado.gen.coroutine
     def get(self, fc_dir):
         args = ['process', 'flowcell', fc_dir]
-        optional = ['--restrict_to_projects', '--restrict_to_samples', '--restart_failed_jobs']
+        optional = ['--project', '--sample', '--restart_failed']
         [args.append(arg) for arg in optional if self.get_argument(arg[2:], False)]
         run_id = yield tornado.gen.Task(self.run_ngi_pipeline, args)
         self.write(run_id)
