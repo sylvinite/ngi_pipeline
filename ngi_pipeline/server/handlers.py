@@ -13,28 +13,32 @@ import yaml
 from ngi_pipeline.server import background
 
 
-def run_ngi_pipeline(args, callback=None):
-    run_id = str(uuid.uuid1())
-    def set_done(status, stdout, stderr, has_timed_out):
-        self.application.runmonitor.set_status(run_id, "finished" if status == 0 else "failed")
-    _run_local(args, set_done)
-    app.runmonitor.set_status(run_id, "running")
-    if callback:
-        callback(run_id)
-    else:
-        return run_id
-
-def _run_local(args, callback):
-    cmd = [os.path.join(os.path.dirname(sys.executable), "ngi_pipeline_start.py")] + args
-    p = background.Subprocess(callback, timeout=-1, args=[str(x) for x in cmd])
-    p.start()
-
-
-
 ##################################
 #          Handlers              #
 ##################################
-class FlowcellHandler(tornado.web.RequestHandler):
+class NGIHandler(tornado.web.RequestHandler):
+    """ Generic Handler for calling NGI pipeline methods.
+    """
+    def run_ngi_pipeline(self, args, callback=None):
+        """ Runs ngi_pipeline_start.py with the given args
+        """
+        run_id = str(uuid.uuid1())
+        def set_done(status, stdout, stderr, has_timed_out):
+            self.application.runmonitor.set_status(run_id, "finished" if status == 0 else "failed")
+        self._run_local(args, set_done)
+        self.application.runmonitor.set_status(run_id, "running")
+        if callback:
+            callback(run_id)
+        else:
+            return run_id
+
+    def _run_local(self, args, callback):
+        cmd = [os.path.join(os.path.dirname(sys.executable), "ngi_pipeline_start.py")] + args
+        p = background.Subprocess(callback, timeout=-1, args=[str(x) for x in cmd])
+        p.start()
+
+
+class FlowcellHandler(NGIHandler):
     """ Handler to manage flowcell processing
 
     GET /flowcell_analysis/(fc_dir)?restrict_to_projects=False&restrict_to_samples=False&restart_failed_jobs=False
@@ -44,7 +48,7 @@ class FlowcellHandler(tornado.web.RequestHandler):
     def get(self, fc_dir):
         args = ['process', 'flowcell', fc_dir, self.get_argument('restrict_to_projects', False),
                 self.get_argument('restrict_to_samples', False), self.get_argument('restart_failed_jobs', False)]
-        run_id = yield tornado.gen.Task(run_ngi_pipeline, args)
+        run_id = yield tornado.gen.Task(self.run_ngi_pipeline, args)
         self.write(run_id)
         self.finish()
 
