@@ -8,7 +8,7 @@ from ngi_pipeline.server import handlers
 def start(port):
     """Run server with provided command line arguments.
     """
-    application = tornado.web.Application([(r"/flowcell_analysis", handlers.FlowcellHandler),
+    application = tornado.web.Application([(r"/flowcell_analysis/([^/]*)$", handlers.FlowcellHandler),
                                            (r"/status", handlers.StatusHandler),
                                            (r"/test/([0-9]*)$", handlers.TestHandler)])
     application.runmonitor = RunMonitor()
