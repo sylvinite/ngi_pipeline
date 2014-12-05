@@ -46,8 +46,9 @@ class FlowcellHandler(NGIHandler):
     @tornado.web.asynchronous
     @tornado.gen.coroutine
     def get(self, fc_dir):
-        args = ['process', 'flowcell', fc_dir, self.get_argument('restrict_to_projects', False),
-                self.get_argument('restrict_to_samples', False), self.get_argument('restart_failed_jobs', False)]
+        args = ['process', 'flowcell', fc_dir]
+        optional = ['--restrict_to_projects', '--restrict_to_samples', '--restart_failed_jobs']
+        [args.append(arg) for arg in optional if self.get_argument(arg[2:], False)]
         run_id = yield tornado.gen.Task(self.run_ngi_pipeline, args)
         self.write(run_id)
         self.finish()
