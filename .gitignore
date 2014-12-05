@@ -1,5 +1,6 @@
 *.py[cod]
 *.swp
+*.log
 
 # C extensions
 *.so
@@ -35,3 +36,6 @@ nosetests.xml
 .mr.developer.cfg
 .project
 .pydevproject
+
+# Mac OSX stuff...
+.DS*
