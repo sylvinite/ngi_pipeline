@@ -150,6 +150,7 @@ def setup_analysis_directory_structure(fc_dir, projects_to_analyze,
         error_msg = "Error: Analysis top directory {} does not exist".format(analysis_top_dir)
         LOG.error(error_msg)
         raise OSError(error_msg)
+    fc_dir = fc_dir if os.path.isabs(fc_dir) else os.path.join(analysis_top_dir, fc_dir)
     if not os.path.exists(fc_dir):
         LOG.error("Error: Flowcell directory {} does not exist".format(fc_dir))
         return []
