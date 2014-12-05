@@ -103,7 +103,7 @@ def analyze(project, sample, exec_mode="sbatch", config=None, config_file_path=N
                                                           workflow_subtask))
                     ## Question: should we just kill the run in this case or let it go?
                     continue
-            except (NotImplementedError, RuntimeError) as e:
+            except (NotImplementedError, RuntimeError, ValueError) as e:
                 error_msg = ('Processing project "{}" / sample "{}" failed: '
                              '{}'.format(project, sample, e.__repr__()))
                 LOG.error(error_msg)
@@ -193,7 +193,7 @@ def sbatch_piper_sample(command_line_list, workflow_name, project, sample, libpr
             try:
                 libprep_valid = charon_session.libprep_get(projectid=project.project_id,
                                                            sampleid=sample.name,
-                                                           libprepid=libprep.name).get("qc") == "PASSED"
+                                                           libprepid=libprep.name).get("qc") != "FAILED"
             except CharonError as e:
                 LOG.warn('Cannot verify library prep {} due to Charon error; proceeding '
                          'with analysis for this libprep (error: {})'.format(libprep, e))
@@ -216,7 +216,7 @@ def sbatch_piper_sample(command_line_list, workflow_name, project, sample, libpr
                                                 fastq)
                         fastq_src_dst_list.append([src_file, dst_file])
                 else:
-                    LOG.info(('Skipping project/sample/libprep/seqrun '
+                    LOG.info(('Skipping analysis of project/sample/libprep/seqrun '
                               '{}/{}/{}/{} because alignment status is '
                               '"DONE"').format(project, sample, libprep, seqrun))
         else:
