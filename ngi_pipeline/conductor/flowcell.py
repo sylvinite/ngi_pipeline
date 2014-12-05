@@ -96,7 +96,22 @@ def process_demultiplexed_flowcells(demux_fcid_dirs, restrict_to_projects=None,
     for project in projects_to_analyze:
         if UPPSALA_PROJECT_RE.match(project.project_id):
             LOG.info('Creating Charon records for Uppsala project "{}" if they are missing'.format(project))
-            create_charon_entries_from_project(project)
+            create_charon_entries_from_project(project, sequencing_facility="NGI-U")
+        else:
+            # I hate this
+            for sample in project:
+                for libprep in sample:
+                    if libprep.name == "Unknown":
+                        LOG.info('Populating Charon with records for project/sample/libprep '
+                                 '{}/{}/{}'.format(project, sample, libprep))
+                        # This is horrible what am I doing somebody stop me
+                        tmp_proj = NGIProject(project.name,
+                                              project.dirname,
+                                              project.project_id,
+                                              project.base_path)
+                        tmp_proj.samples = {sample.name: sample}
+                        tmp_proj.samples[sample.name].libpreps = {libprep.name: libprep}
+                        create_charon_entries_from_project(tmp_proj)
     launch_analysis(projects_to_analyze, restart_failed_jobs)
 
 
@@ -236,10 +251,10 @@ def setup_analysis_directory_structure(fc_dir, projects_to_analyze,
                         LOG.error('Project "{}" / sample "{}" / fastq "{}" '
                                   'has no libprep information in Charon and it '
                                   'could not be determined from the SampleSheet.csv. '
-                                  'Skipping.'.format(project_name,
-                                                     sample_name,
-                                                     fq_file))
-                        continue
+                                  'Setting library prep to "Unknown"'.format(project_name,
+                                                                             sample_name,
+                                                                             fq_file))
+                        libprep_name = "Unknown"
                 libprep_object = sample_obj.add_libprep(name=libprep_name,
                                                         dirname=libprep_name)
                 libprep_dir = os.path.join(sample_dir, libprep_name)

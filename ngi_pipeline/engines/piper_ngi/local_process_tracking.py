@@ -56,6 +56,7 @@ def update_charon_with_local_jobs_status():
                     charon_session.sample_update(projectid=project_id,
                                                  sampleid=sample_id,
                                                  analysis_status=set_status)
+                    recurse_status_for_sample(project_id, sample_id, set_status)
                     # Job is only deleted if the Charon update succeeds
                     session.delete(sample_entry)
                 elif piper_exit_code == 1:
@@ -66,6 +67,7 @@ def update_charon_with_local_jobs_status():
                     charon_session.sample_update(projectid=project_id,
                                                  sampleid=sample_id,
                                                  analysis_status=set_status)
+                    recurse_status_for_sample(project_id, sample_id, set_status)
                     # Job is only deleted if the Charon update succeeds
                     session.delete(sample_entry)
                 else:
@@ -89,6 +91,7 @@ def update_charon_with_local_jobs_status():
                         charon_session.sample_update(projectid=project_id,
                                                      sampleid=sample_id,
                                                      analysis_status=set_status)
+                        recurse_status_for_sample(project_id, sample_id, set_status)
                         # Job is only deleted if the Charon update succeeds
                         LOG.debug("Deleting local entry {}".format(sample_entry))
                         session.delete(sample_entry)
@@ -104,9 +107,52 @@ def update_charon_with_local_jobs_status():
                             charon_session.sample_update(projectid=project_id,
                                                          sampleid=sample_id,
                                                          analysis_status=set_status)
+                            recurse_status_for_sample(project_id, sample_id, "RUNNING")
             except CharonError as e:
                 LOG.error('Unable to update Charon status for "{}": {}'.format(label, e))
         session.commit()
+
+
+def recurse_status_for_sample(project_id, sample_id, set_status, update_done=False):
+    charon_session = CharonSession()
+    sample_libpreps = charon_session.sample_get_libpreps(projectid=project_id,
+                                                         sampleid=sample_id)
+    for libprep in sample_libpreps['libpreps']:
+        if libprep['qc'] == "PASSED":
+            libprep_id = libprep['libprepid']
+            # The assumption here being that we just launched
+            # analysis for this library prep's seqruns
+            # I know, I know. Race condition. Hold those thumbs
+            for seqrun in charon_session.libprep_get_seqruns(projectid=project_id,
+                                                             sampleid=sample_id,
+                                                             libprepid=libprep_id)['seqruns']:
+                seqrun_id = seqrun['seqrunid']
+                aln_status = charon_session.seqrun_get(projectid=project_id,
+                                                       sampleid=sample_id,
+                                                       libprepid=libprep_id,
+                                                       seqrunid=seqrun_id)['alignment_status']
+                if aln_status != "DONE" or update_done:
+                    LOG.info(('Updating status of project/sample/libprep/seqrun '
+                              '{}/{}/{}/{} to "{}" in Charon ').format(project_id,
+                                                                       sample_id,
+                                                                       libprep_id,
+                                                                       seqrun_id,
+                                                                       set_status))
+                    charon_session.seqrun_update(projectid=project_id,
+                                                 sampleid=sample_id,
+                                                 libprepid=libprep_id,
+                                                 seqrunid=seqrun_id,
+                                                 alignment_status=set_status)
+                else:
+                    LOG.info(('Not updating alignment status for project/sample/'
+                              'libprep/seqrun {}/{}/{}/{} because it is '
+                              'already "DONE"').format(project_id, sample_id,
+                                                       libprep_id, seqrun_id))
+        else:
+            LOG.info(('Not updating alignment status for project/sample/'
+                      'libprep/seqrun {}/{}/{} because QC status '
+                      'is "FAILED"').format(project_id, sample_id, libprep['libprepid']))
+
 
 
 def parse_mean_autosomal_coverage_for_sample(piper_qc_dir, sample_id):
@@ -269,7 +315,7 @@ def update_seq_run_for_lane(seqrun_dict, lane_alignment_metrics):
 
 
 def record_process_sample(project, sample, workflow_subtask, analysis_module_name,
-                          analysis_dir, process_id=None, slurm_job_id=None, config=None):
+                          process_id=None, slurm_job_id=None, config=None):
     LOG.info('Recording slurm job id "{}" for project "{}", sample "{}", '
              'workflow "{}"'.format(slurm_job_id, project, sample, workflow_subtask))
     with get_db_session() as session:
@@ -279,7 +325,6 @@ def record_process_sample(project, sample, workflow_subtask, analysis_module_nam
                                        sample_id=sample.name,
                                        engine=analysis_module_name,
                                        workflow=workflow_subtask,
-                                       analysis_dir=analysis_dir,
                                        process_id=process_id,
                                        slurm_job_id=slurm_job_id)
         try:
@@ -305,6 +350,7 @@ def record_process_sample(project, sample, workflow_subtask, analysis_module_nam
         CharonSession().sample_update(projectid=project.project_id,
                                       sampleid=sample.name,
                                       analysis_status=set_status)
+        recurse_status_for_sample(project.project_id, sample.name, "RUNNING")
     except CharonError as e:
         LOG.warn('Could not update Charon status for project/sample '
                  '{}/{} due to error: {}'.format(project, sample, e))

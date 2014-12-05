@@ -10,6 +10,7 @@ import shutil
 import subprocess
 import time
 
+from ngi_pipeline.database.classes import CharonSession, CharonError
 from ngi_pipeline.engines.piper_ngi import workflows
 from ngi_pipeline.engines.piper_ngi.local_process_tracking import is_sample_analysis_running_local, \
                                                                   record_process_sample
@@ -58,12 +59,15 @@ def analyze(project, sample, exec_mode="sbatch", config=None, config_file_path=N
                                                             project_base_path=project.base_path,
                                                             project_name=project.dirname,
                                                             sample_id=sample.name)
-                # These must be run in this order; build_setup_xml modifies the project object.
-                ## FIXME At some point remove this hidden behavior
-                setup_xml_cl = build_setup_xml(project, config, sample,
-                                               local_scratch_mode=(exec_mode == "sbatch"))
-                piper_cl = build_piper_cl(project, workflow_subtask,
-                                          exit_code_path, config,
+                setup_xml_cl, setup_xml_path = build_setup_xml(project=project,
+                                                               sample=sample,
+                                                               local_scratch_mode=(exec_mode == "sbatch"),
+                                                               config=config)
+                piper_cl = build_piper_cl(project=project,
+                                          workflow_name=workflow_subtask,
+                                          setup_xml_path=setup_xml_path,
+                                          exit_code_path=exit_code_path,
+                                          config=config,
                                           exec_mode=exec_mode)
                 if exec_mode == "sbatch":
                     slurm_job_id = sbatch_piper_sample([setup_xml_cl, piper_cl],
@@ -90,7 +94,6 @@ def analyze(project, sample, exec_mode="sbatch", config=None, config_file_path=N
                     record_process_sample(project=project,
                                           sample=sample,
                                           analysis_module_name="piper_ngi",
-                                          analysis_dir=project.analysis_dir,
                                           slurm_job_id=slurm_job_id,
                                           process_id=process_id,
                                           workflow_subtask=workflow_subtask)
@@ -139,12 +142,12 @@ def sbatch_piper_sample(command_line_list, workflow_name, project, sample, libpr
     # Paths to the various data directories
     project_dirname = project.dirname
     sample_dirname = sample.dirname
-    perm_data_dir = os.path.join(project.base_path, "DATA", os.path.join(project_dirname, sample_dirname))
+    perm_data_dir = os.path.join(project.base_path, "DATA", project_dirname, sample_dirname)
     perm_data_topdir = os.path.join(project.base_path, "DATA", project_dirname)
     perm_analysis_dir = os.path.join(project.base_path, "ANALYSIS", project_dirname)
     perm_aln_dir = os.path.join(perm_analysis_dir, "01_raw_alignments")
     perm_qc_dir = os.path.join(perm_analysis_dir, "02_preliminary_alignment_qc")
-    scratch_data_dir = os.path.join("$SNIC_TMP/DATA/", os.path.join(project_dirname, sample_dirname))
+    scratch_data_dir = os.path.join("$SNIC_TMP/DATA/", project_dirname)
     scratch_analysis_dir = os.path.join("$SNIC_TMP/ANALYSIS/", project_dirname)
     scratch_aln_dir = os.path.join(scratch_analysis_dir, "01_raw_alignments")
     scratch_qc_dir = os.path.join(scratch_analysis_dir, "02_preliminary_alignment_qc")
@@ -158,6 +161,8 @@ def sbatch_piper_sample(command_line_list, workflow_name, project, sample, libpr
     slurm_time = config.get("piper", {}).get("job_walltime", {}).get("workflow_name") or "4-00:00:00"
     slurm_out_log = os.path.join(perm_analysis_dir, "logs", "{}_sbatch.out".format(job_identifier))
     slurm_err_log = os.path.join(perm_analysis_dir, "logs", "{}_sbatch.err".format(job_identifier))
+    for log_file in slurm_out_log, slurm_err_log:
+        rotate_file(log_file)
     sbatch_text = create_sbatch_header(slurm_project_id=slurm_project_id,
                                        slurm_queue=slurm_queue,
                                        num_cores=num_cores,
@@ -174,39 +179,87 @@ def sbatch_piper_sample(command_line_list, workflow_name, project, sample, libpr
         sbatch_text_list.append("\n# Load requires modules for Piper")
         for module_name in modules_to_load:
             sbatch_text_list.append("module load {}".format(module_name))
+
     # Fastq files to copy
-    sample_fq_file_pattern = "^{}.*\.(fastq|fq)(\.gz|\.gzip|\.bz2)?$".format(sample.name)
-    fq_files_to_copy = match_files_under_dir(dirname=perm_data_dir,
-                                             pattern=sample_fq_file_pattern)
+    try:
+        charon_session = CharonSession()
+    except CharonError as e:
+        LOG.warn("Unable to connecto Charon and cannot verify library preps; "
+                 "using all fastq files for analysis ({}).format(e)")
+        charon_session = None
+    fastq_src_dst_list = []
+    for libprep in sample:
+        if charon_session:
+            try:
+                libprep_valid = charon_session.libprep_get(projectid=project.project_id,
+                                                           sampleid=sample.name,
+                                                           libprepid=libprep.name).get("qc") == "PASSED"
+            except CharonError as e:
+                LOG.warn('Cannot verify library prep {} due to Charon error; proceeding '
+                         'with analysis for this libprep (error: {})'.format(libprep, e))
+                libprep_valid = True
+        else: # Cannot connect to Charon; use all libpreps
+            libprep_valid = True
+        if libprep_valid:
+            for seqrun in libprep:
+                aln_status =  charon_session.seqrun_get(projectid=project.project_id,
+                                                        sampleid=sample.name,
+                                                        libprepid=libprep.name,
+                                                        seqrunid=seqrun.name)['alignment_status'] 
+                if aln_status != "DONE":
+                    for fastq in seqrun:
+                        src_file = os.path.join(project.base_path, "DATA", project.dirname,
+                                                sample.dirname, libprep.dirname,
+                                                seqrun.dirname, fastq)
+                        dst_file = os.path.join(scratch_data_dir, sample.dirname,
+                                                libprep.dirname, seqrun.dirname,
+                                                fastq)
+                        fastq_src_dst_list.append([src_file, dst_file])
+                else:
+                    LOG.info(('Skipping project/sample/libprep/seqrun '
+                              '{}/{}/{}/{} because alignment status is '
+                              '"DONE"').format(project, sample, libprep, seqrun))
+        else:
+            LOG.info('Library prep "{}" failed QC, excluding from analysis.'.format(libprep))
+    sbatch_text_list.append("date")
+    sbatch_text_list.append("\necho -e '\\n\\nCopying fastq files'")
+    if fastq_src_dst_list:
+        for src_file, dst_file in fastq_src_dst_list:
+            sbatch_text_list.append("mkdir -p {}".format(os.path.dirname(dst_file)))
+            sbatch_text_list.append("rsync -rptoDv {} {}".format(src_file, dst_file))
+    else:
+        raise ValueError(('No valid fastq files available to process for '
+                          'project/sample {}/{}'.format(project, sample)))
+
+    # BAM files / Alignment QC files
     sample_analysis_file_pattern = "{sample_name}.*.{sample_name}.*".format(sample_name=sample.name)
-    # BAM files
     aln_files_to_copy = glob.glob(os.path.join(perm_aln_dir, sample_analysis_file_pattern))
-    # Alignment QC files
     qc_files_to_copy = glob.glob(os.path.join(perm_qc_dir, sample_analysis_file_pattern))
-    input_files_list = [ fq_files_to_copy, aln_files_to_copy, qc_files_to_copy ]
-    output_dirs_list = [ scratch_data_dir, scratch_aln_dir, scratch_qc_dir ]
-    comment_txt_list = ["\n# Copy fastq files for sample",
-                        "\n# Copy any pre-existing alignment files",
-                        "\n# Copy any pre-existing alignment qc files"]
-    for comment_text, input_files, output_dir in zip(comment_txt_list, input_files_list, output_dirs_list):
+    input_files_list = [ aln_files_to_copy, qc_files_to_copy ]
+    output_dirs_list = [ scratch_aln_dir, scratch_qc_dir ]
+    echo_text_list = ["Copying any pre-existing alignment files",
+                      "Copying any pre-existing alignment qc files"]
+    for echo_text, input_files, output_dir in zip(echo_text_list, input_files_list, output_dirs_list):
         if input_files:
-            sbatch_text_list.append(comment_text)
+            sbatch_text_list.append("date")
+            sbatch_text_list.append("\necho -e '\\n\\n{}'".format(echo_text))
             sbatch_text_list.append("mkdir -p {}".format(output_dir))
-            sbatch_text_list.append(("rsync -a {input_files} "
+            sbatch_text_list.append(("rsync -rptoDv {input_files} "
                                      "{output_directory}/").format(input_files=" ".join(input_files),
                                                                   output_directory=output_dir))
     sbatch_text_list.append("\n# Run the actual commands")
     for command_line in command_line_list:
         sbatch_text_list.append(command_line)
-    sbatch_text_list.append("\n#Copy back the resulting analysis files")
-    sbatch_text_list.append("rsync -a {}/ {}/\n".format(scratch_analysis_dir, perm_analysis_dir))
+    sbatch_text_list.append("date")
+    sbatch_text_list.append("\necho -e '\\n\\nCopying back the resulting analysis files'")
+    sbatch_text_list.append("mkdir -p {}".format(perm_analysis_dir))
+    sbatch_text_list.append("rsync -rptoDv {}/ {}/\n".format(scratch_analysis_dir, perm_analysis_dir))
 
     # Write the sbatch file
     sbatch_dir = os.path.join(perm_analysis_dir, "sbatch")
     safe_makedir(sbatch_dir)
     sbatch_outfile = os.path.join(sbatch_dir, "{}.sbatch".format(job_identifier))
-    if os.path.exists(sbatch_outfile):
-        rotate_file(sbatch_outfile)
+    rotate_file(sbatch_outfile)
     with open(sbatch_outfile, 'w') as f:
         f.write("\n".join(sbatch_text_list))
     LOG.info("Queueing sbatch file {} for job {}".format(sbatch_outfile, job_identifier))
@@ -250,7 +303,9 @@ def launch_piper_job(command_line, project, log_file_path=None):
     return popen_object
 
 
-def build_piper_cl(project, workflow_name, exit_code_path, config, exec_mode="local"):
+## TODO change this to use local_scratch_mode boolean instead of exec_mode
+def build_piper_cl(project, workflow_name, setup_xml_path, exit_code_path,
+                   config, exec_mode="local"):
     """Determine which workflow to run for a project and build the appropriate command line.
     :param NGIProject project: The project object to analyze.
     :param str workflow_name: The name of the workflow to execute (e.g. "dna_alignonly")
@@ -262,35 +317,44 @@ def build_piper_cl(project, workflow_name, exit_code_path, config, exec_mode="lo
     :rtype: list
     :raises ValueError: If a required configuration value is missing.
     """
+    if exec_mode == "sbatch":
+        output_dir = os.path.join("$SNIC_TMP/ANALYSIS/", project.dirname)
+        # Can't create these directories ahead of time of course
+    elif exec_mode == "local":
+        output_dir = os.path.join(project.base_path, "ANALYSIS", project.dirname)
+        safe_makedir(analysis_dir, 0770)
+    else:
+        raise ValueError('"exec_mode" must be one of "local", "sbatch" (value '
+                         'was "{}"'.format(exec_mode))
+
+    # Global Piper configuration
     piper_rootdir = config.get("piper", {}).get("path_to_piper_rootdir")
-    piper_global_config_path = (os.environ.get("PIPER_GLOB_CONF_XML") or
-                                config.get("piper", {}).get("path_to_piper_globalconfig") or
-                                (os.path.join(piper_rootdir, "globalConfig.xml") if
-                                piper_rootdir else None))
+    piper_global_config_path = \
+                    (os.environ.get("PIPER_GLOB_CONF_XML") or
+                     config.get("piper", {}).get("path_to_piper_globalconfig") or
+                     (os.path.join(piper_rootdir, "globalConfig.xml") if
+                     piper_rootdir else None))
     if not piper_global_config_path:
-        error_msg = ("Could not find Piper global configuration file in config file, "
-                     "as environmental variable (\"PIPER_GLOB_CONF_XML\"), "
-                     "or in Piper root directory.")
-        raise ValueError(error_msg)
-    piper_qscripts_dir = (os.environ.get("PIPER_QSCRIPTS_DIR") or
-                          config['piper']['path_to_piper_qscripts'])
-    if not piper_qscripts_dir:
-        error_msg = ("Could not find Piper QScripts directory in config file or "
-                    "as environmental variable (\"PIPER_QSCRIPTS_DIR\").")
-        raise ValueError(error_msg)
+        raise ValueError('Could not find Piper global configuration file in config '
+                         'file, as environmental variable ("PIPER_GLOB_CONF_XML"), '
+                         'or in Piper root directory.')
+
+    # QScripts directory
+    try:
+        piper_qscripts_dir = (os.environ.get("PIPER_QSCRIPTS_DIR") or
+                              config['piper']['path_to_piper_qscripts'])
+    except KeyError:
+        raise Valueerror('Could not find Piper QScripts directory in config file or '
+                         'as environmental variable ("PIPER_QSCRIPTS_DIR").')
+
+    # Build Piper cl
     LOG.info('Building workflow command line(s) for project "{}" / workflow '
              '"{}"'.format(project, workflow_name))
-    try:
-        setup_xml_path = project.setup_xml_path
-    except AttributeError:
-        error_msg = ('Project "{}" has no setup.xml file. Skipping project '
-                     'command-line generation.'.format(project))
-        raise ValueError(error_msg)
     cl = workflows.return_cl_for_workflow(workflow_name=workflow_name,
                                           qscripts_dir_path=piper_qscripts_dir,
                                           setup_xml_path=setup_xml_path,
                                           global_config_path=piper_global_config_path,
-                                          output_dir=project.analysis_dir,
+                                          output_dir=output_dir,
                                           exec_mode=exec_mode)
     # Blank out the file if it already exists
     safe_makedir(os.path.dirname(exit_code_path))
@@ -307,30 +371,39 @@ def add_exit_code_recording(cl, exit_code_path):
     return cl + record_exit_code
 
 
-def build_setup_xml(project, config, sample=None, local_scratch_mode=False):
+def build_setup_xml(project, sample, local_scratch_mode, config):
     """Build the setup.xml file for each project using the CLI-interface of
     Piper's SetupFileCreator.
 
     :param NGIProject project: The project to be converted.
-    :param dict config: The (parsed) configuration file for this machine/environment.
     :param NGISample sample: the sample object
+    :param bool local_scratch_mode: Whether the job will be run in scratch or permanent storage
+    :param dict config: The (parsed) configuration file for this machine/environment.
 
     :raises ValueError: If a required configuration file value is missing
     :raises RuntimeError: If the setupFileCreator returns non-zero
     """
     LOG.info('Building Piper setup.xml file for project "{}" '
              'sample "{}"'.format(project, sample.name))
+
     if local_scratch_mode:
         project_top_level_dir = os.path.join("$SNIC_TMP/DATA/", project.dirname)
         analysis_dir = os.path.join("$SNIC_TMP/ANALYSIS/", project.dirname)
+        # Can't create these directories ahead of time of course
     else:
         project_top_level_dir = os.path.join(project.base_path, "DATA", project.dirname)
         analysis_dir = os.path.join(project.base_path, "ANALYSIS", project.dirname)
         safe_makedir(analysis_dir, 0770)
-        safe_makedir(os.path.join(analysis_dir, "logs"))
+    ## TODO handle this elsewhere
+    #safe_makedir(os.path.join(analysis_dir, "logs"))
+
     cl_args = {'project': project.dirname}
     cl_args["sequencing_center"] = "NGI"
-    # Load needed data from configuration file / Charon
+    cl_args["sequencing_tech"] = "Illumina"
+    ## TODO load these from (ngi_pipeline) config file
+    cl_args["qos"] = "seqver"
+    
+    # Eventually this will be loaded from e.g. Charon
     reference_genome = 'GRCh37'
     try:
         cl_args["reference_path"] = config['supported_genomes'][reference_genome]
@@ -340,15 +413,19 @@ def build_setup_xml(project, config, sample=None, local_scratch_mode=False):
                      "configuration file and cannot continue with project {}: "
                      "value \"{}\" missing".format(project, e.message))
         raise ValueError(error_msg)
+
     try:
         cl_args["sfc_binary"] = config['piper']['path_to_setupfilecreator']
     except KeyError:
         cl_args["sfc_binary"] = "setupFileCreator" # Assume setupFileCreator is on path
-    output_xml_filepath = os.path.join(analysis_dir,
-                                       "{}-{}-setup.xml".format(project, sample.name))
+
+    # setup XML file is always stored in permanent analysis directory
+    output_xml_filepath = os.path.join(project.base_path, "ANALYSIS",
+                                       project.dirname, "setup_xml_files",
+                                       "{}-{}-setup.xml".format(project, sample))
+    safe_makedir(os.path.dirname(output_xml_filepath))
     cl_args["output_xml_filepath"] = output_xml_filepath
-    cl_args["sequencing_tech"] = "Illumina"
-    cl_args["qos"] = "seqver"
+    
     setupfilecreator_cl = ("{sfc_binary} "
                            "--output {output_xml_filepath} "
                            "--project_name {project} "
@@ -359,10 +436,9 @@ def build_setup_xml(project, config, sample=None, local_scratch_mode=False):
                            "--qos {qos}").format(**cl_args)
     for libprep in sample:
         for seqrun in libprep:
-            sample_run_directory = os.path.join(project_top_level_dir, sample.dirname, libprep.name, seqrun.name )
+            sample_run_directory = os.path.join(project_top_level_dir, sample.dirname,
+                                                libprep.dirname, seqrun.dirname)
             for fastq_file_name in seqrun.fastq_files:
                 fastq_file = os.path.join(sample_run_directory, fastq_file_name)
                 setupfilecreator_cl += " --input_fastq {}".format(fastq_file)
-    project.setup_xml_path = output_xml_filepath
-    project.analysis_dir = analysis_dir
-    return setupfilecreator_cl
+    return (setupfilecreator_cl, output_xml_filepath)

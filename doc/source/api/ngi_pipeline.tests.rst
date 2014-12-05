@@ -4,9 +4,14 @@ ngi_pipeline.tests package
 Submodules
 ----------
 
-.. toctree::
+ngi_pipeline.tests.generate_test_data module
+--------------------------------------------
 
-   ngi_pipeline.tests.generate_test_data
+.. automodule:: ngi_pipeline.tests.generate_test_data
+    :members:
+    :undoc-members:
+    :show-inheritance:
+
 
 Module contents
 ---------------
