@@ -151,7 +151,7 @@ def recurse_status_for_sample(project_id, sample_id, set_status, update_done=Fal
                                                       include_done_seqruns=update_done)
     charon_session = CharonSession()
     for libprep_id, seqruns in seqruns_by_libprep.iteritems():
-        for seqrun in seqruns:
+        for seqrun_id in seqruns:
             label = "{}/{}/{}/{}".format(project_id, sample_id, libprep_id, seqrun_id)
             LOG.info(('Updating status of project/sample/libprep/seqrun '
                       '"{}" to "{}" in Charon ').format(label, set_status))
