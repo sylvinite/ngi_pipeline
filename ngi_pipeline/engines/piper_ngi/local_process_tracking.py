@@ -118,7 +118,7 @@ def recurse_status_for_sample(project_id, sample_id, set_status, update_done=Fal
     sample_libpreps = charon_session.sample_get_libpreps(projectid=project_id,
                                                          sampleid=sample_id)
     for libprep in sample_libpreps['libpreps']:
-        if libprep['qc'] == "PASSED":
+        if libprep.get('qc') != "FAILED":
             libprep_id = libprep['libprepid']
             # The assumption here being that we just launched
             # analysis for this library prep's seqruns
