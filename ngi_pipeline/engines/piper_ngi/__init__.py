@@ -226,7 +226,7 @@ def sbatch_piper_sample(command_line_list, workflow_name, project, sample, libpr
     if fastq_src_dst_list:
         for src_file, dst_file in fastq_src_dst_list:
             sbatch_text_list.append("mkdir -p {}".format(os.path.dirname(dst_file)))
-            sbatch_text_list.append("rsync -rptoDv {} {}".format(src_file, dst_file))
+            sbatch_text_list.append("rsync -rptoDLv {} {}".format(src_file, dst_file))
     else:
         raise ValueError(('No valid fastq files available to process for '
                           'project/sample {}/{}'.format(project, sample)))
@@ -244,7 +244,7 @@ def sbatch_piper_sample(command_line_list, workflow_name, project, sample, libpr
             sbatch_text_list.append("date")
             sbatch_text_list.append("\necho -e '\\n\\n{}'".format(echo_text))
             sbatch_text_list.append("mkdir -p {}".format(output_dir))
-            sbatch_text_list.append(("rsync -rptoDv {input_files} "
+            sbatch_text_list.append(("rsync -rptoDLv {input_files} "
                                      "{output_directory}/").format(input_files=" ".join(input_files),
                                                                   output_directory=output_dir))
     sbatch_text_list.append("\n# Run the actual commands")
@@ -253,7 +253,7 @@ def sbatch_piper_sample(command_line_list, workflow_name, project, sample, libpr
     sbatch_text_list.append("date")
     sbatch_text_list.append("\necho -e '\\n\\nCopying back the resulting analysis files'")
     sbatch_text_list.append("mkdir -p {}".format(perm_analysis_dir))
-    sbatch_text_list.append("rsync -rptoDv {}/ {}/\n".format(scratch_analysis_dir, perm_analysis_dir))
+    sbatch_text_list.append("rsync -rptoDLv {}/ {}/\n".format(scratch_analysis_dir, perm_analysis_dir))
 
     # Write the sbatch file
     sbatch_dir = os.path.join(perm_analysis_dir, "sbatch")

@@ -61,9 +61,9 @@ def get_slurm_job_status(slurm_job_id):
         # actual sbatch command for the bash interpreter? Unclear.
     except ValueError:
         raise TypeError("SLURM Job ID not an integer: {}".format(slurm_job_id))
-    LOG.info('Checking slurm job status with cl "{}"...'.format(check_cl))
+    LOG.debug('Checking slurm job status with cl "{}"...'.format(check_cl))
     job_status = subprocess.check_output(shlex.split(check_cl))
-    LOG.info('job status for job {} is "{}"'.format(slurm_job_id, job_status.strip()))
+    LOG.debug('job status for job {} is "{}"'.format(slurm_job_id, job_status.strip()))
     if not job_status:
         raise ValueError("No such slurm job found: {}".format(slurm_job_id))
     else:
