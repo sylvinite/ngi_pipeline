@@ -1,3 +1,4 @@
+import collections
 import glob
 import inspect
 import os
@@ -47,12 +48,11 @@ def update_charon_with_local_jobs_status():
                     LOG.info('Workflow "{}" for {} finished succesfully. '
                              'Recording status {} in Charon'.format(workflow, label,
                                                                     set_status))
-                    # Parse seqrun output results
+                    # Parse seqrun output results / update Charon
                     piper_qc_dir = os.path.join(project_base_path, "ANALYSIS",
                                                 sample_id, "02_preliminary_alignment_qc")
-                    ## TODO make this so it updates all the seqruns individually too
-                    ##      this is just for testing
-                    parse_mean_autosomal_coverage_for_sample(piper_qc_dir, sample_id)
+                    update_coverage_for_sample_seqruns(project_id, sample_id, piper_qc_dir)
+
                     charon_session.sample_update(projectid=project_id,
                                                  sampleid=sample_id,
                                                  analysis_status=set_status)
@@ -113,16 +113,25 @@ def update_charon_with_local_jobs_status():
         session.commit()
 
 
-def recurse_status_for_sample(project_id, sample_id, set_status, update_done=False):
+def get_valid_seqruns_for_sample(project_id, sample_id, include_failed_libpreps=False,
+                                 include_done_seqruns=False):
+    """Find all the valid seqruns for a particular sample.
+
+    :param str project_id: The id of the project
+    :param str sample_id: The id of the sample
+    :param bool include_failed_libpreps: Include seqruns for libreps that have failed QC
+    :param bool include_done_seqruns: Include seqruns that are already marked DONE
+
+    :returns: A dict of {libprep_01: [seqrun_01, ..., seqrun_nn], ...}
+    :rtype: dict
+    """
     charon_session = CharonSession()
     sample_libpreps = charon_session.sample_get_libpreps(projectid=project_id,
                                                          sampleid=sample_id)
+    libpreps = collections.defaultdict(list)
     for libprep in sample_libpreps['libpreps']:
-        if libprep.get('qc') != "FAILED":
+        if libprep.get('qc') != "FAILED" or include_failed_libpreps:
             libprep_id = libprep['libprepid']
-            # The assumption here being that we just launched
-            # analysis for this library prep's seqruns
-            # I know, I know. Race condition. Hold those thumbs
             for seqrun in charon_session.libprep_get_seqruns(projectid=project_id,
                                                              sampleid=sample_id,
                                                              libprepid=libprep_id)['seqruns']:
@@ -131,28 +140,64 @@ def recurse_status_for_sample(project_id, sample_id, set_status, update_done=Fal
                                                        sampleid=sample_id,
                                                        libprepid=libprep_id,
                                                        seqrunid=seqrun_id)['alignment_status']
-                if aln_status != "DONE" or update_done:
-                    LOG.info(('Updating status of project/sample/libprep/seqrun '
-                              '{}/{}/{}/{} to "{}" in Charon ').format(project_id,
-                                                                       sample_id,
-                                                                       libprep_id,
-                                                                       seqrun_id,
-                                                                       set_status))
-                    charon_session.seqrun_update(projectid=project_id,
-                                                 sampleid=sample_id,
-                                                 libprepid=libprep_id,
-                                                 seqrunid=seqrun_id,
-                                                 alignment_status=set_status)
-                else:
-                    LOG.info(('Not updating alignment status for project/sample/'
-                              'libprep/seqrun {}/{}/{}/{} because it is '
-                              'already "DONE"').format(project_id, sample_id,
-                                                       libprep_id, seqrun_id))
-        else:
-            LOG.info(('Not updating alignment status for project/sample/'
-                      'libprep/seqrun {}/{}/{} because QC status '
-                      'is "FAILED"').format(project_id, sample_id, libprep['libprepid']))
+                if aln_status != "DONE" or include_done_seqruns:
+                    libpreps[libprep_id].append(seqrun_id)
+    return dict(libpreps)
 
+
+def recurse_status_for_sample(project_id, sample_id, set_status, update_done=False):
+
+    seqruns_by_libprep = get_valid_seqruns_for_sample(project_id, sample_id,
+                                                      include_done_seqruns=update_done)
+    charon_session = CharonSession()
+    for libprep_id, seqruns in seqruns_by_libprep.iteritems():
+        for seqrun_id in seqruns:
+            label = "{}/{}/{}/{}".format(project_id, sample_id, libprep_id, seqrun_id)
+            LOG.info(('Updating status of project/sample/libprep/seqrun '
+                      '"{}" to "{}" in Charon ').format(label, set_status))
+            try:
+                charon_session.seqrun_update(projectid=project_id,
+                                             sampleid=sample_id,
+                                             libprepid=libprep_id,
+                                             seqrunid=seqrun_id,
+                                             alignment_status=set_status)
+            except CharonError as e:
+                LOG.error(('Could not update status of project/sample/libprep/seqrun '
+                           '"{}" in Charon to "{}": {}').format(label, set_status, e))
+
+
+def update_coverage_for_sample_seqruns(project_id, sample_id, piper_qc_dir):
+    """Find all the valid seqruns for a particular sample, parse their
+    qualimap output files, and update Charon with the mean autosomal
+    coverage for each.
+
+    :param str piper_qc_dir: The path to the Piper qc dir (02_preliminary_alignment_qc at time of writing)
+    :param str sample_id: The sample name (e.g. P1170_105)
+
+    :raises OSError: If the qc path specified is missing or otherwise inaccessible
+    :raises RuntimeError: If you specify both the seqrun_id and fcid and they don't match
+    :raises ValueError: If arguments are incorrect
+    """
+    seqruns_by_libprep = get_valid_seqruns_for_sample(project_id, sample_id)
+
+    charon_session = CharonSession()
+    for libprep_id, seqruns in seqruns_by_libprep.iteritems():
+        for seqrun_id in seqruns:
+            label = "{}/{}/{}/{}".format(project_id, sample_id, libprep_id, seqrun_id)
+            ma_coverage = _parse_mean_coverage_from_qualimap(piper_qc_dir, sample_id, seqrun_id)
+            LOG.info(('Updating project/sample/libprep/seqrun "{}" in '
+                      'Charon with mean autosomal coverage "{}"').format(label,
+                                                                         ma_coverage))
+            try:
+                charon_session.seqrun_update(projectid=project_id,
+                                             sampleid=sample_id,
+                                             libprepid=libprep_id,
+                                             seqrunid=seqrun_id,
+                                             mean_autosomal_coverage=ma_coverage)
+            except CharonError as e:
+                LOG.error(('Could not update project/sample/libprep/seqrun "{}" '
+                           'in Charon with mean autosomal coverage '
+                           '"{}": {}').format(label, ma_coverage, e))
 
 
 def parse_mean_autosomal_coverage_for_sample(piper_qc_dir, sample_id):
@@ -166,7 +211,6 @@ def parse_mean_autosomal_coverage_for_sample(piper_qc_dir, sample_id):
     :returns: The mean autosomal coverage
     :rtype: int
     :raises OSError: If the qc path specified is missing or otherwise inaccessible
-    :raises RuntimeError: If you specify both the seqrun_id and fcid and they don't match
     :raises ValueError: If arguments are incorrect
     """
     return _parse_mean_coverage_from_qualimap(piper_qc_dir, sample_id)
