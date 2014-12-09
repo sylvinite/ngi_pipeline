@@ -202,11 +202,16 @@ def sbatch_piper_sample(command_line_list, workflow_name, project, sample, libpr
             libprep_valid = True
         if libprep_valid:
             for seqrun in libprep:
-                aln_status =  charon_session.seqrun_get(projectid=project.project_id,
-                                                        sampleid=sample.name,
-                                                        libprepid=libprep.name,
-                                                        seqrunid=seqrun.name)['alignment_status'] 
-                if aln_status != "DONE":
+                try:
+                    aln_status =  charon_session.seqrun_get(projectid=project.project_id,
+                                                            sampleid=sample.name,
+                                                            libprepid=libprep.name,
+                                                            seqrunid=seqrun.name)['alignment_status'] 
+                except KeyError:
+                    LOG.warn('Seqrun {} does not have a value for key "{}"; '
+                             'proceeding as though it were "DONE"'.format(seqrun, e.args[0]))
+                    aln_status = None
+                if aln_status != None:
                     for fastq in seqrun:
                         src_file = os.path.join(project.base_path, "DATA", project.dirname,
                                                 sample.dirname, libprep.dirname,

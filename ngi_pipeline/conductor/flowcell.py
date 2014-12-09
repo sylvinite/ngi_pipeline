@@ -175,7 +175,8 @@ def setup_analysis_directory_structure(fc_dir, projects_to_analyze,
                     project_bpa = charon_session.project_get(project_name).get("best_practice_analysis")
                 except (CharonError, RuntimeError, ValueError) as e:
                     LOG.warn('Could not retrieve project id from Charon (record missing?). '
-                     'Probably  project {} is not an IGN (no mixed flowcells)'.format(project_name))
+                     'Probably  project {} is not an IGN (no mixed flowcells) '
+                     '(error: {})'.format(project_name, e))
                     continue
                 if not project_bpa == "IGN":
                     # If this is not an IGN project, skip it
@@ -188,7 +189,8 @@ def setup_analysis_directory_structure(fc_dir, projects_to_analyze,
             project_id = get_project_id_from_name(project_name)
         except (CharonError, RuntimeError, ValueError) as e:
             LOG.warn('Could not retrieve project id from Charon (record missing?). '
-                     'Using project name ("{}") as project id'.format(project_name))
+                     'Using project name ("{}") as project id '
+                     '(error: {})'.format(project_name, e))
             project_id = project_name
         LOG.info("Setting up project {}".format(project.get("project_name")))
         # Create a project directory if it doesn't already exist, including
