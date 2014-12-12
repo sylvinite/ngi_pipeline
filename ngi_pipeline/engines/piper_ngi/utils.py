@@ -36,31 +36,33 @@ def create_sbatch_header(slurm_project_id, slurm_queue, num_cores, slurm_time,
 
 
 def create_log_file_path(workflow_subtask, project_base_path, project_name,
-                         sample_id=None, libprep_id=None, seqrun_id=None):
+                         project_id=None,sample_id=None, libprep_id=None, seqrun_id=None):
     file_base_pathname = _create_generic_output_file_path(workflow_subtask,
                                                           project_base_path,
                                                           project_name,
+                                                          project_id,
                                                           sample_id,
                                                           libprep_id,
                                                           seqrun_id)
     return file_base_pathname + ".log"
 
 
-def create_exit_code_file_path(workflow_subtask, project_base_path, project_name,
+def create_exit_code_file_path(workflow_subtask, project_base_path, project_name, project_id,
                                sample_id=None, libprep_id=None, seqrun_id=None):
     file_base_pathname = _create_generic_output_file_path(workflow_subtask,
                                                           project_base_path,
                                                           project_name,
+                                                          project_id,
                                                           sample_id,
                                                           libprep_id,
                                                           seqrun_id)
     return file_base_pathname + ".exit"
 
 
-def _create_generic_output_file_path(workflow_subtask, project_base_path, project_name,
+def _create_generic_output_file_path(workflow_subtask, project_base_path, project_name, project_id,
                                      sample_id=None, libprep_id=None, seqrun_id=None):
-    base_path = os.path.join(project_base_path, "ANALYSIS", project_name, "logs")
-    file_name = project_name
+    base_path = os.path.join(project_base_path, "ANALYSIS", project_id, "logs")
+    file_name = project_id
     if sample_id:
         file_name += "-{}".format(sample_id)
         if libprep_id:

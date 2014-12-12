@@ -38,6 +38,7 @@ def update_charon_with_local_jobs_status():
             piper_exit_code = get_exit_code(workflow_name=workflow,
                                             project_base_path=project_base_path,
                                             project_name=project_name,
+                                            project_id=project_id,
                                             sample_id=sample_id)
             label = "project/sample {}/{}".format(project_name,
                                                                  sample_id)
@@ -49,8 +50,8 @@ def update_charon_with_local_jobs_status():
                              'Recording status {} in Charon'.format(workflow, label,
                                                                     set_status))
                     # Parse seqrun output results / update Charon
-                    piper_qc_dir = os.path.join(project_base_path, "ANALYSIS",
-                                                sample_id, "02_preliminary_alignment_qc")
+                    piper_qc_dir = os.path.join(project_base_path, "ANALYSIS",project_id,
+                                                "02_preliminary_alignment_qc")
                     update_coverage_for_sample_seqruns(project_id, sample_id, piper_qc_dir)
 
                     charon_session.sample_update(projectid=project_id,
@@ -418,14 +419,16 @@ def is_sample_analysis_running_local(workflow_subtask, project_id, sample_id):
             return False
 
 
-def get_exit_code(workflow_name, project_base_path, project_name,
+def get_exit_code(workflow_name, project_base_path, project_name, project_id,
                   sample_id, libprep_id=None, seqrun_id=None):
     exit_code_file_path = create_exit_code_file_path(workflow_name,
                                                      project_base_path,
                                                      project_name,
+                                                     project_id,
                                                      sample_id,
                                                      libprep_id,
                                                      seqrun_id)
+
     try:
         with open(exit_code_file_path, 'r') as f:
             exit_code = f.read().strip()

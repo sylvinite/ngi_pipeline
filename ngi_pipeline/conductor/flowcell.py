@@ -178,7 +178,7 @@ def setup_analysis_directory_structure(fc_dir, projects_to_analyze,
                      'Probably  project {} is not an IGN (no mixed flowcells) '
                      '(error: {})'.format(project_name, e))
                     continue
-                if not project_bpa == "IGN":
+                if not project_bpa in config.get('analysis',{}).get('best_practice_analysis',{}):
                     # If this is not an IGN project, skip it
                     continue
         if restrict_to_projects and project_name not in restrict_to_projects:
