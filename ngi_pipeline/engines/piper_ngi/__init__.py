@@ -53,11 +53,13 @@ def analyze(project, sample, exec_mode="sbatch", config=None, config_file_path=N
                 log_file_path = create_log_file_path(workflow_subtask=workflow_subtask,
                                                      project_base_path=project.base_path,
                                                      project_name=project.dirname,
+                                                     project_id=project.project_id,
                                                      sample_id=sample.name)
                 rotate_file(log_file_path)
                 exit_code_path = create_exit_code_file_path(workflow_subtask=workflow_subtask,
                                                             project_base_path=project.base_path,
                                                             project_name=project.dirname,
+                                                            project_id=project.project_id,
                                                             sample_id=sample.name)
                 setup_xml_cl, setup_xml_path = build_setup_xml(project=project,
                                                                sample=sample,
