@@ -343,7 +343,7 @@ def parse_casava_directory(fc_dir):
     if not os.access(fc_dir, os.R_OK): os_msg = "could not be read (permission denied)"
     if locals().get('os_msg'): raise OSError("Error with flowcell dir {}: directory {}".format(fc_dir, os_msg))
 
-    LOG.info("Parsing flowcell directory \"{}\"...".format(fc_dir))
+    LOG.info('Parsing flowcell directory "{}"...'.format(fc_dir))
     try:
         samplesheet_path = os.path.abspath(glob.glob(os.path.join(fc_dir, "SampleSheet.csv"))[0])
         LOG.debug("SampleSheet.csv found at {}".format(samplesheet_path))
@@ -354,29 +354,28 @@ def parse_casava_directory(fc_dir):
     fc_full_id = os.path.basename(fc_dir)
     # "Unaligned*" because SciLifeLab dirs are called "Unaligned_Xbp"
     # (where "X" is the index length) and there is also an "Unaligned" folder
-    unaligned_dir_pattern = os.path.join(fc_dir,"Unaligned*")
+    unaligned_dir_pattern = os.path.join(fc_dir, "Unaligned*")
     # e.g. 131030_SN7001362_0103_BC2PUYACXX/Unaligned_16bp/Y__Mom_15_01/
 
-    project_dir_pattern = os.path.join(unaligned_dir_pattern,"*")
+    project_dir_pattern = os.path.join(unaligned_dir_pattern, "*")
     for project_dir in glob.glob(project_dir_pattern):
         LOG.info('Parsing project directory "{}"...'.format(
                             project_dir.split(os.path.split(fc_dir)[0] + "/")[1]))
-        project_name = os.path.basename(project_dir).replace('__','.')
+        project_name = os.path.basename(project_dir).replace('__', '.')
         project_samples = []
-        sample_dir_pattern = os.path.join(project_dir,"*")
+        sample_dir_pattern = os.path.join(project_dir, "*")
 
         # e.g. <Project_dir>/P680_356F_dual56/
         for sample_dir in glob.glob(sample_dir_pattern):
             LOG.info('Parsing samples directory "{}"...'.format(sample_dir.split(
                                                 os.path.split(fc_dir)[0] + "/")[1]))
             sample_name = os.path.basename(sample_dir).replace('__','.')
-            fastq_file_pattern = os.path.join(sample_dir,"*.fastq.gz")
+            fastq_file_pattern = os.path.join(sample_dir, "*.fastq.gz")
             fastq_files = [os.path.basename(fq) for fq in glob.glob(fastq_file_pattern)]
 
             project_samples.append({'sample_dir': os.path.basename(sample_dir),
                                     'sample_name': sample_name,
-                                    'files': fastq_files,
-                                   })
+                                    'files': fastq_files})
         if not project_samples:
             LOG.warn('No samples found for project "{}" in fc {}'.format(project_name, fc_dir))
         else:
