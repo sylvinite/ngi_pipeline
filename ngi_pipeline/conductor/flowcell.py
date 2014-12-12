@@ -341,7 +341,7 @@ def parse_casava_directory(fc_dir):
 
     if not os.access(fc_dir, os.F_OK): os_msg = "does not exist"
     if not os.access(fc_dir, os.R_OK): os_msg = "could not be read (permission denied)"
-    if os_msg: raise OSError("Error with flowcell dir {}: directory {}".format(fc_dir, os_msg))
+    if locals().get('os_msg'): raise OSError("Error with flowcell dir {}: directory {}".format(fc_dir, os_msg))
 
     LOG.info("Parsing flowcell directory \"{}\"...".format(fc_dir))
     try:
