@@ -153,7 +153,13 @@ def determine_libprep_from_uppsala_samplesheet(samplesheet_path, project_id, sam
            lane_num == ss_lane_num:
                # Resembles 'LIBRARY_NAME:SX398_NA11993_Nano'
                try:
-                   return row["Description"].split(":")[1]
+                   #return row["Description"].split(":")[1]
+                   for keyval in row["Description"].split(";"):
+                       if keyval.split(":")[0] =="LIBRARY_NAME":
+                           return keyval.split(":")[1]
+                   #if we have not returned anything yet,raise
+                   raise IndexError
+                        
                except IndexError:
                    error_msg = ('Malformed description in "{}"; cannot get '
                                 'libprep information'.format(samplesheet_path))
