@@ -40,6 +40,35 @@ def get_valid_seqruns_for_sample(project_id, sample_id, include_failed_libpreps=
     return dict(libpreps)
 
 
+def check_for_preexisting_sample_runs(project_obj, sample_obj):
+    """If any analysis is undergoing or has completed for this sample's
+    seqruns, raise a RuntimeError.
+
+    :param NGIProject project_obj: The project object
+    :param NGISample sample_obj: The sample object
+
+    :raises RuntimeError: If any seqruns for this samples are RUNNING or DONE
+    """
+    charon_session = CharonSession()
+    sample_libpreps = charon_session.sample_get_libpreps(projectid=project_id,
+                                                         sampleid=sample_id)
+    for libprep in sample_libpreps['libpreps']:
+        libprep_id = libprep['libprepid']
+        for seqrun in charon_session.libprep_get_seqruns(projectid=project_id,
+                                                         sampleid=sample_id,
+                                                         libprepid=libprep_id)['seqruns']:
+            seqrun_id = seqrun['seqrunid']
+            aln_status = charon_session.seqrun_get(projectid=project_id,
+                                                   sampleid=sample_id,
+                                                   libprepid=libprep_id,
+                                                   seqrunid=seqrun_id).get('alignment_status')
+            if aln_status in ("RUNNING, DONE"):
+                raise RuntimeError('Project/Sample "{}/{}" has a preexisting '
+                                   'seqrun "{}" with status "{}"'.format(project_obj,
+                                                                         sample_obj,
+                                                                         aln_status))
+
+
 SBATCH_HEADER = """#!/bin/bash -l
 
 #SBATCH -A {slurm_project_id}
