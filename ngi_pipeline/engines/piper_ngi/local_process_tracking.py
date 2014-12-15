@@ -6,10 +6,12 @@ import psutil
 import re
 import time
 
+from ngi_pipeline.conductor.classes import NGIProject
 from ngi_pipeline.database.classes import CharonSession, CharonError
 from ngi_pipeline.log.loggers import minimal_logger
 from ngi_pipeline.engines.piper_ngi.database import SampleAnalysis, get_db_session
 from ngi_pipeline.engines.piper_ngi.utils import create_exit_code_file_path, \
+                                                 create_project_obj_from_analysis_log, \
                                                  get_valid_seqruns_for_sample
 from ngi_pipeline.utils.parsers import get_slurm_job_status, \
                                        parse_qualimap_results, \
@@ -41,8 +43,13 @@ def update_charon_with_local_jobs_status():
                                             project_name=project_name,
                                             project_id=project_id,
                                             sample_id=sample_id)
-            label = "project/sample {}/{}".format(project_name,
-                                                                 sample_id)
+            label = "project/sample {}/{}".format(project_name, sample_id)
+
+            project_obj = create_project_obj_from_analysis_log(project_name,
+                                                               project_id,
+                                                               project_base_path,
+                                                               sample_id,
+                                                               workflow)
             try:
                 if piper_exit_code == 0:
                     # 0 -> Job finished successfully
@@ -58,7 +65,7 @@ def update_charon_with_local_jobs_status():
                     charon_session.sample_update(projectid=project_id,
                                                  sampleid=sample_id,
                                                  analysis_status=set_status)
-                    recurse_status_for_sample(project_id, sample_id, set_status)
+                    recurse_status_for_sample(project_obj, set_status)
                     # Job is only deleted if the Charon update succeeds
                     session.delete(sample_entry)
                 elif piper_exit_code == 1:
@@ -69,7 +76,7 @@ def update_charon_with_local_jobs_status():
                     charon_session.sample_update(projectid=project_id,
                                                  sampleid=sample_id,
                                                  analysis_status=set_status)
-                    recurse_status_for_sample(project_id, sample_id, set_status)
+                    recurse_status_for_sample(project_obj, set_status)
                     # Job is only deleted if the Charon update succeeds
                     session.delete(sample_entry)
                 else:
@@ -93,7 +100,7 @@ def update_charon_with_local_jobs_status():
                         charon_session.sample_update(projectid=project_id,
                                                      sampleid=sample_id,
                                                      analysis_status=set_status)
-                        recurse_status_for_sample(project_id, sample_id, set_status)
+                        recurse_status_for_sample(project_obj, set_status)
                         # Job is only deleted if the Charon update succeeds
                         LOG.debug("Deleting local entry {}".format(sample_entry))
                         session.delete(sample_entry)
@@ -109,20 +116,26 @@ def update_charon_with_local_jobs_status():
                             charon_session.sample_update(projectid=project_id,
                                                          sampleid=sample_id,
                                                          analysis_status=set_status)
-                            recurse_status_for_sample(project_id, sample_id, "RUNNING")
+                            recurse_status_for_sample(project_obj, "RUNNING")
             except CharonError as e:
                 LOG.error('Unable to update Charon status for "{}": {}'.format(label, e))
         session.commit()
 
 
 
-def recurse_status_for_sample(project_id, sample_id, set_status, update_done=False):
+def recurse_status_for_sample(project_obj, set_status, update_done=False):
+    """Set seqruns under sample to have status "set_status"
+    """
 
-    seqruns_by_libprep = get_valid_seqruns_for_sample(project_id, sample_id,
-                                                      include_done_seqruns=update_done)
     charon_session = CharonSession()
-    for libprep_id, seqruns in seqruns_by_libprep.iteritems():
-        for seqrun_id in seqruns:
+    project_id = project_obj.project_id
+    for sample_obj in project_obj:
+        # There's only one sample but this is an iterator
+        sample_id = sample_obj.name
+    for libprep_obj in sample_obj:
+        libprep_id = libprep_obj.name
+        for seqrun_obj in libprep_obj:
+            seqrun_id = seqrun_obj.name
             label = "{}/{}/{}/{}".format(project_id, sample_id, libprep_id, seqrun_id)
             LOG.info(('Updating status of project/sample/libprep/seqrun '
                       '"{}" to "{}" in Charon ').format(label, set_status))
@@ -365,7 +378,7 @@ def record_process_sample(project, sample, workflow_subtask, analysis_module_nam
         CharonSession().sample_update(projectid=project.project_id,
                                       sampleid=sample.name,
                                       analysis_status=set_status)
-        recurse_status_for_sample(project.project_id, sample.name, "RUNNING")
+        recurse_status_for_sample(project, "RUNNING")
     except CharonError as e:
         LOG.warn('Could not update Charon status for project/sample '
                  '{}/{} due to error: {}'.format(project, sample, e))

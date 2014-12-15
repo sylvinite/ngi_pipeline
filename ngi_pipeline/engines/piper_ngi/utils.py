@@ -2,6 +2,7 @@ import collections
 import os
 import yaml
 
+from ngi_pipeline.conductor.classes import NGIProject
 from ngi_pipeline.database.classes import CharonSession
 from ngi_pipeline.utils.filesystem import rotate_file, safe_makedir
 
@@ -62,6 +63,27 @@ def record_analysis_details(project, job_identifier):
     safe_makedir(os.path.dirname(output_file_path))
     with open(output_file_path, 'w') as f:
         f.write(yaml.dump(analysis_dict))
+
+
+def create_project_obj_from_analysis_log(project_name, project_id,
+                                         project_base_path, sample_id, workflow):
+    """Using the log of seqruns used for a sample analysis, recreate a project
+    object with relevant sample, libprep, and seqrun objects.
+    """
+    analysis_log_filename = "{}-{}-{}.files".format(project_id, sample_id, workflow)
+    analysis_log_path = os.path.join(project_base_path, "ANALYSIS",
+                                     project_id, "logs", analysis_log_filename)
+    with open(analysis_log_path, 'r') as f:
+        analysis_dict = yaml.load(f)
+    project_obj = NGIProject(name=project_name, dirname=project_id,
+                             project_id=project_id, base_path=project_base_path)
+    sample_obj = project_obj.add_sample(sample_id, sample_id)
+    for libprep_name, seqrun_dict in analysis_dict[project_id][sample_id].items():
+        libprep_obj = sample_obj.add_libprep(libprep_name, libprep_name)
+        for seqrun_name in seqrun_dict.keys():
+            libprep_obj.add_seqrun(seqrun_name, seqrun_name)
+    return project_obj
+
 
 def check_for_preexisting_sample_runs(project_obj, sample_obj):
     """If any analysis is undergoing or has completed for this sample's

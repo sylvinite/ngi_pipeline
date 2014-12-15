@@ -104,6 +104,8 @@ def analyze(project, sample, exec_mode="sbatch", config=None, config_file_path=N
                                   'queue properly! Job ID {} cannot be '
                                   'found.'.format(project, sample, slurm_job_id))
                 else:
+                    ## FIXME Now this is broken again
+                    raise NotImplementedError("Sorry dude it's a no-go")
                     slurm_job_id = None
                     launch_piper_job(setup_xml_cl, project)
                     process_handle = launch_piper_job(piper_cl, project)
