@@ -290,6 +290,9 @@ def match_files_under_dir(dirname, pattern, pt_style="regex", realpath=True):
     :param str pattern: The pattern against which to match
     :param str pt_style: pattern style, "regex" or "shell"
     :param bool realpath: If true, dereferences symbolic links
+
+    :returns: A list of full paths to the fastq files, using dereferenced paths if realpath=True
+    :rtype: list
     """
     if pt_style not in ("regex", "shell"):
         LOG.warn('Chosen pattern style "{}" invalid (must be "regex" or "shell"); '
