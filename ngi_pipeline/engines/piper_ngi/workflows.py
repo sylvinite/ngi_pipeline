@@ -10,6 +10,22 @@ from ngi_pipeline.utils.parsers import slurm_time_to_seconds
 LOG = minimal_logger(__name__)
 
 
+def get_subtasks_for_level(level):
+    """For a given level (e.g. "sample"), get all the associated
+    subtasks that should be run (e.g. "qc", "merge_process_variantcall")
+
+    :param str level: The level (e.g. "sample")
+    :returns: The names (strings) of the workflows that should be run at that level
+    :rtype: tuple
+
+    :raises NotImplementedError: If the level has no associated subtasks
+    """
+    if level == "sample":
+        return ("merge_process_variantcall",)
+    else:
+        raise NotImplementedError('The level "{}" has no associated subtasks.')
+
+
 @with_ngi_config
 def return_cl_for_workflow(workflow_name, qscripts_dir_path, setup_xml_path, global_config_path,
                            output_dir=None, exec_mode="local", config=None, config_file_path=None):

@@ -34,6 +34,14 @@ def create_sbatch_header(slurm_project_id, slurm_queue, num_cores, slurm_time,
                                 slurm_err_log=slurm_err_log)
 
 
+def add_exit_code_recording(cl, exit_code_path):
+    """Takes a command line and returns it with increased pizzaz"""
+    record_exit_code = "; echo $? > {}".format(exit_code_path)
+    if type(cl) is list:
+        # This should work, right? Right
+        cl = " ".join(cl)
+    return cl + record_exit_code
+
 
 def create_log_file_path(workflow_subtask, project_base_path, project_name,
                          project_id=None,sample_id=None, libprep_id=None, seqrun_id=None):
