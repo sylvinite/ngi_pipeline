@@ -48,7 +48,7 @@ class CharonSession(requests.Session):
                                 "sequencing_facility")
         self._sample_params = ("sampleid", "analysis_status", "qc_status", "genotyping_status",
                                "total_autosomal_coverage", "total_sequenced_reads")
-        self._libprep_params = ("libprepid", "qc_analysis")
+        self._libprep_params = ("libprepid", "qc")
         self._seqrun_params = ('seqrunid', 'lane_sequencing_status', 'alignment_status',
                                'runid', "total_reads", "mean_autosomal_coverage")
         self._seqrun_reset_params = tuple(set(self._seqrun_params) - \
@@ -130,7 +130,7 @@ class CharonSession(requests.Session):
         return self.get(self.construct_charon_url('seqruns', projectid, sampleid, libprepid)).json()
 
 
-    def libprep_update(self, projectid, sampleid, libprepid, qc_analysis=None):
+    def libprep_update(self, projectid, sampleid, libprepid, qc=None):
         url = self.construct_charon_url("libprep", projectid, sampleid, libprepid)
         l_dict = locals()
         data = { k: l_dict.get(k) for k in self._libprep_params if l_dict.get(k)}
