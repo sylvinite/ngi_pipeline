@@ -9,7 +9,8 @@ import time
 from ngi_pipeline.database.classes import CharonSession, CharonError
 from ngi_pipeline.log.loggers import minimal_logger
 from ngi_pipeline.engines.piper_ngi.database import SampleAnalysis, get_db_session
-from ngi_pipeline.engines.piper_ngi.utils import create_exit_code_file_path
+from ngi_pipeline.engines.piper_ngi.utils import create_exit_code_file_path, \
+                                                 get_valid_seqruns_for_sample
 from ngi_pipeline.utils.parsers import get_slurm_job_status, \
                                        parse_qualimap_results, \
                                        STHLM_UUSNP_SEQRUN_RE, \
@@ -113,37 +114,6 @@ def update_charon_with_local_jobs_status():
                 LOG.error('Unable to update Charon status for "{}": {}'.format(label, e))
         session.commit()
 
-
-def get_valid_seqruns_for_sample(project_id, sample_id, include_failed_libpreps=False,
-                                 include_done_seqruns=False):
-    """Find all the valid seqruns for a particular sample.
-
-    :param str project_id: The id of the project
-    :param str sample_id: The id of the sample
-    :param bool include_failed_libpreps: Include seqruns for libreps that have failed QC
-    :param bool include_done_seqruns: Include seqruns that are already marked DONE
-
-    :returns: A dict of {libprep_01: [seqrun_01, ..., seqrun_nn], ...}
-    :rtype: dict
-    """
-    charon_session = CharonSession()
-    sample_libpreps = charon_session.sample_get_libpreps(projectid=project_id,
-                                                         sampleid=sample_id)
-    libpreps = collections.defaultdict(list)
-    for libprep in sample_libpreps['libpreps']:
-        if libprep.get('qc') != "FAILED" or include_failed_libpreps:
-            libprep_id = libprep['libprepid']
-            for seqrun in charon_session.libprep_get_seqruns(projectid=project_id,
-                                                             sampleid=sample_id,
-                                                             libprepid=libprep_id)['seqruns']:
-                seqrun_id = seqrun['seqrunid']
-                aln_status = charon_session.seqrun_get(projectid=project_id,
-                                                       sampleid=sample_id,
-                                                       libprepid=libprep_id,
-                                                       seqrunid=seqrun_id)['alignment_status']
-                if aln_status != "DONE" or include_done_seqruns:
-                    libpreps[libprep_id].append(seqrun_id)
-    return dict(libpreps)
 
 
 def recurse_status_for_sample(project_id, sample_id, set_status, update_done=False):
