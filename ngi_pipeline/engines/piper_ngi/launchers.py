@@ -16,14 +16,17 @@ from ngi_pipeline.engines.piper_ngi.command_creation import build_piper_cl, \
                                                             build_setup_xml
 from ngi_pipeline.engines.piper_ngi.local_process_tracking import is_sample_analysis_running_local, \
                                                                   record_process_sample
-from ngi_pipeline.engines.piper_ngi.utils import create_exit_code_file_path, \
+from ngi_pipeline.engines.piper_ngi.utils import check_for_preexisting_sample_runs, \
+                                                 create_exit_code_file_path, \
                                                  create_log_file_path, \
-                                                 create_sbatch_header
+                                                 create_sbatch_header, \
+                                                 get_valid_seqruns_for_sample
 from ngi_pipeline.log.loggers import log_process_non_blocking, minimal_logger
 from ngi_pipeline.utils.filesystem import load_modules, execute_command_line, \
                                           rotate_file, safe_makedir, \
                                           match_files_under_dir
 from ngi_pipeline.utils.classes import with_ngi_config
+from ngi_pipeline.utils.filesystem import fastq_files_under_dir
 from ngi_pipeline.utils.parsers import parse_lane_from_filename, find_fastq_read_pairs_from_dir, \
                                        get_flowcell_id_from_dirtree, get_slurm_job_status
 
@@ -41,6 +44,16 @@ def analyze(project, sample, exec_mode="sbatch", config=None, config_file_path=N
 
     :raises ValueError: If exec_mode is an unsupported value
     """
+
+    # If seqruns already exist for this sample and are RUNNING or DONE,
+    # I guess for now we're asking for user intervention.
+    # Refuse to process this data.
+    try:
+        check_for_preexisting_sample_runs(project, sample)
+    except RuntimeError as e:
+        raise RuntimeError('Aborting processing of project/sample "{}/{}": '
+                           '{}'.format(project, sample, e))
+
     if exec_mode.lower() not in ("sbatch", "local"):
         raise ValueError(('"exec_mode" param must be one of "sbatch" or "local" ')
                          ('value was "{}"'.format(exec_mode)))
@@ -74,6 +87,7 @@ def analyze(project, sample, exec_mode="sbatch", config=None, config_file_path=N
                                           config=config,
                                           exec_mode=exec_mode)
                 if exec_mode == "sbatch":
+                    process_id = None
                     slurm_job_id = sbatch_piper_sample([setup_xml_cl, piper_cl],
                                                        workflow_subtask,
                                                        project, sample)
@@ -87,13 +101,11 @@ def analyze(project, sample, exec_mode="sbatch", config=None, config_file_path=N
                         LOG.error('sbatch file for sample {}/{} did not '
                                   'queue properly! Job ID {} cannot be '
                                   'found.'.format(project, sample, slurm_job_id))
-
-                    process_id = None
                 else:
+                    slurm_job_id = None
                     launch_piper_job(setup_xml_cl, project)
                     process_handle = launch_piper_job(piper_cl, project)
                     process_id = process_handle.pid
-                    slurm_job_id = None
                 try:
                     record_process_sample(project=project,
                                           sample=sample,
@@ -113,9 +125,66 @@ def analyze(project, sample, exec_mode="sbatch", config=None, config_file_path=N
                 LOG.error(error_msg)
 
 
+def collect_files_for_sample_analysis(project_obj, sample_obj):
+    """This function finds all data files relating to a sample and 
+    follows a preset decision path to decide which of them to include in
+    a sample-level analysis. This can include fastq files, bam files, and
+    alignment-qc-level files.
+    """
+    ### FASTQ
+    # Access the filesystem to determine what fastq files are available
+    # For each file, validate it.
+
+    # This funtion goes into Charon and finds all valid libpreps and seqruns,
+    # dvs libpreps for which               'qc' != "FAILED"
+    # and seqruns  for which 'alignment_status' != "DONE"
+    valid_libprep_seqruns = get_valid_seqruns_for_sample(project_id=project_obj.project_id,
+                                                         sample_id=sample_obj.name,
+                                                         include_failed_libpreps=False,
+                                                         include_done_seqruns=False)
+    if not valid_libprep_seqruns: LOG.error("Notify user or whatever. I don't know.")
+
+    # Now we find all fastq files that are available and validate them against
+    # the group compiled in the previous step (get_valid_seqruns_for_sample)
+    sample_data_directory = os.path.join(project_obj.base_path, "DATA",
+                                         project_obj.dirname, sample_obj.dirname)
+    fastq_files_on_filesystem = fastq_files_under_dir(sample_data_directory, realpath=False)
+    if not fastq_files_on_filesystem: LOG.error("TODO raise an error or something")
+    fastq_files_to_analyze = []
+    for fastq_path in fastq_files_on_filesystem:
+        base_path, fastq = os.path.split(fastq_path)
+        if not fastq:
+            base_path, fastq = os.path.split(base_path) # Handles trailing slash
+        base_path, fs_seqrun_name = os.path.split(base_path)
+        base_path, fs_libprep_name = os.path.split(base_path)
+        if fs_libprep_name not in valid_libprep_seqruns.keys():
+            # Invalid library prep, skip this fastq file
+            continue
+        elif fs_seqrun_name not in valid_libprep_seqruns.get(fs_libprep_name, []):
+            continue
+        else:
+            fastq_files_to_analyze.append(fastq_path)
+    if not fastq_files_to_analyze:
+        LOG.error("This doesn't seem like it should happen. Mario decide what to do here.")
+
+    ### BAM / ALIGNMENT QC
+    # Access the filesystem to determine which alignment (bam) files are available.
+    # If there are any, add them to the list of files to include in the new analysis.
+    # Include alignment qc files.
+    project_analysis_dir = os.path.join(project_obj.base_path, "ANALYSIS", project_obj.dirname)
+    project_aln_dir = os.path.join(project_analysis_dir, "01_raw_alignments")
+    project_alnqc_dir = os.path.join(project_analysis_dir, "02_preliminary_alignment_qc")
+    sample_analysis_file_pattern = "{sample_name}.*.{sample_name}.*".format(sample_name=sample_obj.name)
+    aln_files_to_copy = glob.glob(os.path.join(project_aln_dir, sample_analysis_file_pattern))
+    qc_files_to_copy = glob.glob(os.path.join(project_alnqc_dir, sample_analysis_file_pattern))
+
+    return {"fastq_files": fastq_files_to_analyze,
+            "bam_files": aln_files_to_copy,
+            "alnqc_files": qc_files_to_copy}
+
 @with_ngi_config
-def sbatch_piper_sample(command_line_list, workflow_name, project, sample, libprep=None,
-                        config=None, config_file_path=None):
+def sbatch_piper_sample(command_line_list, workflow_name, project, sample,
+                        libprep=None, config=None, config_file_path=None):
     """sbatch a piper sample-level workflow.
 
     :param list command_line_list: The list of command lines to execute (in order)
@@ -163,56 +232,21 @@ def sbatch_piper_sample(command_line_list, workflow_name, project, sample, libpr
         sbatch_text_list.append("#SBATCH {} {}\n\n".format(param, value))
     modules_to_load = config.get("piper", {}).get("load_modules", [])
     if modules_to_load:
-        sbatch_text_list.append("\n# Load requires modules for Piper")
+        sbatch_text_list.append("\n# Load required modules for Piper")
         for module_name in modules_to_load:
             sbatch_text_list.append("module load {}".format(module_name))
 
+
+    src_fastq_files, src_aln_files, src_alnqc_files = \
+            collect_files_for_sample_analysis(project, sample).values()
+
     # Fastq files to copy
-    try:
-        charon_session = CharonSession()
-    except CharonError as e:
-        LOG.warn("Unable to connecto Charon and cannot verify library preps; "
-                 "using all fastq files for analysis ({}).format(e)")
-        charon_session = None
     fastq_src_dst_list = []
-    for libprep in sample:
-        if charon_session:
-            try:
-                libprep_valid = charon_session.libprep_get(projectid=project.project_id,
-                                                           sampleid=sample.name,
-                                                           libprepid=libprep.name).get("qc") != "FAILED"
-            except CharonError as e:
-                LOG.warn('Cannot verify library prep {} due to Charon error; proceeding '
-                         'with analysis for this libprep (error: {})'.format(libprep, e))
-                libprep_valid = True
-        else: # Cannot connect to Charon; use all libpreps
-            libprep_valid = True
-        if libprep_valid:
-            for seqrun in libprep:
-                try:
-                    aln_status =  charon_session.seqrun_get(projectid=project.project_id,
-                                                            sampleid=sample.name,
-                                                            libprepid=libprep.name,
-                                                            seqrunid=seqrun.name)['alignment_status'] 
-                except KeyError:
-                    LOG.warn('Seqrun {} does not have a value for key "{}"; '
-                             'proceeding as though it were "DONE"'.format(seqrun, e.args[0]))
-                    aln_status = None
-                if aln_status != None:
-                    for fastq in seqrun:
-                        src_file = os.path.join(project.base_path, "DATA", project.dirname,
-                                                sample.dirname, libprep.dirname,
-                                                seqrun.dirname, fastq)
-                        dst_file = os.path.join(scratch_data_dir, sample.dirname,
-                                                libprep.dirname, seqrun.dirname,
-                                                fastq)
-                        fastq_src_dst_list.append([src_file, dst_file])
-                else:
-                    LOG.info(('Skipping analysis of project/sample/libprep/seqrun '
-                              '{}/{}/{}/{} because alignment status is '
-                              '"DONE"').format(project, sample, libprep, seqrun))
-        else:
-            LOG.info('Library prep "{}" failed QC, excluding from analysis.'.format(libprep))
+    for fastq_path in src_fastq_files:
+        proj_specific_path = fastq_path.split("DATA/{}".format(project.dirname))[1]
+        dst_file = os.path.join(scratch_data_dir, proj_specific_path)
+        fastq_src_dst_list.append([fastq_path, dst_file])
+
     sbatch_text_list.append("\ndate")
     sbatch_text_list.append("echo -e '\\n\\nCopying fastq files'")
     if fastq_src_dst_list:
@@ -224,10 +258,7 @@ def sbatch_piper_sample(command_line_list, workflow_name, project, sample, libpr
                           'project/sample {}/{}'.format(project, sample)))
 
     # BAM files / Alignment QC files
-    sample_analysis_file_pattern = "{sample_name}.*.{sample_name}.*".format(sample_name=sample.name)
-    aln_files_to_copy = glob.glob(os.path.join(perm_aln_dir, sample_analysis_file_pattern))
-    qc_files_to_copy = glob.glob(os.path.join(perm_qc_dir, sample_analysis_file_pattern))
-    input_files_list = [ aln_files_to_copy, qc_files_to_copy ]
+    input_files_list = [ src_aln_files, src_alnqc_files ]
     output_dirs_list = [ scratch_aln_dir, scratch_qc_dir ]
     echo_text_list = ["Copying any pre-existing alignment files",
                       "Copying any pre-existing alignment qc files"]
@@ -240,7 +271,7 @@ def sbatch_piper_sample(command_line_list, workflow_name, project, sample, libpr
                                      "{output_directory}/").format(input_files=" ".join(input_files),
                                                                   output_directory=output_dir))
     sbatch_text_list.append("\ndate")
-    sbatch_text_list.append("Executing command lines")
+    sbatch_text_list.append("echo -e '\\n\\nExecuting command lines")
     sbatch_text_list.append("# Run the actual commands")
     for command_line in command_line_list:
         sbatch_text_list.append(command_line)
