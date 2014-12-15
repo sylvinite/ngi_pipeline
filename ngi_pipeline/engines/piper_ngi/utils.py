@@ -1,6 +1,9 @@
 import collections
 import os
+import yaml
+
 from ngi_pipeline.database.classes import CharonSession
+from ngi_pipeline.utils.filesystem import rotate_file, safe_makedir
 
 def get_valid_seqruns_for_sample(project_id, sample_id, include_failed_libpreps=False,
                                  include_done_seqruns=False):
@@ -40,6 +43,26 @@ def get_valid_seqruns_for_sample(project_id, sample_id, include_failed_libpreps=
     return dict(libpreps)
 
 
+def record_analysis_details(project, job_identifier):
+    """Write a yaml file enumerating exactly which fastq files we've started
+    analyzing.
+    """
+    output_file_path = os.path.join(project.base_path, "ANALYSIS",
+                                    project.dirname, "logs",
+                                    "{}.files".format(job_identifier))
+    analysis_dict = {}
+    proj_dict = analysis_dict[project.dirname] = {}
+    for sample in project:
+        samp_dict = proj_dict[sample.name] = {}
+        for libprep in sample:
+            lib_dict = samp_dict[libprep.name] = {}
+            for seqrun in libprep:
+                lib_dict[seqrun.name] = seqrun.fastq_files
+    rotate_file(output_file_path)
+    safe_makedir(os.path.dirname(output_file_path))
+    with open(output_file_path, 'w') as f:
+        f.write(yaml.dump(analysis_dict))
+
 def check_for_preexisting_sample_runs(project_obj, sample_obj):
     """If any analysis is undergoing or has completed for this sample's
     seqruns, raise a RuntimeError.
@@ -49,6 +72,8 @@ def check_for_preexisting_sample_runs(project_obj, sample_obj):
 
     :raises RuntimeError: If any seqruns for this samples are RUNNING or DONE
     """
+    project_id = project_obj.project_id
+    sample_id = sample_obj.name
     charon_session = CharonSession()
     sample_libpreps = charon_session.sample_get_libpreps(projectid=project_id,
                                                          sampleid=sample_id)

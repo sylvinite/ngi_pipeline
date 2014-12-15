@@ -10,6 +10,7 @@ import shutil
 import subprocess
 import time
 
+from ngi_pipeline.conductor.classes import NGIProject
 from ngi_pipeline.database.classes import CharonSession, CharonError
 from ngi_pipeline.engines.piper_ngi import workflows
 from ngi_pipeline.engines.piper_ngi.command_creation import build_piper_cl, \
@@ -20,7 +21,8 @@ from ngi_pipeline.engines.piper_ngi.utils import check_for_preexisting_sample_ru
                                                  create_exit_code_file_path, \
                                                  create_log_file_path, \
                                                  create_sbatch_header, \
-                                                 get_valid_seqruns_for_sample
+                                                 get_valid_seqruns_for_sample, \
+                                                 record_analysis_details
 from ngi_pipeline.log.loggers import log_process_non_blocking, minimal_logger
 from ngi_pipeline.utils.filesystem import load_modules, execute_command_line, \
                                           rotate_file, safe_makedir, \
@@ -146,10 +148,13 @@ def collect_files_for_sample_analysis(project_obj, sample_obj):
 
     # Now we find all fastq files that are available and validate them against
     # the group compiled in the previous step (get_valid_seqruns_for_sample)
+    # We're going to recreate NGIProject/NGISample/NGILibraryPrep/NGISeqrun objects here
     sample_data_directory = os.path.join(project_obj.base_path, "DATA",
                                          project_obj.dirname, sample_obj.dirname)
     fastq_files_on_filesystem = fastq_files_under_dir(sample_data_directory, realpath=False)
     if not fastq_files_on_filesystem: LOG.error("TODO raise an error or something")
+
+
     fastq_files_to_analyze = []
     for fastq_path in fastq_files_on_filesystem:
         base_path, fastq = os.path.split(fastq_path)
@@ -163,9 +168,9 @@ def collect_files_for_sample_analysis(project_obj, sample_obj):
         elif fs_seqrun_name not in valid_libprep_seqruns.get(fs_libprep_name, []):
             continue
         else:
-            fastq_files_to_analyze.append(fastq_path)
-    if not fastq_files_to_analyze:
-        LOG.error("This doesn't seem like it should happen. Mario decide what to do here.")
+            libprep_obj = sample_obj.add_libprep(name=fs_libprep_name, dirname=fs_libprep_name)
+            seqrun_obj = libprep_obj.add_seqrun(name=fs_seqrun_name, dirname=fs_seqrun_name)
+            seqrun_obj.add_fastq_files(fastq)
 
     ### BAM / ALIGNMENT QC
     # Access the filesystem to determine which alignment (bam) files are available.
@@ -178,8 +183,7 @@ def collect_files_for_sample_analysis(project_obj, sample_obj):
     aln_files_to_copy = glob.glob(os.path.join(project_aln_dir, sample_analysis_file_pattern))
     qc_files_to_copy = glob.glob(os.path.join(project_alnqc_dir, sample_analysis_file_pattern))
 
-    return {"fastq_files": fastq_files_to_analyze,
-            "bam_files": aln_files_to_copy,
+    return {"bam_files": aln_files_to_copy,
             "alnqc_files": qc_files_to_copy}
 
 @with_ngi_config
@@ -198,12 +202,7 @@ def sbatch_piper_sample(command_line_list, workflow_name, project, sample,
     # Paths to the various data directories
     project_dirname = project.dirname
     sample_dirname = sample.dirname
-    perm_data_dir = os.path.join(project.base_path, "DATA", project_dirname, sample_dirname)
-    perm_data_topdir = os.path.join(project.base_path, "DATA", project_dirname)
     perm_analysis_dir = os.path.join(project.base_path, "ANALYSIS", project_dirname)
-    perm_aln_dir = os.path.join(perm_analysis_dir, "01_raw_alignments")
-    perm_qc_dir = os.path.join(perm_analysis_dir, "02_preliminary_alignment_qc")
-    scratch_data_dir = os.path.join("$SNIC_TMP/DATA/", project_dirname)
     scratch_analysis_dir = os.path.join("$SNIC_TMP/ANALYSIS/", project_dirname)
     scratch_aln_dir = os.path.join(scratch_analysis_dir, "01_raw_alignments")
     scratch_qc_dir = os.path.join(scratch_analysis_dir, "02_preliminary_alignment_qc")
@@ -236,22 +235,36 @@ def sbatch_piper_sample(command_line_list, workflow_name, project, sample,
         for module_name in modules_to_load:
             sbatch_text_list.append("module load {}".format(module_name))
 
-
-    src_fastq_files, src_aln_files, src_alnqc_files = \
+    # This function updates the project object we pass it to include all
+    # relevant fastq files. I guess that's pretty useless at this point
+    # but in the future I'm thinking we might need to run a bunch of different
+    # seqruns' fastq files? Like if we've waited to launch analysis or killed
+    # the previous one? I don't know. Whatever.
+    src_aln_files, src_alnqc_files = \
             collect_files_for_sample_analysis(project, sample).values()
 
     # Fastq files to copy
     fastq_src_dst_list = []
-    for fastq_path in src_fastq_files:
-        proj_specific_path = fastq_path.split("DATA/{}".format(project.dirname))[1]
-        dst_file = os.path.join(scratch_data_dir, proj_specific_path)
-        fastq_src_dst_list.append([fastq_path, dst_file])
+    directories_to_create = set()
+    for sample in project:
+        for libprep in sample:
+            for seqrun in libprep:
+                project_specific_path = os.path.join(project.dirname,
+                                                     sample.dirname,
+                                                     libprep.dirname,
+                                                     seqrun.dirname)
+                directories_to_create.add(os.path.join("$SNIC_TMP/DATA/", project_specific_path))
+                for fastq in seqrun.fastq_files:
+                    src_file = os.path.join(project.base_path, "DATA", project_specific_path, fastq)
+                    dst_file = os.path.join("$SNIC_TMP/DATA/", project_specific_path, fastq)
+                    fastq_src_dst_list.append([src_file, dst_file])
 
     sbatch_text_list.append("\ndate")
     sbatch_text_list.append("echo -e '\\n\\nCopying fastq files'")
     if fastq_src_dst_list:
+        for directory in directories_to_create:
+            sbatch_text_list.append("mkdir -p {}".format(directory))
         for src_file, dst_file in fastq_src_dst_list:
-            sbatch_text_list.append("mkdir -p {}".format(os.path.dirname(dst_file)))
             sbatch_text_list.append("rsync -rptoDLv {} {}".format(src_file, dst_file))
     else:
         raise ValueError(('No valid fastq files available to process for '
@@ -271,7 +284,7 @@ def sbatch_piper_sample(command_line_list, workflow_name, project, sample,
                                      "{output_directory}/").format(input_files=" ".join(input_files),
                                                                   output_directory=output_dir))
     sbatch_text_list.append("\ndate")
-    sbatch_text_list.append("echo -e '\\n\\nExecuting command lines")
+    sbatch_text_list.append("echo -e '\\n\\nExecuting command lines'")
     sbatch_text_list.append("# Run the actual commands")
     for command_line in command_line_list:
         sbatch_text_list.append(command_line)
@@ -299,6 +312,8 @@ def sbatch_piper_sample(command_line_list, workflow_name, project, sample,
     except AttributeError:
         raise RuntimeError('Could not submit sbatch job for workflow "{}": '
                            '{}'.format(job_identifier, p_err))
+    # Detail which seqruns we've started analyzing so we can update statuses later
+    record_analysis_details(project, job_identifier)
     return int(slurm_job_id)
 
 
