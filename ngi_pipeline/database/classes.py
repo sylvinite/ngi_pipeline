@@ -116,7 +116,7 @@ class CharonSession(requests.Session):
         return self.delete(self.construct_charon_url("sample", projectid, sampleid))
 
     # LibPrep
-    def libprep_create(self, projectid, sampleid, libprepid, qc_analysis=None):
+    def libprep_create(self, projectid, sampleid, libprepid, qc=None):
         url = self.construct_charon_url("libprep", projectid, sampleid)
         l_dict = locals()
         data = { k: l_dict.get(k) for k in self._libprep_params }

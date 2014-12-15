@@ -1,3 +1,5 @@
+#!/bin/env python
+
 """
 Use this script to launch the pipeline from a project that has already been
 organized into Project/Sample/Libprep/Seqrun (as opposed to starting from

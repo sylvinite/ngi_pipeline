@@ -77,13 +77,13 @@ def create_charon_entries_from_project(project, best_practice_analysis="whole_ge
                 except CharonError as e:
                     LOG.warn('Could not delete libprep "{}": {}'.format(libprep, e))
             try:
-                qc_analysis = "PASSED"
-                LOG.info('Creating libprep "{}" with qc_analysis status "{}"'.format(libprep, qc_analysis))
+                qc= "PASSED"
+                LOG.info('Creating libprep "{}" with qc status "{}"'.format(libprep, qc))
                 charon_session.libprep_create(projectid=project.project_id,
                                               sampleid=sample.name,
                                               libprepid=libprep.name,
-                                              qc_analysis=qc_analysis)
-            except CharonError:
+                                              qc=qc)
+            except CharonError as e:
                 if force_overwrite:
                     LOG.warn('Overwriting data for project "{}" / '
                              'sample "{}" / libprep "{}"'.format(project, sample,
@@ -91,8 +91,9 @@ def create_charon_entries_from_project(project, best_practice_analysis="whole_ge
                     charon_session.libprep_update(projectid=project.project_id,
                                                   sampleid=sample.name,
                                                   libprepid=libprep.name,
-                                                  qc_analysis=qc_analysis)
+                                                  qc=qc)
                 else:
+                    LOG.info(e)
                     LOG.info('Project "{}" / sample "{}" / libprep "{}" already '
                              'exists; moving to libpreps'.format(project, sample, libprep))
 
