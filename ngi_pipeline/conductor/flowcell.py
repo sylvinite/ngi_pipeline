@@ -356,7 +356,7 @@ def parse_casava_directory(fc_dir):
     # (where "X" is the index length) and there is also an "Unaligned" folder
     unaligned_dir_pattern = os.path.join(fc_dir, "Unaligned*")
     # e.g. 131030_SN7001362_0103_BC2PUYACXX/Unaligned_16bp/Project_J__Bjorkegren_13_02/
-    project_dir_pattern = os.path.join(unaligned_dir_pattern, "*")
+    project_dir_pattern = os.path.join(unaligned_dir_pattern, "Project_*")
     print(project_dir_pattern)
     for project_dir in glob.glob(project_dir_pattern):
         LOG.info('Parsing project directory "{}"...'.format(
