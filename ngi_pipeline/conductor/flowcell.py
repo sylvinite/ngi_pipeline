@@ -300,7 +300,7 @@ def parse_casava_directory(fc_dir):
     """
     Traverse a CASAVA-1.8-generated directory structure and return a dictionary
     of the elements it contains.
-    The flowcell directory tree has (roughly) the structure:
+    The flowcell directory tree for HiSeq 2500 runs has (roughly) the structure:
 
     |-- Data
     |   |-- Intensities
@@ -326,6 +326,8 @@ def parse_casava_directory(fc_dir):
             |-- Sample_lane1
             |   ...
             |-- Sample_lane8
+
+    The structure for X-Ten flowcells is close to but not exactly the same
 
     :param str fc_dir: The directory created by CASAVA for this flowcell.
 
