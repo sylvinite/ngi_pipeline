@@ -1,4 +1,120 @@
+import collections
 import os
+import yaml
+
+from ngi_pipeline.conductor.classes import NGIProject
+from ngi_pipeline.database.classes import CharonSession
+from ngi_pipeline.utils.filesystem import rotate_file, safe_makedir
+
+def get_valid_seqruns_for_sample(project_id, sample_id, include_failed_libpreps=False,
+                                 include_done_seqruns=False):
+    """Find all the valid seqruns for a particular sample.
+
+    :param str project_id: The id of the project
+    :param str sample_id: The id of the sample
+    :param bool include_failed_libpreps: Include seqruns for libreps that have failed QC
+    :param bool include_done_seqruns: Include seqruns that are already marked DONE
+
+    :returns: A dict of {libprep_01: [seqrun_01, ..., seqrun_nn], ...}
+    :rtype: dict
+    """
+    charon_session = CharonSession()
+    sample_libpreps = charon_session.sample_get_libpreps(projectid=project_id,
+                                                         sampleid=sample_id)
+    libpreps = collections.defaultdict(list)
+    for libprep in sample_libpreps['libpreps']:
+        if libprep.get('qc') != "FAILED" or include_failed_libpreps:
+            libprep_id = libprep['libprepid']
+            for seqrun in charon_session.libprep_get_seqruns(projectid=project_id,
+                                                             sampleid=sample_id,
+                                                             libprepid=libprep_id)['seqruns']:
+                seqrun_id = seqrun['seqrunid']
+                aln_status = charon_session.seqrun_get(projectid=project_id,
+                                                       sampleid=sample_id,
+                                                       libprepid=libprep_id,
+                                                       seqrunid=seqrun_id).get('alignment_status')
+                if aln_status != "DONE" or include_done_seqruns:
+                    libpreps[libprep_id].append(seqrun_id)
+                else:
+                    LOG.info('Skipping seqrun "{}" due to alignment_status '
+                             '"{}"'.format(seqrun_id, aln_status))
+        else:
+            LOG.info('Skipping libprep "{}" due to qc status '
+                     '"{}"'.format(libprep, libprep.get("qc")))
+    return dict(libpreps)
+
+
+def record_analysis_details(project, job_identifier):
+    """Write a yaml file enumerating exactly which fastq files we've started
+    analyzing.
+    """
+    output_file_path = os.path.join(project.base_path, "ANALYSIS",
+                                    project.dirname, "logs",
+                                    "{}.files".format(job_identifier))
+    analysis_dict = {}
+    proj_dict = analysis_dict[project.dirname] = {}
+    for sample in project:
+        samp_dict = proj_dict[sample.name] = {}
+        for libprep in sample:
+            lib_dict = samp_dict[libprep.name] = {}
+            for seqrun in libprep:
+                lib_dict[seqrun.name] = seqrun.fastq_files
+    rotate_file(output_file_path)
+    safe_makedir(os.path.dirname(output_file_path))
+    with open(output_file_path, 'w') as f:
+        f.write(yaml.dump(analysis_dict))
+
+
+def create_project_obj_from_analysis_log(project_name, project_id,
+                                         project_base_path, sample_id, workflow):
+    """Using the log of seqruns used for a sample analysis, recreate a project
+    object with relevant sample, libprep, and seqrun objects.
+    """
+    analysis_log_filename = "{}-{}-{}.files".format(project_id, sample_id, workflow)
+    analysis_log_path = os.path.join(project_base_path, "ANALYSIS",
+                                     project_id, "logs", analysis_log_filename)
+    with open(analysis_log_path, 'r') as f:
+        analysis_dict = yaml.load(f)
+    project_obj = NGIProject(name=project_name, dirname=project_id,
+                             project_id=project_id, base_path=project_base_path)
+    sample_obj = project_obj.add_sample(sample_id, sample_id)
+    for libprep_name, seqrun_dict in analysis_dict[project_id][sample_id].items():
+        libprep_obj = sample_obj.add_libprep(libprep_name, libprep_name)
+        for seqrun_name in seqrun_dict.keys():
+            libprep_obj.add_seqrun(seqrun_name, seqrun_name)
+    return project_obj
+
+
+def check_for_preexisting_sample_runs(project_obj, sample_obj):
+    """If any analysis is undergoing or has completed for this sample's
+    seqruns, raise a RuntimeError.
+
+    :param NGIProject project_obj: The project object
+    :param NGISample sample_obj: The sample object
+
+    :raises RuntimeError: If any seqruns for this samples are RUNNING or DONE
+    """
+    project_id = project_obj.project_id
+    sample_id = sample_obj.name
+    charon_session = CharonSession()
+    sample_libpreps = charon_session.sample_get_libpreps(projectid=project_id,
+                                                         sampleid=sample_id)
+    for libprep in sample_libpreps['libpreps']:
+        libprep_id = libprep['libprepid']
+        for seqrun in charon_session.libprep_get_seqruns(projectid=project_id,
+                                                         sampleid=sample_id,
+                                                         libprepid=libprep_id)['seqruns']:
+            seqrun_id = seqrun['seqrunid']
+            aln_status = charon_session.seqrun_get(projectid=project_id,
+                                                   sampleid=sample_id,
+                                                   libprepid=libprep_id,
+                                                   seqrunid=seqrun_id).get('alignment_status')
+            if aln_status in ("RUNNING, DONE"):
+                raise RuntimeError('Project/Sample "{}/{}" has a preexisting '
+                                   'seqrun "{}" with status "{}"'.format(project_obj,
+                                                                         sample_obj,
+                                                                         seqrun_id,
+                                                                         aln_status))
 
 
 SBATCH_HEADER = """#!/bin/bash -l

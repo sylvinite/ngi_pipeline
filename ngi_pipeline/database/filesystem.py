@@ -41,7 +41,6 @@ def create_charon_entries_from_project(project, best_practice_analysis="whole_ge
                                           sequencing_facility=sequencing_facility)
         else:
             LOG.info('Project "{}" already exists; moving to samples...'.format(project))
-
     for sample in project:
         if delete_existing:
             LOG.warn('Deleting existing sample "{}"'.format(sample))

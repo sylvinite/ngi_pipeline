@@ -79,11 +79,9 @@ def launch_analysis(projects_to_analyze, restart_failed_jobs=False,
                                         sample=sample,
                                         exec_mode=exec_mode)
             except Exception as e:
-                raise
                 LOG.error('Cannot process project "{}" / sample "{}" / '
                           ' best practice analysis "{}" : {}'.format(project,
                                                                      sample,
                                                                      best_practice_analysis,
                                                                      e))
-                set_new_seqrun_status = "FAILED"
                 continue
