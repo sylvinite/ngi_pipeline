@@ -378,7 +378,12 @@ def record_process_sample(project, sample, workflow_subtask, analysis_module_nam
         CharonSession().sample_update(projectid=project.project_id,
                                       sampleid=sample.name,
                                       analysis_status=set_status)
-        recurse_status_for_sample(project, "RUNNING")
+        project_obj = create_project_obj_from_analysis_log(project.name,
+                                                           project.project_id,
+                                                           project.base_path,
+                                                           sample.name,
+                                                           workflow_subtask)
+        recurse_status_for_sample(project_obj, "RUNNING")
     except CharonError as e:
         LOG.warn('Could not update Charon status for project/sample '
                  '{}/{} due to error: {}'.format(project, sample, e))
