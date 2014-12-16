@@ -46,7 +46,6 @@ def analyze(project, sample, exec_mode="sbatch", config=None, config_file_path=N
 
     :raises ValueError: If exec_mode is an unsupported value
     """
-
     # If seqruns already exist for this sample and are RUNNING or DONE,
     # I guess for now we're asking for user intervention.
     # Refuse to process this data.
@@ -156,8 +155,12 @@ def collect_files_for_sample_analysis(project_obj, sample_obj):
     fastq_files_on_filesystem = fastq_files_under_dir(sample_data_directory, realpath=False)
     if not fastq_files_on_filesystem: LOG.error("TODO raise an error or something")
 
-
     fastq_files_to_analyze = []
+    # Create a new NGIProject object (the old one could still be in use elsewhere)
+    # Fix this later I've been coding for too long
+    proj_obj = NGIProject(project_obj.name, project_obj.dirname,
+                          project_obj.project_id, project_obj.base_path)
+    sample_obj = proj_obj.add_sample(sample_obj.name, sample_obj.dirname)
     for fastq_path in fastq_files_on_filesystem:
         base_path, fastq = os.path.split(fastq_path)
         if not fastq:
@@ -185,8 +188,7 @@ def collect_files_for_sample_analysis(project_obj, sample_obj):
     aln_files_to_copy = glob.glob(os.path.join(project_aln_dir, sample_analysis_file_pattern))
     qc_files_to_copy = glob.glob(os.path.join(project_alnqc_dir, sample_analysis_file_pattern))
 
-    return {"bam_files": aln_files_to_copy,
-            "alnqc_files": qc_files_to_copy}
+    return (proj_obj, aln_files_to_copy, qc_files_to_copy)
 
 @with_ngi_config
 def sbatch_piper_sample(command_line_list, workflow_name, project, sample,
@@ -237,13 +239,8 @@ def sbatch_piper_sample(command_line_list, workflow_name, project, sample,
         for module_name in modules_to_load:
             sbatch_text_list.append("module load {}".format(module_name))
 
-    # This function updates the project object we pass it to include all
-    # relevant fastq files. I guess that's pretty useless at this point
-    # but in the future I'm thinking we might need to run a bunch of different
-    # seqruns' fastq files? Like if we've waited to launch analysis or killed
-    # the previous one? I don't know. Whatever.
-    src_aln_files, src_alnqc_files = \
-            collect_files_for_sample_analysis(project, sample).values()
+    project, src_aln_files, src_alnqc_files = \
+            collect_files_for_sample_analysis(project, sample)
 
     # Fastq files to copy
     fastq_src_dst_list = []
