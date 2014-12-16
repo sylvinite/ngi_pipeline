@@ -109,8 +109,8 @@ def process_demultiplexed_flowcells(demux_fcid_dirs, restrict_to_projects=None,
                                               project.dirname,
                                               project.project_id,
                                               project.base_path)
-                        tmp_proj.samples = {sample.name: sample}
-                        tmp_proj.samples[sample.name].libpreps = {libprep.name: libprep}
+                        tmp_proj._subitems = {sample.name: sample}
+                        tmp_proj._subitems[sample.name]._subitems = {libprep.name: libprep}
                         create_charon_entries_from_project(tmp_proj)
     launch_analysis(projects_to_analyze, restart_failed_jobs)
 
@@ -120,7 +120,7 @@ def process_demultiplexed_flowcells(demux_fcid_dirs, restrict_to_projects=None,
 def setup_analysis_directory_structure(fc_dir, projects_to_analyze,
                                        restrict_to_projects=None, restrict_to_samples=None,
                                        create_files=True,
-                                       ign_only=True,
+                                       ign_only=False,
                                        config=None, config_file_path=None):
     """
     Copy and sort files from their CASAVA-demultiplexed flowcell structure
@@ -131,7 +131,7 @@ def setup_analysis_directory_structure(fc_dir, projects_to_analyze,
     :param dict config: The parsed configuration file.
     :param set projects_to_analyze: A dict (of Project objects, or empty)
     :param bool create_files: Alter the filesystem (as opposed to just parsing flowcells) (default True)
-    :param bool ign_only: Only process IGN projects (default True)
+    :param bool ign_only: Only process IGN projects (default False)
     :param list restrict_to_projects: Specific projects within the flowcell to process exclusively
     :param list restrict_to_samples: Specific samples within the flowcell to process exclusively
 
