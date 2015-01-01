@@ -31,6 +31,7 @@ def create_charon_entries_from_project(project, best_practice_analysis="whole_ge
                                       status=status,
                                       best_practice_analysis=best_practice_analysis,
                                       sequencing_facility=sequencing_facility)
+        LOG.info('Project "{}" created in Charon.'.format(project))
     except CharonError as e:
         if force_overwrite:
             LOG.warn('Overwriting data for project "{}"'.format(project))
@@ -39,6 +40,7 @@ def create_charon_entries_from_project(project, best_practice_analysis="whole_ge
                                           status=status,
                                           best_practice_analysis=best_practice_analysis,
                                           sequencing_facility=sequencing_facility)
+            LOG.info('Project "{}" updated in Charon.'.format(project))
         else:
             LOG.info('Project "{}" already exists; moving to samples...'.format(project))
     for sample in project:
@@ -55,6 +57,7 @@ def create_charon_entries_from_project(project, best_practice_analysis="whole_ge
             charon_session.sample_create(projectid=project.project_id,
                                          sampleid=sample.name,
                                          analysis_status=analysis_status)
+            LOG.info('Project/sample "{}/{}" created in Charon.'.format(project, sample))
         except CharonError:
             if force_overwrite:
                 LOG.warn('Overwriting data for project "{}" / '
@@ -62,6 +65,7 @@ def create_charon_entries_from_project(project, best_practice_analysis="whole_ge
                 charon_session.sample_update(projectid=project.project_id,
                                              sampleid=sample.name,
                                              analysis_status=analysis_status)
+                LOG.info('Project/sample "{}/{}" updated in Charon.'.format(project, sample))
             else:
                 LOG.info('Project "{}" / sample "{}" already exists; moving '
                          'to libpreps'.format(project, sample))
@@ -82,6 +86,8 @@ def create_charon_entries_from_project(project, best_practice_analysis="whole_ge
                                               sampleid=sample.name,
                                               libprepid=libprep.name,
                                               qc=qc)
+                LOG.info(('Project/sample/libprep "{}/{}/{}" created in '
+                          'Charon').format(project, sample, libprep))
             except CharonError as e:
                 if force_overwrite:
                     LOG.warn('Overwriting data for project "{}" / '
@@ -91,6 +97,8 @@ def create_charon_entries_from_project(project, best_practice_analysis="whole_ge
                                                   sampleid=sample.name,
                                                   libprepid=libprep.name,
                                                   qc=qc)
+                    LOG.info(('Project/sample/libprep "{}/{}/{}" updated in '
+                              'Charon').format(project, sample, libprep))
                 else:
                     LOG.info(e)
                     LOG.info('Project "{}" / sample "{}" / libprep "{}" already '
@@ -116,6 +124,9 @@ def create_charon_entries_from_project(project, best_practice_analysis="whole_ge
                                                  alignment_status=alignment_status,
                                                  total_reads=0,
                                                  mean_autosomal_coverage=0)
+                    LOG.info(('Project/sample/libprep/seqrun "{}/{}/{}/{}" '
+                              'created in Charon').format(project, sample,
+                                                          libpre, seqrun))
                 except CharonError as e:
                     if force_overwrite:
                         LOG.warn('Overwriting data for project "{}" / '
@@ -129,6 +140,9 @@ def create_charon_entries_from_project(project, best_practice_analysis="whole_ge
                                                      alignment_status=alignment_status,
                                                      total_reads=0,
                                                      mean_autosomal_coverage=0)
+                        LOG.info(('Project/sample/libprep/seqrun "{}/{}/{}/{}" '
+                                  'updated in Charon').format(project, sample,
+                                                              libpre, seqrun))
                     else:
                         LOG.info('Project "{}" / sample "{}" / libprep "{}" / '
                                  'seqrun "{}" already exists; next...'.format(project, sample,
