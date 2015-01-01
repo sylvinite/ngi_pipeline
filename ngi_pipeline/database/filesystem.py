@@ -126,7 +126,7 @@ def create_charon_entries_from_project(project, best_practice_analysis="whole_ge
                                                  mean_autosomal_coverage=0)
                     LOG.info(('Project/sample/libprep/seqrun "{}/{}/{}/{}" '
                               'created in Charon').format(project, sample,
-                                                          libpre, seqrun))
+                                                          libprep, seqrun))
                 except CharonError as e:
                     if force_overwrite:
                         LOG.warn('Overwriting data for project "{}" / '
@@ -142,7 +142,7 @@ def create_charon_entries_from_project(project, best_practice_analysis="whole_ge
                                                      mean_autosomal_coverage=0)
                         LOG.info(('Project/sample/libprep/seqrun "{}/{}/{}/{}" '
                                   'updated in Charon').format(project, sample,
-                                                              libpre, seqrun))
+                                                              libprep, seqrun))
                     else:
                         LOG.info('Project "{}" / sample "{}" / libprep "{}" / '
                                  'seqrun "{}" already exists; next...'.format(project, sample,
