@@ -45,11 +45,18 @@ def update_charon_with_local_jobs_status():
                                             sample_id=sample_id)
             label = "project/sample {}/{}".format(project_name, sample_id)
 
-            project_obj = create_project_obj_from_analysis_log(project_name,
-                                                               project_id,
-                                                               project_base_path,
-                                                               sample_id,
-                                                               workflow)
+            try:
+                project_obj = create_project_obj_from_analysis_log(project_name,
+                                                                   project_id,
+                                                                   project_base_path,
+                                                                   sample_id,
+                                                                   workflow)
+            except IOError as e: # analysis log file is missing!
+                LOG.error('Could not find analysis log file! Cannot update '
+                          'Charon for sample run {}/{}: {}'.format(project_id,
+                                                                   sample_id,
+                                                                   e))
+                continue
             try:
                 if piper_exit_code == 0:
                     # 0 -> Job finished successfully
