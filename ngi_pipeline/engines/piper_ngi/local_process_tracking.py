@@ -53,7 +53,7 @@ def update_charon_with_local_jobs_status():
             try:
                 if piper_exit_code == 0:
                     # 0 -> Job finished successfully
-                    set_status = "DONE"
+                    set_status = "ANALYZED"
                     LOG.info('Workflow "{}" for {} finished succesfully. '
                              'Recording status {} in Charon'.format(workflow, label,
                                                                     set_status))
