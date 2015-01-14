@@ -250,12 +250,13 @@ def setup_analysis_directory_structure(fc_dir, projects_to_analyze,
                         else:
                             raise ValueError()
                     except ValueError:
-                        LOG.error('Project "{}" / sample "{}" / fastq "{}" '
-                                  'has no libprep information in Charon and it '
-                                  'could not be determined from the SampleSheet.csv. '
-                                  'Setting library prep to "Unknown"'.format(project_name,
-                                                                             sample_name,
-                                                                             fq_file))
+                        LOG.warn('Project "{}" / sample "{}" / seqrun "{}" / fastq "{}" '
+                                 'has no libprep information in Charon and it '
+                                 'could not be determined from the SampleSheet.csv. '
+                                 'Setting library prep to "Unknown"'.format(project_name,
+                                                                            sample_name,
+                                                                            fc_full_id,
+                                                                            fq_file))
                         libprep_name = "Unknown"
                 libprep_object = sample_obj.add_libprep(name=libprep_name,
                                                         dirname=libprep_name)
