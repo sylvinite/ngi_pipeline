@@ -93,6 +93,13 @@ def process_demultiplexed_flowcells(demux_fcid_dirs, restrict_to_projects=None,
     else:
         projects_to_analyze = projects_to_analyze.values()
     for project in projects_to_analyze:
+        project_status = Charon_Session().project_get(project.project_id)['status']
+        if not project_status != "OPEN":
+            LOG.error('Data found on filesystem for project "{}" but Charon '
+                      'reports its status is not OPEN ("{}"). Not launching '
+                      'analysis for this project.'.format(project, project_status))
+            ## TODO MAIL OPERATORS?
+            continue
         if UPPSALA_PROJECT_RE.match(project.project_id):
             LOG.info('Creating Charon records for Uppsala project "{}" if they '
                      'are missing'.format(project))
@@ -282,7 +289,7 @@ def setup_analysis_directory_structure(fc_dir, projects_to_analyze,
                         try:
                             do_symlink(src_fastq_files, seqrun_dir)
                         except OSError:
-                            # TODO INSERT MAILTO
+                            # TODO MAIL OPERATORS?
                             LOG.error('Could not symlink files for project/sample'
                                       'libprep/seqrun {}/{}/{}/{}'.format(project_obj,
                                                                           sample_obj,
