@@ -45,11 +45,18 @@ def update_charon_with_local_jobs_status():
                                             sample_id=sample_id)
             label = "project/sample {}/{}".format(project_name, sample_id)
 
-            project_obj = create_project_obj_from_analysis_log(project_name,
-                                                               project_id,
-                                                               project_base_path,
-                                                               sample_id,
-                                                               workflow)
+            try:
+                project_obj = create_project_obj_from_analysis_log(project_name,
+                                                                   project_id,
+                                                                   project_base_path,
+                                                                   sample_id,
+                                                                   workflow)
+            except IOError as e: # analysis log file is missing!
+                LOG.error('Could not find analysis log file! Cannot update '
+                          'Charon for sample run {}/{}: {}'.format(project_id,
+                                                                   sample_id,
+                                                                   e))
+                continue
             try:
                 if piper_exit_code == 0:
                     # 0 -> Job finished successfully
@@ -378,7 +385,12 @@ def record_process_sample(project, sample, workflow_subtask, analysis_module_nam
         CharonSession().sample_update(projectid=project.project_id,
                                       sampleid=sample.name,
                                       analysis_status=set_status)
-        recurse_status_for_sample(project, "RUNNING")
+        project_obj = create_project_obj_from_analysis_log(project.name,
+                                                           project.project_id,
+                                                           project.base_path,
+                                                           sample.name,
+                                                           workflow_subtask)
+        recurse_status_for_sample(project_obj, "RUNNING")
     except CharonError as e:
         LOG.warn('Could not update Charon status for project/sample '
                  '{}/{} due to error: {}'.format(project, sample, e))

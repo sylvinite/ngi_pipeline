@@ -113,6 +113,7 @@ def check_for_preexisting_sample_runs(project_obj, sample_obj):
                 raise RuntimeError('Project/Sample "{}/{}" has a preexisting '
                                    'seqrun "{}" with status "{}"'.format(project_obj,
                                                                          sample_obj,
+                                                                         seqrun_id,
                                                                          aln_status))
 
 

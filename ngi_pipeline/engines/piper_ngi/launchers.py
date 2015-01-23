@@ -202,7 +202,7 @@ def sbatch_piper_sample(command_line_list, workflow_name, project, sample,
     :param dict config: The parsed configuration file (optional)
     :param str config_file_path: The path to the configuration file (optional)
     """
-    job_identifier = "{}-{}-{}".format(project, sample, workflow_name)
+    job_identifier = "{}-{}-{}".format(project.project_id, sample, workflow_name)
     # Paths to the various data directories
     project_dirname = project.dirname
     sample_dirname = sample.dirname

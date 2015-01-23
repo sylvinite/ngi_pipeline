@@ -64,8 +64,8 @@ class NGISeqRun(NGIObject):
     def add_fastq_files(self, fastq):
         if type(fastq) == list:
             self._subitems.extend(fastq)
-        elif type(fastq) == str:
-            self._subitems.append(fastq)
+        elif type(fastq) == str or type(fastq) == unicode:
+            self._subitems.append(str(fastq))
         else:
             raise TypeError("Fastq files must be passed as a list or a string: " \
                             "got \"{}\"".format(fastq))
