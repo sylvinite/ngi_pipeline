@@ -65,9 +65,11 @@ def launch_analysis(projects_to_analyze, restart_failed_jobs=False,
                 LOG.info('Charon reports seqrun analysis for project "{}" / sample "{}" '
                          'does not need processing '
                          ' (already "{}")'.format(project, sample, charon_reported_status))
+                # TODO MAIL OPERATORS?
                 continue
             elif charon_reported_status == "FAILED":
                 if not restart_failed_jobs:
+                    # TODO MAIL OPERATORS
                     LOG.error('FAILED:  Project "{}" / sample "{}" Charon reports FAILURE, manual '
                               'investigation needed!'.format(project, sample))
                     continue
@@ -79,6 +81,7 @@ def launch_analysis(projects_to_analyze, restart_failed_jobs=False,
                                         sample=sample,
                                         exec_mode=exec_mode)
             except Exception as e:
+                ## TODO MAIL OPERATORS
                 LOG.error('Cannot process project "{}" / sample "{}" / '
                           ' best practice analysis "{}" : {}'.format(project,
                                                                      sample,
