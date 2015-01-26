@@ -79,23 +79,30 @@ def process_demultiplexed_flowcells(demux_fcid_dirs, restrict_to_projects=None,
                                                                  config=config)
     if not projects_to_analyze:
         if restrict_to_projects:
-            error_message = ("No projects found to process; the specified flowcells "
+            error_message = ("No projects found to process: the specified flowcells "
                              "({fcid_dirs}) do not contain the specified project(s) "
                              "({restrict_to_projects}) or there was an error "
                              "gathering required information.").format(
-                                    fcid_dirs = ",".join(demux_fcid_dirs_set),
-                                    restrict_to_projects = ",".join(restrict_to_projects))
+                                    fcid_dirs=",".join(demux_fcid_dirs_set),
+                                    restrict_to_projects=",".join(restrict_to_projects))
         else:
             error_message = ("No projects found to process in flowcells {} "
                              "or there was an error gathering required "
                              "information.".format(",".join(demux_fcid_dirs_set)))
-        LOG.info(error_message)
-        sys.exit("Quitting: " + error_message)
+        raise RuntimeError(error_message)
     else:
-        projects_to_analyze = projects_to_analyze.values() # Don't need the dict functionality anymore; revert to list
+        projects_to_analyze = projects_to_analyze.values()
     for project in projects_to_analyze:
+        project_status = Charon_Session().project_get(project.project_id)['status']
+        if not project_status != "OPEN":
+            LOG.error('Data found on filesystem for project "{}" but Charon '
+                      'reports its status is not OPEN ("{}"). Not launching '
+                      'analysis for this project.'.format(project, project_status))
+            ## TODO MAIL OPERATORS?
+            continue
         if UPPSALA_PROJECT_RE.match(project.project_id):
-            LOG.info('Creating Charon records for Uppsala project "{}" if they are missing'.format(project))
+            LOG.info('Creating Charon records for Uppsala project "{}" if they '
+                     'are missing'.format(project))
             create_charon_entries_from_project(project, sequencing_facility="NGI-U")
         else:
             # I hate this
@@ -115,7 +122,6 @@ def process_demultiplexed_flowcells(demux_fcid_dirs, restrict_to_projects=None,
     launch_analysis(projects_to_analyze, restart_failed_jobs)
 
 
-### TODO rework so that the creation of the NGIObjects and the actual creation of files are different functions?
 @with_ngi_config
 def setup_analysis_directory_structure(fc_dir, projects_to_analyze,
                                        restrict_to_projects=None, restrict_to_samples=None,
@@ -184,7 +190,7 @@ def setup_analysis_directory_structure(fc_dir, projects_to_analyze,
             LOG.debug("Skipping project {}".format(project_name))
             continue
         try:
-            # This requires Charon access -- maps e.g. "Y.Mom_14_01" to "P123"
+            # Maps e.g. "Y.Mom_14_01" to "P123"
             project_id = get_project_id_from_name(project_name)
         except (CharonError, RuntimeError, ValueError) as e:
             LOG.warn('Could not retrieve project id from Charon (record missing?). '
@@ -214,7 +220,8 @@ def setup_analysis_directory_structure(fc_dir, projects_to_analyze,
             sample_name = sample['sample_name'].replace('__','.')
             # If specific samples are specified, skip those that do not match
             if restrict_to_samples and sample_name not in restrict_to_samples:
-                LOG.debug("Skipping sample {}: not in specified samples {}".format(sample_name, ", ".join(restrict_to_samples)))
+                LOG.debug("Skipping sample {}: not in specified samples "
+                          "{}".format(sample_name, ", ".join(restrict_to_samples)))
                 continue
             LOG.info("Setting up sample {}".format(sample_name))
             # Create a directory for the sample if it doesn't already exist
@@ -268,9 +275,6 @@ def setup_analysis_directory_structure(fc_dir, projects_to_analyze,
                 if create_files: safe_makedir(seqrun_dir, 0770)
                 seqrun_object.add_fastq_files(fq_file)
             if fastq_files and create_files:
-                # rsync the source files to the sample directory
-                #    src: flowcell/data/project/sample
-                #    dst: project/sample/libprep/flowcell_run
                 src_sample_dir = os.path.join(fc_dir_structure['fc_dir'],
                                               project['data_dir'],
                                               project['project_dir'],
@@ -282,18 +286,17 @@ def setup_analysis_directory_structure(fc_dir, projects_to_analyze,
                         seqrun_dst_dir = os.path.join(project_obj.base_path, project_obj.dirname,
                                                       sample_obj.dirname, libprep_obj.dirname,
                                                       seqrun_obj.dirname)
-                        LOG.info("Copying fastq files from {} to {}...".format(src_sample_dir, seqrun_dir))
-                        #try:
-                        ## FIXME this exception should be handled somehow when rsync fails
-                        do_symlink(src_fastq_files, seqrun_dir)
-                        #do_rsync(src_fastq_files, seqrun_dir)
-                        #except subprocess.CalledProcessError as e:
-                        #    ## TODO Here the rsync has failed
-                        #    ##      should we delete this libprep from the sample object in this case?
-                        #    ##      this could be an issue downstream if e.g. Piper expects these files
-                        #    ##      and they are missing
-                        #    LOG.warn('Error when performing rsync for "{}/{}/{}": '
-                        #              '{}'.format(project, sample, libprep, e,))
+                        LOG.info("Symlinking fastq files from {} to {}...".format(src_sample_dir, seqrun_dir))
+                        try:
+                            do_symlink(src_fastq_files, seqrun_dir)
+                        except OSError:
+                            # TODO MAIL OPERATORS?
+                            LOG.error('Could not symlink files for project/sample'
+                                      'libprep/seqrun {}/{}/{}/{}'.format(project_obj,
+                                                                          sample_obj,
+                                                                          libprep_obj,
+                                                                          seqrun_obj))
+                            continue
     return projects_to_analyze
 
 

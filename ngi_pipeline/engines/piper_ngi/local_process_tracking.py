@@ -111,6 +111,7 @@ def update_charon_with_local_jobs_status():
                         # Job is only deleted if the Charon update succeeds
                         LOG.debug("Deleting local entry {}".format(sample_entry))
                         session.delete(sample_entry)
+                        ## TODO NOTIFY OPERATORS
                     else: # Job still running
                         charon_status = charon_session.sample_get(projectid=project_id,
                                                                   sampleid=sample_id)['analysis_status']
