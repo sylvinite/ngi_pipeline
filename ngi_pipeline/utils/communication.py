@@ -17,13 +17,15 @@ def mail(recipient, subject, text, origin="ngi_pipeline"):
 
 def mail_sample_analysis(project_name, sample_name, workflow_name,
         recipient="ngi_pipeline_operators@scilifelab.se",
-        subject="sample_analysis intervention needed", origin="ngi_pipeline"):
+        subject="sample_analysis intervention needed", origin="ngi_pipeline", exception_text=None):
 
     text="""
     Project {} / Sample {} / Workflow {}
 
-    This sample analysis is already running.
+    This sample analysis has encountered an error.
     Not launching any new analysis.
-     
+    
     """.format(project_name, sample_name, workflow_name)
+    if exception_text:
+        text = text + "{}\n".format(exception_text)
     mail(recipient=recipient, subject=subject, text=text, origin=origin)
