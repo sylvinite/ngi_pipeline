@@ -5,6 +5,7 @@ import os
 import re
 import shlex
 import subprocess
+import time
 import xml.etree.cElementTree as ET
 import xml.parsers.expat
 
@@ -60,7 +61,9 @@ def get_slurm_job_status(slurm_job_id):
         # actual sbatch command for the bash interpreter? Unclear.
     except ValueError:
         raise TypeError("SLURM Job ID not an integer: {}".format(slurm_job_id))
+    LOG.debug('Checking slurm job status with cl "{}"...'.format(check_cl))
     job_status = subprocess.check_output(shlex.split(check_cl))
+    LOG.debug('job status for job {} is "{}"'.format(slurm_job_id, job_status.strip()))
     if not job_status:
         raise ValueError("No such slurm job found: {}".format(slurm_job_id))
     else:
@@ -117,10 +120,10 @@ def determine_library_prep_from_fcid(project_id, sample_name, fcid):
                         seqrun_runid = seqrun["seqrunid"]
                         if seqrun_runid == fcid:
                             return libprep['libprepid']
-                    else:
-                        raise CharonError("No match", 404)
                 else:
                     raise CharonError("No seqruns found!", 404)
+            else:
+                raise CharonError("No match", 404)
         else:
             raise CharonError("No libpreps found!", 404)
     except CharonError as e:
@@ -150,7 +153,13 @@ def determine_libprep_from_uppsala_samplesheet(samplesheet_path, project_id, sam
            lane_num == ss_lane_num:
                # Resembles 'LIBRARY_NAME:SX398_NA11993_Nano'
                try:
-                   return row["Description"].split(":")[1]
+                   #return row["Description"].split(":")[1]
+                   for keyval in row["Description"].split(";"):
+                       if keyval.split(":")[0] =="LIBRARY_NAME":
+                           return keyval.split(":")[1]
+                   #if we have not returned anything yet,raise
+                   raise IndexError
+                        
                except IndexError:
                    error_msg = ('Malformed description in "{}"; cannot get '
                                 'libprep information'.format(samplesheet_path))

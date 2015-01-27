@@ -8,34 +8,44 @@ from ngi_pipeline.log.loggers import minimal_logger
 LOG = minimal_logger(__name__)
 
 
-## FIXME this is a hack, improve it soon/later/someday
-##       (/never)
-def create_charon_entries_from_project(project, workflow="NGI", force_overwrite=False, delete_existing=False):
+def create_charon_entries_from_project(project, best_practice_analysis="whole_genome_reseq",
+                                       sequencing_facility="NGI-S",
+                                       force_overwrite=False, delete_existing=False):
     """Given a project object, creates the relevant entries
     in Charon.
 
     :param NGIProject project: The NGIProject object
-    :param str workflow: The workflow to assign for this project (default NGI)
+    :param str best_practice_analysis: The workflow to assign for this project (default "variant_calling")
+    :param str sequencing_facility: The facility that did the sequencing
     :param bool force_overwrite: If this is set to true, overwrite existing entries in Charon (default false)
+    :param bool delete_existing: Don't just update existing entries, delete them and create new ones (default false)
     """
     charon_session = CharonSession()
     try:
-        status="SEQUENCED"
-        LOG.info('Creating project "{}" with status "{}" and workflow "{}"'.format(project, status, workflow))
+        status="OPEN"
+        LOG.info('Creating project "{}" with status "{}", best practice analysis "{}", '
+                 'and sequencing_facility {}'.format(project, status, best_practice_analysis,
+                                                   sequencing_facility))
         charon_session.project_create(projectid=project.project_id,
                                       name=project.name,
                                       status=status,
-                                      pipeline=workflow)
-    except CharonError:
-        if force_overwrite:
-            LOG.warn('Overwriting data for project "{}"'.format(project))
-            charon_session.project_update(projectid=project.project_id,
-                                          name=project.name,
-                                          status=status,
-                                          pipeline=workflow)
+                                      best_practice_analysis=best_practice_analysis,
+                                      sequencing_facility=sequencing_facility)
+        LOG.info('Project "{}" created in Charon.'.format(project))
+    except CharonError as e:
+        if e.status_code == 400:
+            if force_overwrite:
+                LOG.warn('Overwriting data for project "{}"'.format(project))
+                charon_session.project_update(projectid=project.project_id,
+                                              name=project.name,
+                                              status=status,
+                                              best_practice_analysis=best_practice_analysis,
+                                              sequencing_facility=sequencing_facility)
+                LOG.info('Project "{}" updated in Charon.'.format(project))
+            else:
+                LOG.info('Project "{}" already exists; moving to samples...'.format(project))
         else:
-            LOG.info('Project "{}" already exists; moving to samples...'.format(project))
-
+            raise
     for sample in project:
         if delete_existing:
             LOG.warn('Deleting existing sample "{}"'.format(sample))
@@ -45,21 +55,27 @@ def create_charon_entries_from_project(project, workflow="NGI", force_overwrite=
             except CharonError as e:
                 LOG.error('Could not delete sample "{}": {}'.format(sample, e))
         try:
-            LOG.info('Creating sample "{}"'.format(sample))
+            analysis_status = "TO_ANALYZE"
+            LOG.info('Creating sample "{}" with analysis_status "{}"'.format(sample, analysis_status))
             charon_session.sample_create(projectid=project.project_id,
                                          sampleid=sample.name,
-                                         status="NEW")
-        except CharonError:
-            if force_overwrite:
-                LOG.warn('Overwriting data for project "{}" / '
-                         'sample "{}"'.format(project, sample))
-                charon_session.sample_update(projectid=project.project_id,
-                                             sampleid=sample.name,
-                                             status="NEW")
+                                         analysis_status=analysis_status)
+            LOG.info('Project/sample "{}/{}" created in Charon.'.format(project, sample))
+        except CharonError as e:
+            if e.status_code == 400:
+                if force_overwrite:
+                    LOG.warn('Overwriting data for project "{}" / '
+                             'sample "{}"'.format(project, sample))
+                    charon_session.sample_update(projectid=project.project_id,
+                                                 sampleid=sample.name,
+                                                 analysis_status=analysis_status)
+                    LOG.info('Project/sample "{}/{}" updated in Charon.'.format(project, sample))
+                else:
+                    LOG.info('Project "{}" / sample "{}" already exists; moving '
+                             'to libpreps'.format(project, sample))
             else:
-                LOG.info('Project "{}" / sample "{}" already exists; moving '
-                         'to libpreps'.format(project, sample))
-
+                LOG.error(e)
+                continue
         for libprep in sample:
             if delete_existing:
                 LOG.warn('Deleting existing libprep "{}"'.format(libprep))
@@ -70,24 +86,33 @@ def create_charon_entries_from_project(project, workflow="NGI", force_overwrite=
                 except CharonError as e:
                     LOG.warn('Could not delete libprep "{}": {}'.format(libprep, e))
             try:
-                LOG.info('Creating libprep "{}"'.format(libprep))
+                qc= "PASSED"
+                LOG.info('Creating libprep "{}" with qc status "{}"'.format(libprep, qc))
                 charon_session.libprep_create(projectid=project.project_id,
                                               sampleid=sample.name,
                                               libprepid=libprep.name,
-                                              status="NEW")
-            except CharonError:
-                if force_overwrite:
-                    LOG.warn('Overwriting data for project "{}" / '
-                             'sample "{}" / libprep "{}"'.format(project, sample,
-                                                                 libprep))
-                    charon_session.libprep_update(projectid=project.project_id,
-                                                  sampleid=sample.name,
-                                                  libprepid=libprep.name,
-                                                  status="NEW")
+                                              qc=qc)
+                LOG.info(('Project/sample/libprep "{}/{}/{}" created in '
+                          'Charon').format(project, sample, libprep))
+            except CharonError as e:
+                if e.status_code == 400:
+                    if force_overwrite:
+                        LOG.warn('Overwriting data for project "{}" / '
+                                 'sample "{}" / libprep "{}"'.format(project, sample,
+                                                                     libprep))
+                        charon_session.libprep_update(projectid=project.project_id,
+                                                      sampleid=sample.name,
+                                                      libprepid=libprep.name,
+                                                      qc=qc)
+                        LOG.info(('Project/sample/libprep "{}/{}/{}" updated in '
+                                  'Charon').format(project, sample, libprep))
+                    else:
+                        LOG.info(e)
+                        LOG.info('Project "{}" / sample "{}" / libprep "{}" already '
+                                 'exists; moving to libpreps'.format(project, sample, libprep))
                 else:
-                    LOG.info('Project "{}" / sample "{}" / libprep "{}" already '
-                             'exists; moving to libpreps'.format(project, sample, libprep))
-
+                    LOG.error(e)
+                    continue
             for seqrun in libprep:
                 if delete_existing:
                     LOG.warn('Deleting existing seqrun "{}"'.format(seqrun))
@@ -99,30 +124,42 @@ def create_charon_entries_from_project(project, workflow="NGI", force_overwrite=
                     except CharonError as e:
                         LOG.error('Could not delete seqrun "{}": {}'.format(seqrun, e))
                 try:
-                    LOG.info('Creating seqrun "{}"'.format(seqrun))
+                    alignment_status="NOT_RUNNING"
+                    LOG.info('Creating seqrun "{}" with alignment_status "{}"'.format(seqrun, alignment_status))
                     charon_session.seqrun_create(projectid=project.project_id,
                                                  sampleid=sample.name,
                                                  libprepid=libprep.name,
                                                  seqrunid=seqrun.name,
+                                                 alignment_status=alignment_status,
                                                  total_reads=0,
-                                                 mean_autosomal_coverage=0,
-                                                 sequencing_status="DONE",
-                                                 alignment_status="NEW")
+                                                 mean_autosomal_coverage=0)
+                    LOG.info(('Project/sample/libprep/seqrun "{}/{}/{}/{}" '
+                              'created in Charon').format(project, sample,
+                                                          libprep, seqrun))
                 except CharonError as e:
-                    if force_overwrite:
-                        LOG.warn('Overwriting data for project "{}" / '
-                                 'sample "{}" / libprep "{}" / '
-                                 'seqrun "{}"'.format(project, sample,
-                                                      libprep, seqrun))
-                        charon_session.seqrun_update(projectid=project.project_id,
-                                                     sampleid=sample.name,
-                                                     libprepid=libprep.name,
-                                                     seqrunid=seqrun.name,
-                                                     status="NEW")
+                    if e.status_code == 400:
+                        if force_overwrite:
+                            LOG.warn('Overwriting data for project "{}" / '
+                                     'sample "{}" / libprep "{}" / '
+                                     'seqrun "{}"'.format(project, sample,
+                                                          libprep, seqrun))
+                            charon_session.seqrun_update(projectid=project.project_id,
+                                                         sampleid=sample.name,
+                                                         libprepid=libprep.name,
+                                                         seqrunid=seqrun.name,
+                                                         alignment_status=alignment_status,
+                                                         total_reads=0,
+                                                         mean_autosomal_coverage=0)
+                            LOG.info(('Project/sample/libprep/seqrun "{}/{}/{}/{}" '
+                                      'updated in Charon').format(project, sample,
+                                                                  libprep, seqrun))
+                        else:
+                            LOG.info('Project "{}" / sample "{}" / libprep "{}" / '
+                                     'seqrun "{}" already exists; next...'.format(project, sample,
+                                                                                  libprep, seqrun))
                     else:
-                        LOG.info('Project "{}" / sample "{}" / libprep "{}" / '
-                                 'seqrun "{}" already exists; next...'.format(project, sample,
-                                                                              libprep, seqrun))
+                        LOG.error(e)
+                        continue
 
 
 def recreate_project_from_db(analysis_top_dir, project_name, project_id):

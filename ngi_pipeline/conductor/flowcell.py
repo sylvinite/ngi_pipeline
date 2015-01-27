@@ -9,7 +9,7 @@ import re
 import sys
 
 from ngi_pipeline.conductor.classes import NGIProject
-from ngi_pipeline.conductor.launchers import launch_analysis_for_seqruns
+from ngi_pipeline.conductor.launchers import launch_analysis
 from ngi_pipeline.database.classes import CharonSession, CharonError
 from ngi_pipeline.database.communicate import get_project_id_from_name
 from ngi_pipeline.database.filesystem import create_charon_entries_from_project
@@ -24,9 +24,7 @@ LOG = minimal_logger(__name__)
 
 UPPSALA_PROJECT_RE = re.compile(r'\w{2}-\d{4}')
 
-## NOTE
-## This is called the key function that needs to be called by Celery when  a new flowcell is delivered
-## from Sthlm or Uppsala
+
 def process_demultiplexed_flowcell(demux_fcid_dir_path, restrict_to_projects=None,
                                    restrict_to_samples=None, restart_failed_jobs=False,
                                    config_file_path=None):
@@ -81,38 +79,54 @@ def process_demultiplexed_flowcells(demux_fcid_dirs, restrict_to_projects=None,
                                                                  config=config)
     if not projects_to_analyze:
         if restrict_to_projects:
-            error_message = ("No projects found to process; the specified flowcells "
+            error_message = ("No projects found to process: the specified flowcells "
                              "({fcid_dirs}) do not contain the specified project(s) "
                              "({restrict_to_projects}) or there was an error "
                              "gathering required information.").format(
-                                    fcid_dirs = ",".join(demux_fcid_dirs_set),
-                                    restrict_to_projects = ",".join(restrict_to_projects))
+                                    fcid_dirs=",".join(demux_fcid_dirs_set),
+                                    restrict_to_projects=",".join(restrict_to_projects))
         else:
-            error_message = ("No projects found to process in flowcells {}"
+            error_message = ("No projects found to process in flowcells {} "
                              "or there was an error gathering required "
                              "information.".format(",".join(demux_fcid_dirs_set)))
-        LOG.info(error_message)
-        sys.exit("Quitting: " + error_message)
+        raise RuntimeError(error_message)
     else:
-        # Don't need the dict functionality anymore; revert to list
         projects_to_analyze = projects_to_analyze.values()
     for project in projects_to_analyze:
+        project_status = CharonSession().project_get(project.project_id)['status']
+        if not project_status != "OPEN":
+            LOG.error('Data found on filesystem for project "{}" but Charon '
+                      'reports its status is not OPEN ("{}"). Not launching '
+                      'analysis for this project.'.format(project, project_status))
+            ## TODO MAIL OPERATORS?
+            continue
         if UPPSALA_PROJECT_RE.match(project.project_id):
-            LOG.info('Creating Charon records for Uppsala project "{}" if they are missing'.format(project))
-            create_charon_entries_from_project(project)
-    # The automatic analysis that occurs after flowcells are delivered is
-    # only at the flowcell level. Another intermittent check determines if
-    # conditions are met for sample-level analysis to proceed and launches
-    # that if so.
-    launch_analysis_for_seqruns(projects_to_analyze, restart_failed_jobs)
+            LOG.info('Creating Charon records for Uppsala project "{}" if they '
+                     'are missing'.format(project))
+            create_charon_entries_from_project(project, sequencing_facility="NGI-U")
+        else:
+            # I hate this
+            for sample in project:
+                for libprep in sample:
+                    if libprep.name == "Unknown":
+                        LOG.info('Populating Charon with records for project/sample/libprep '
+                                 '{}/{}/{}'.format(project, sample, libprep))
+                        # This is horrible what am I doing somebody stop me
+                        tmp_proj = NGIProject(project.name,
+                                              project.dirname,
+                                              project.project_id,
+                                              project.base_path)
+                        tmp_proj._subitems = {sample.name: sample}
+                        tmp_proj._subitems[sample.name]._subitems = {libprep.name: libprep}
+                        create_charon_entries_from_project(tmp_proj)
+    launch_analysis(projects_to_analyze, restart_failed_jobs)
 
 
-### FIXME rework so that the creation of the NGIObjects and the actual creation of files are different functions?
 @with_ngi_config
 def setup_analysis_directory_structure(fc_dir, projects_to_analyze,
                                        restrict_to_projects=None, restrict_to_samples=None,
                                        create_files=True,
-                                       ign_only=True,
+                                       ign_only=False,
                                        config=None, config_file_path=None):
     """
     Copy and sort files from their CASAVA-demultiplexed flowcell structure
@@ -123,14 +137,13 @@ def setup_analysis_directory_structure(fc_dir, projects_to_analyze,
     :param dict config: The parsed configuration file.
     :param set projects_to_analyze: A dict (of Project objects, or empty)
     :param bool create_files: Alter the filesystem (as opposed to just parsing flowcells) (default True)
-    :param bool ign_only: Only process IGN projects (default True)
+    :param bool ign_only: Only process IGN projects (default False)
     :param list restrict_to_projects: Specific projects within the flowcell to process exclusively
     :param list restrict_to_samples: Specific samples within the flowcell to process exclusively
 
     :returns: A list of NGIProject objects that need to be run through the analysis pipeline
     :rtype: list
 
-    :raises OSError: If the analysis destination directory does not exist or if there are permissions errors.
     :raises KeyError: If a required configuration key is not available.
     """
     LOG.info("Setting up analysis for demultiplexed data in source folder \"{}\"".format(fc_dir))
@@ -142,13 +155,14 @@ def setup_analysis_directory_structure(fc_dir, projects_to_analyze,
         error_msg = "Error: Analysis top directory {} does not exist".format(analysis_top_dir)
         LOG.error(error_msg)
         raise OSError(error_msg)
+    fc_dir = fc_dir if os.path.isabs(fc_dir) else os.path.join(analysis_top_dir, fc_dir)
     if not os.path.exists(fc_dir):
         LOG.error("Error: Flowcell directory {} does not exist".format(fc_dir))
         return []
     # Map the directory structure for this flowcell
     try:
         fc_dir_structure = parse_casava_directory(fc_dir)
-    except RuntimeError as e:
+    except (OSError, ValueError) as e:
         LOG.error("Error when processing flowcell dir \"{}\": {}".format(fc_dir, e))
         return []
     fc_full_id = fc_dir_structure['fc_full_id']
@@ -166,30 +180,43 @@ def setup_analysis_directory_structure(fc_dir, projects_to_analyze,
                     project_bpa = charon_session.project_get(project_name).get("best_practice_analysis")
                 except (CharonError, RuntimeError, ValueError) as e:
                     LOG.warn('Could not retrieve project id from Charon (record missing?). '
-                     'Probably  project {} is not an IGN (no mixed flowcells)'.format(project_name))
+                     'Probably  project {} is not an IGN (no mixed flowcells) '
+                     '(error: {})'.format(project_name, e))
                     continue
-                if not project_bpa == "IGN":
+                if not project_bpa in config.get('analysis',{}).get('best_practice_analysis',{}):
                     # If this is not an IGN project, skip it
                     continue
         if restrict_to_projects and project_name not in restrict_to_projects:
             LOG.debug("Skipping project {}".format(project_name))
             continue
         try:
-            # This requires Charon access -- maps e.g. "Y.Mom_14_01" to "P123"
+            # Maps e.g. "Y.Mom_14_01" to "P123"
             project_id = get_project_id_from_name(project_name)
         except (CharonError, RuntimeError, ValueError) as e:
             LOG.warn('Could not retrieve project id from Charon (record missing?). '
-                     'Using project name ("{}") as project id'.format(project_name))
+                     'Using project name ("{}") as project id '
+                     '(error: {})'.format(project_name, e))
             project_id = project_name
         LOG.info("Setting up project {}".format(project.get("project_name")))
         # Create a project directory if it doesn't already exist, including
         # intervening "DATA" directory
-        project_dir = os.path.join(analysis_top_dir, "DATA", project_name)
-        if create_files: safe_makedir(project_dir, 0770)
+        project_dir = os.path.join(analysis_top_dir, "DATA", project_id)
+        project_sl_dir = os.path.join(analysis_top_dir, "DATA", project_name)
+        project_analysis_dir = os.path.join(analysis_top_dir, "ANALYSIS", project_id)
+        project_analysis_sl_dir = os.path.join(analysis_top_dir, "ANALYSIS", project_name)
+        if create_files:
+            safe_makedir(project_dir, 0770)
+            safe_makedir(project_analysis_dir, 0770)
+            if not project_dir == project_sl_dir and \
+               not os.path.exists(project_sl_dir):
+                os.symlink(project_dir, project_sl_dir)
+            if not project_analysis_dir == project_analysis_sl_dir and \
+               not os.path.exists(project_analysis_sl_dir):
+                os.symlink(project_analysis_dir, project_analysis_sl_dir)
         try:
             project_obj = projects_to_analyze[project_dir]
         except KeyError:
-            project_obj = NGIProject(name=project_name, dirname=project_name,
+            project_obj = NGIProject(name=project_name, dirname=project_id,
                                      project_id=project_id,
                                      base_path=analysis_top_dir)
             projects_to_analyze[project_dir] = project_obj
@@ -199,7 +226,8 @@ def setup_analysis_directory_structure(fc_dir, projects_to_analyze,
             sample_name = sample['sample_name'].replace('__','.')
             # If specific samples are specified, skip those that do not match
             if restrict_to_samples and sample_name not in restrict_to_samples:
-                LOG.debug("Skipping sample {}: not in specified samples {}".format(sample_name, ", ".join(restrict_to_samples)))
+                LOG.debug("Skipping sample {}: not in specified samples "
+                          "{}".format(sample_name, ", ".join(restrict_to_samples)))
                 continue
             LOG.info("Setting up sample {}".format(sample_name))
             # Create a directory for the sample if it doesn't already exist
@@ -235,13 +263,14 @@ def setup_analysis_directory_structure(fc_dir, projects_to_analyze,
                         else:
                             raise ValueError()
                     except ValueError:
-                        LOG.error('Project "{}" / sample "{}" / fastq "{}" '
-                                  'has no libprep information in Charon and it '
-                                  'could not be determined from the SampleSheet.csv. '
-                                  'Skipping.'.format(project_name,
-                                                     sample_name,
-                                                     fq_file))
-                        continue
+                        LOG.warn('Project "{}" / sample "{}" / seqrun "{}" / fastq "{}" '
+                                 'has no libprep information in Charon and it '
+                                 'could not be determined from the SampleSheet.csv. '
+                                 'Setting library prep to "Unknown"'.format(project_name,
+                                                                            sample_name,
+                                                                            fc_full_id,
+                                                                            fq_file))
+                        libprep_name = "Unknown"
                 libprep_object = sample_obj.add_libprep(name=libprep_name,
                                                         dirname=libprep_name)
                 libprep_dir = os.path.join(sample_dir, libprep_name)
@@ -252,9 +281,6 @@ def setup_analysis_directory_structure(fc_dir, projects_to_analyze,
                 if create_files: safe_makedir(seqrun_dir, 0770)
                 seqrun_object.add_fastq_files(fq_file)
             if fastq_files and create_files:
-                # rsync the source files to the sample directory
-                #    src: flowcell/data/project/sample
-                #    dst: project/sample/libprep/flowcell_run
                 src_sample_dir = os.path.join(fc_dir_structure['fc_dir'],
                                               project['data_dir'],
                                               project['project_dir'],
@@ -266,18 +292,17 @@ def setup_analysis_directory_structure(fc_dir, projects_to_analyze,
                         seqrun_dst_dir = os.path.join(project_obj.base_path, project_obj.dirname,
                                                       sample_obj.dirname, libprep_obj.dirname,
                                                       seqrun_obj.dirname)
-                        LOG.info("Copying fastq files from {} to {}...".format(src_sample_dir, seqrun_dir))
-                        #try:
-                        ## FIXME this exception should be handled somehow when rsync fails
-                        do_symlink(src_fastq_files, seqrun_dir)
-                        #do_rsync(src_fastq_files, seqrun_dir)
-                        #except subprocess.CalledProcessError as e:
-                        #    ## TODO Here the rsync has failed
-                        #    ##      should we delete this libprep from the sample object in this case?
-                        #    ##      this could be an issue downstream if e.g. Piper expects these files
-                        #    ##      and they are missing
-                        #    LOG.warn('Error when performing rsync for "{}/{}/{}": '
-                        #              '{}'.format(project, sample, libprep, e,))
+                        LOG.info("Symlinking fastq files from {} to {}...".format(src_sample_dir, seqrun_dir))
+                        try:
+                            do_symlink(src_fastq_files, seqrun_dir)
+                        except OSError:
+                            # TODO MAIL OPERATORS?
+                            LOG.error('Could not symlink files for project/sample'
+                                      'libprep/seqrun {}/{}/{}/{}'.format(project_obj,
+                                                                          sample_obj,
+                                                                          libprep_obj,
+                                                                          seqrun_obj))
+                            continue
     return projects_to_analyze
 
 
@@ -285,12 +310,13 @@ def parse_casava_directory(fc_dir):
     """
     Traverse a CASAVA-1.8-generated directory structure and return a dictionary
     of the elements it contains.
-    The flowcell directory tree has (roughly) the structure:
+    The flowcell directory tree for HiSeq 2500 runs has (roughly) the structure:
 
     |-- Data
     |   |-- Intensities
     |       |-- BaseCalls
     |-- InterOp
+    |-- SampleSheet.csv
     |-- Unaligned
     |   |-- Basecall_Stats_C2PUYACXX
     |-- Unaligned_16bp
@@ -304,7 +330,6 @@ def parse_casava_directory(fc_dir):
         |-- Project_J__Bjorkegren_13_02
         |   |-- Sample_P680_356F_dual56
         |   |   |-- <fastq files are here>
-        |   |   |-- <SampleSheet.csv is here>
         |   |-- Sample_P680_360F_dual60
         |   |   ...
         |-- Undetermined_indices
@@ -312,46 +337,68 @@ def parse_casava_directory(fc_dir):
             |   ...
             |-- Sample_lane8
 
+    The structure for X-Ten flowcells is close to but not exactly the same
+
     :param str fc_dir: The directory created by CASAVA for this flowcell.
 
     :returns: A dict of information about the flowcell, including project/sample info
     :rtype: dict
 
-    :raises RuntimeError: If the fc_dir does not exist or cannot be accessed
+    :raises OSError: If the fc_dir does not exist or cannot be accessed
     """
     projects = []
     fc_dir = os.path.abspath(fc_dir)
-    LOG.info("Parsing flowcell directory \"{}\"...".format(fc_dir))
+
+    if not os.access(fc_dir, os.F_OK): os_msg = "does not exist"
+    if not os.access(fc_dir, os.R_OK): os_msg = "could not be read (permission denied)"
+    if locals().get('os_msg'): raise OSError("Error with flowcell dir {}: directory {}".format(fc_dir, os_msg))
+
+    LOG.info('Parsing flowcell directory "{}"...'.format(fc_dir))
+    try:
+        samplesheet_path = os.path.abspath(glob.glob(os.path.join(fc_dir, "SampleSheet.csv"))[0])
+        LOG.debug("SampleSheet.csv found at {}".format(samplesheet_path))
+    except IndexError:
+        LOG.warn("Could not find samplesheet in directory {}".format(fc_dir))
+        samplesheet_path = None
+
     fc_full_id = os.path.basename(fc_dir)
     # "Unaligned*" because SciLifeLab dirs are called "Unaligned_Xbp"
     # (where "X" is the index length) and there is also an "Unaligned" folder
-    unaligned_dir_pattern = os.path.join(fc_dir,"Unaligned*")
+    unaligned_dir_pattern = os.path.join(fc_dir, "Unaligned*")
     # e.g. 131030_SN7001362_0103_BC2PUYACXX/Unaligned_16bp/Project_J__Bjorkegren_13_02/
-    project_dir_pattern = os.path.join(unaligned_dir_pattern,"Project_*")
+    project_dir_pattern = os.path.join(unaligned_dir_pattern, "Project_*")
+    print(project_dir_pattern)
     for project_dir in glob.glob(project_dir_pattern):
-        LOG.info("Parsing project directory \"{}\"...".format(project_dir.split(os.path.split(fc_dir)[0] + "/")[1]))
+        LOG.info('Parsing project directory "{}"...'.format(
+                            project_dir.split(os.path.split(fc_dir)[0] + "/")[1]))
+        project_name = os.path.basename(project_dir).replace('Project_', '').replace('__', '.')
         project_samples = []
-        try:
-            samplesheet_path = os.path.abspath(glob.glob(os.path.join(project_dir, "../../SampleSheet.csv"))[0])
-        except IndexError:
-            samplesheet_path = None
-        sample_dir_pattern = os.path.join(project_dir,"Sample_*")
-        # e.g. <Project_dir>/Sample_P680_356F_dual56/
+        sample_dir_pattern = os.path.join(project_dir, "*")
+
+        # e.g. <Project_dir>/P680_356F_dual56/
         for sample_dir in glob.glob(sample_dir_pattern):
-            LOG.info("Parsing samples directory \"{}\"...".format(sample_dir.split(os.path.split(fc_dir)[0] + "/")[1]))
-            fastq_file_pattern = os.path.join(sample_dir,"*.fastq.gz")
-            fastq_files = [os.path.basename(file) for file in glob.glob(fastq_file_pattern)]
-            sample_name = os.path.basename(sample_dir).replace("Sample_","").replace('__','.')
+            LOG.info('Parsing samples directory "{}"...'.format(sample_dir.split(
+                                                os.path.split(fc_dir)[0] + "/")[1]))
+            sample_name = os.path.basename(sample_dir).replace('Sample_', '').replace('__','.')
+            fastq_file_pattern = os.path.join(sample_dir, "*.fastq.gz")
+            fastq_files = [os.path.basename(fq) for fq in glob.glob(fastq_file_pattern)]
+
             project_samples.append({'sample_dir': os.path.basename(sample_dir),
                                     'sample_name': sample_name,
-                                    'files': fastq_files,
-                                   })
-        project_name = os.path.basename(project_dir).replace("Project_","").replace('__','.')
-        projects.append({'data_dir': os.path.relpath(os.path.dirname(project_dir),fc_dir),
-                         'project_dir': os.path.basename(project_dir),
-                         'project_name': project_name,
-                         'samples': project_samples})
-    return {'fc_dir'    : fc_dir,
-            'fc_full_id': fc_full_id,
-            'projects': projects,
-            'samplesheet_path': samplesheet_path}
+                                    'files': fastq_files})
+        if not project_samples:
+            LOG.warn('No samples found for project "{}" in fc {}'.format(project_name, fc_dir))
+        else:
+            projects.append({'data_dir': os.path.relpath(os.path.dirname(project_dir), fc_dir),
+                             'project_dir': os.path.basename(project_dir),
+                             'project_name': project_name,
+                             'samples': project_samples})
+
+    if not projects:
+        raise ValueError('No projects or no projects with sample found in '
+                         'flowcell directory {}'.format(fc_dir))
+    else:
+        return {'fc_dir'    : fc_dir,
+                'fc_full_id': fc_full_id,
+                'projects': projects,
+                'samplesheet_path': samplesheet_path}
