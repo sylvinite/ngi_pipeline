@@ -93,7 +93,7 @@ def process_demultiplexed_flowcells(demux_fcid_dirs, restrict_to_projects=None,
     else:
         projects_to_analyze = projects_to_analyze.values()
     for project in projects_to_analyze:
-        project_status = Charon_Session().project_get(project.project_id)['status']
+        project_status = CharonSession().project_get(project.project_id)['status']
         if not project_status != "OPEN":
             LOG.error('Data found on filesystem for project "{}" but Charon '
                       'reports its status is not OPEN ("{}"). Not launching '
@@ -202,11 +202,17 @@ def setup_analysis_directory_structure(fc_dir, projects_to_analyze,
         # intervening "DATA" directory
         project_dir = os.path.join(analysis_top_dir, "DATA", project_id)
         project_sl_dir = os.path.join(analysis_top_dir, "DATA", project_name)
+        project_analysis_dir = os.path.join(analysis_top_dir, "ANALYSIS", project_id)
+        project_analysis_sl_dir = os.path.join(analysis_top_dir, "ANALYSIS", project_name)
         if create_files:
             safe_makedir(project_dir, 0770)
+            safe_makedir(project_analysis_dir, 0770)
             if not project_dir == project_sl_dir and \
                not os.path.exists(project_sl_dir):
                 os.symlink(project_dir, project_sl_dir)
+            if not project_analysis_dir == project_analysis_sl_dir and \
+               not os.path.exists(project_analysis_sl_dir):
+                os.symlink(project_analysis_dir, project_analysis_sl_dir)
         try:
             project_obj = projects_to_analyze[project_dir]
         except KeyError:

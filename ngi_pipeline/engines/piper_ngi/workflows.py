@@ -109,7 +109,7 @@ def workflow_dna_variantcalling(qscripts_dir_path, setup_xml_path, global_config
         cl_string += " --output_directory {output_dir}"
     if exec_mode == "sbatch":
         # Execute from within an sbatch file (run jobs on the local node)
-        num_threads = int(config.get("piper", {}).get("threads") or 16)
+        num_threads = int(config.get("piper", {}).get("threads") or 8)
         job_runner = "Shell"
         scatter_gather = 1
     else: # exec_mode == "local"
