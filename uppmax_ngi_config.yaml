@@ -10,8 +10,7 @@ analysis:
 
 
 database:
-    record_tracking_db_path: /proj/a2014205/ngi_resources/record_tracking_database_milou.sql
-
+        record_tracking_db_path: /proj/a2014205/ngi_resources/record_tracking_database.sql
 
 environment:
     project_id: a2014205
@@ -25,7 +24,7 @@ logging:
 
 piper:
     # Also can be set as an environmental variable $PIPER_QSCRIPTS_DIR
-    path_to_piper_qscripts: /proj/a2014205/software/piper/qscripts
+    path_to_piper_qscripts: /proj/a2014205/software/piper_bin/qscripts
     load_modules:
         - java/sun_jdk1.7.0_25
         - R/2.15.0
