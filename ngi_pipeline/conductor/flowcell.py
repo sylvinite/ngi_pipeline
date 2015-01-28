@@ -94,7 +94,7 @@ def process_demultiplexed_flowcells(demux_fcid_dirs, restrict_to_projects=None,
         projects_to_analyze = projects_to_analyze.values()
     for project in projects_to_analyze:
         project_status = CharonSession().project_get(project.project_id)['status']
-        if not project_status != "OPEN":
+        if not project_status == "OPEN":
             LOG.error('Data found on filesystem for project "{}" but Charon '
                       'reports its status is not OPEN ("{}"). Not launching '
                       'analysis for this project.'.format(project, project_status))
