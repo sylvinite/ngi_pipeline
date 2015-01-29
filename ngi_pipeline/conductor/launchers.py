@@ -4,6 +4,7 @@ from __future__ import print_function
 
 import importlib
 import os
+import inspect
 
 from ngi_pipeline.conductor.classes import NGIProject
 from ngi_pipeline.database.classes import CharonSession, CharonError
@@ -77,7 +78,7 @@ def launch_analysis(projects_to_analyze, restart_failed_jobs=False,
                 LOG.info('Charon reports seqrun analysis for project "{}" / sample "{}" '
                          'does not need processing '
                          ' (already "{}")'.format(project, sample, charon_reported_status))
-                mail_sample_analysis(project_name=project.name, sample_name=sample.name, workflow_name=analysis_module.__name__)
+                mail_sample_analysis(project_name=project.name, sample_name=sample.name, engine_name=analysis_module.__name__)
                 continue
             elif charon_reported_status == "FAILED":
                 if not restart_failed_jobs:
