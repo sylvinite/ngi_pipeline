@@ -13,7 +13,7 @@ from ngi_pipeline.database.filesystem import recreate_project_from_db
 from ngi_pipeline.engines.piper_ngi.local_process_tracking import update_charon_with_local_jobs_status
 from ngi_pipeline.log.loggers import minimal_logger
 from ngi_pipeline.utils.classes import with_ngi_config
-from ngi_pipeline.utils.communication import mail_sample_analysis 
+from ngi_pipeline.utils.communication import mail_analysis 
 
 
 LOG = minimal_logger(__name__)
@@ -57,6 +57,14 @@ def launch_analysis(projects_to_analyze, restart_failed_jobs=False,
     
     charon_session = CharonSession()
     for project in projects_to_analyze: # Get information from Charon regarding which best practice analyses to run
+        project_status = charon_session.project_get(project.project_id)['status']
+        if not project_status == "OPEN":
+            error_text=('Data found on filesystem for project "{}" but Charon '
+                      'reports its status is not OPEN ("{}"). Not launching '
+                      'analysis for this project.'.format(project, project_status))
+            LOG.error(error_text)
+            mail_analysis(project_name = project.name, info_text = error_text)
+            continue
         try:
             analysis_module=get_engine_for_BP(project)
         except (RuntimeError, KeyError, CharonError) as e: # BPA missing from Charon?
@@ -78,7 +86,7 @@ def launch_analysis(projects_to_analyze, restart_failed_jobs=False,
                 LOG.info('Charon reports seqrun analysis for project "{}" / sample "{}" '
                          'does not need processing '
                          ' (already "{}")'.format(project, sample, charon_reported_status))
-                mail_sample_analysis(project_name=project.name, sample_name=sample.name, engine_name=analysis_module.__name__)
+                mail_analysis(project_name=project.name, sample_name=sample.name, engine_name=analysis_module.__name__)
                 continue
             elif charon_reported_status == "FAILED":
                 if not restart_failed_jobs:
