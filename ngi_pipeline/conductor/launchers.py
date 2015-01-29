@@ -83,16 +83,18 @@ def launch_analysis(projects_to_analyze, restart_failed_jobs=False,
                                              analysis_status=charon_reported_status)
             # Check Charon to ensure this hasn't already been processed
             if charon_reported_status in ("UNDER_ANALYSIS", "ANALYZED"):
-                LOG.info('Charon reports seqrun analysis for project "{}" / sample "{}" '
+                error_text = ('Charon reports seqrun analysis for project "{}" / sample "{}" '
                          'does not need processing '
                          ' (already "{}")'.format(project, sample, charon_reported_status))
-                mail_analysis(project_name=project.name, sample_name=sample.name, engine_name=analysis_module.__name__)
+                LOG.error(error_text)
+                mail_analysis(project_name=project.name, sample_name=sample.name, engine_name=analysis_module.__name__, info_text=error_text)
                 continue
             elif charon_reported_status == "FAILED":
                 if not restart_failed_jobs:
-                    # TODO MAIL OPERATORS
-                    LOG.error('FAILED:  Project "{}" / sample "{}" Charon reports FAILURE, manual '
+                    error_text=('FAILED:  Project "{}" / sample "{}" Charon reports FAILURE, manual '
                               'investigation needed!'.format(project, sample))
+                    LOG.error(error_text)
+                    mail_analysis(project_name=project.name, sample_name=sample.name, engine_name=analysis_module.__name__, info_text=error_text)
                     continue
             try:
                 LOG.info('Attempting to launch sample analysis for '
@@ -102,10 +104,9 @@ def launch_analysis(projects_to_analyze, restart_failed_jobs=False,
                                         sample=sample,
                                         exec_mode=exec_mode)
             except Exception as e:
-                # TODO MAIL OPERATORS?
-                LOG.error('Cannot process project "{}" / sample "{}" / '
-                          ' engine "{}" : {}'.format(project,
-                                                                     sample,
-                                                                     analysis_module.__name__,
-                                                                     e))
+                error_text=('Cannot process project "{}" / sample "{}" / '
+                          ' engine "{}" : {}'.format(project,sample,
+                                                    analysis_module.__name__,e))
+                LOG.error(error_text)
+                mail_analysis(project_name=project.name, sample_name=sample.name, engine_name=analysis_module.__name__, info_text=e)
                 continue

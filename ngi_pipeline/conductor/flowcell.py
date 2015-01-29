@@ -289,12 +289,13 @@ def setup_analysis_directory_structure(fc_dir, projects_to_analyze,
                         try:
                             do_symlink(src_fastq_files, seqrun_dir)
                         except OSError:
-                            # TODO MAIL OPERATORS?
-                            LOG.error('Could not symlink files for project/sample'
+                            error_text=('Could not symlink files for project/sample'
                                       'libprep/seqrun {}/{}/{}/{}'.format(project_obj,
                                                                           sample_obj,
                                                                           libprep_obj,
                                                                           seqrun_obj))
+                            LOG.error(error_text)
+                            mail_analysis(project_name=project_name, sample_name=sample_name,engine_name='piper_ngi', info_text=error_text)
                             continue
     return projects_to_analyze
 
