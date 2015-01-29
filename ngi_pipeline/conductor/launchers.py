@@ -4,7 +4,6 @@ from __future__ import print_function
 
 import importlib
 import os
-import inspect
 
 from ngi_pipeline.conductor.classes import NGIProject
 from ngi_pipeline.database.classes import CharonSession, CharonError
