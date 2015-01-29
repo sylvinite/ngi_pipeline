@@ -4,7 +4,6 @@ from __future__ import print_function
 
 import importlib
 import os
-import sys
 
 from ngi_pipeline.conductor.classes import NGIProject
 from ngi_pipeline.database.classes import CharonSession, CharonError
@@ -20,9 +19,9 @@ LOG = minimal_logger(__name__)
 
 @with_ngi_config
 def get_engine_for_BP(project, config=None, config_file_path=None):
-    """returns a .
+    """returns a analysis engine module for the given project.
 
-    :param list projects_to_analyze: The list of projects (Project objects) to analyze
+    :param NGIProject  project: The project to get the engine from.
     """
     charon_session = CharonSession()
     best_practice_analysis = charon_session.project_get(project.project_id)["best_practice_analysis"]
@@ -58,25 +57,9 @@ def launch_analysis(projects_to_analyze, restart_failed_jobs=False,
     charon_session = CharonSession()
     for project in projects_to_analyze: # Get information from Charon regarding which best practice analyses to run
         try:
-            best_practice_analysis = charon_session.project_get(project.project_id)["best_practice_analysis"]
-        except (KeyError, CharonError) as e: # BPA missing from Charon?
+            analysis_module=get_engine_for_BP(project)
+        except (RuntimeError, KeyError, CharonError) as e: # BPA missing from Charon?
             LOG.error('Skipping project "{}" because of error: {}'.format(project, e))
-            continue
-        try:
-            analysis_engine_module_name = config["analysis"]["best_practice_analysis"][best_practice_analysis]["analysis_engine"]
-        except KeyError:
-            error_msg = ('No analysis engine for best practice analysis "{}" '
-                         'specified in configuration file. Skipping this analysis '
-                         'for project {}'.format(best_practice_analysis, project))
-            LOG.error(error_msg)
-            raise RuntimeError(error_msg)
-        try:
-            analysis_module = importlib.import_module(analysis_engine_module_name)
-        except ImportError as e:
-            error_msg = ('Skipping project "{}" best practice analysis"{}": couldn\'t import '
-                         'module "{}": {}'.format(project, best_practice_analysis,
-                                                  analysis_engine_module_name, e))
-            LOG.error(error_msg)
             continue
         for sample in project:
             label = "{}/{}".format(project, sample)
@@ -94,7 +77,7 @@ def launch_analysis(projects_to_analyze, restart_failed_jobs=False,
                 LOG.info('Charon reports seqrun analysis for project "{}" / sample "{}" '
                          'does not need processing '
                          ' (already "{}")'.format(project, sample, charon_reported_status))
-                mail_sample_analysis(project_name=project.name, sample_name=sample.name, workflow_name=best_practice_analysis)
+                mail_sample_analysis(project_name=project.name, sample_name=sample.name, workflow_name=analysis_module.__name__)
                 continue
             elif charon_reported_status == "FAILED":
                 if not restart_failed_jobs:
@@ -104,16 +87,16 @@ def launch_analysis(projects_to_analyze, restart_failed_jobs=False,
                     continue
             try:
                 LOG.info('Attempting to launch sample analysis for '
-                         'project "{}" / sample "{}" / best practice analysis '
-                         '"{}"'.format(project, sample, best_practice_analysis))
+                         'project "{}" / sample "{}" / engine'
+                         '"{}"'.format(project, sample, analysis_module.__name__))
                 analysis_module.analyze(project=project,
                                         sample=sample,
                                         exec_mode=exec_mode)
             except Exception as e:
                 # TODO MAIL OPERATORS?
                 LOG.error('Cannot process project "{}" / sample "{}" / '
-                          ' best practice analysis "{}" : {}'.format(project,
+                          ' engine "{}" : {}'.format(project,
                                                                      sample,
-                                                                     best_practice_analysis,
+                                                                     analysis_module.__name__,
                                                                      e))
                 continue
