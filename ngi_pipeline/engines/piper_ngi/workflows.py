@@ -96,7 +96,7 @@ def workflow_dna_variantcalling(qscripts_dir_path, setup_xml_path, global_config
     """
     ## TODO need to add -jobNative arguments (--qos=seqver)
     workflow_qscript_path = os.path.join(qscripts_dir_path, "DNABestPracticeVariantCalling.scala")
-    job_walltime = slurm_time_to_seconds(config.get("slurm", {}).get("time") or "3-00:00:00")
+    job_walltime = slurm_time_to_seconds(config.get("slurm", {}).get("time") or "4-00:00:00")
     cl_string = ("piper -S {workflow_qscript_path}"
                  " --xml_input {setup_xml_path}"
                  " --global_config {global_config_path}"
