@@ -26,11 +26,9 @@ def mail_analysis(project_name, sample_name = None, engine_name = None,
         text+=" / Engine {}".format(engine_name)
 
     text+="""
-    File : {} / Line : {}
-
     This analysis has encountered an error.
-    Not launching any new analysis.
     
+    File : {} / Line : {}
     """.format(tb_info[0],tb_info[1])
     if info_text:
         text = text + "{}\n".format(info_text)
