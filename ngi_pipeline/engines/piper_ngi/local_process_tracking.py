@@ -9,6 +9,7 @@ import time
 from ngi_pipeline.conductor.classes import NGIProject
 from ngi_pipeline.database.classes import CharonSession, CharonError
 from ngi_pipeline.log.loggers import minimal_logger
+from ngi_pipeline.utils.communication import mail_analysis
 from ngi_pipeline.engines.piper_ngi.database import SampleAnalysis, get_db_session
 from ngi_pipeline.engines.piper_ngi.utils import create_exit_code_file_path, \
                                                  create_project_obj_from_analysis_log, \
@@ -18,6 +19,7 @@ from ngi_pipeline.utils.parsers import get_slurm_job_status, \
                                        STHLM_UUSNP_SEQRUN_RE, \
                                        STHLM_UUSNP_SAMPLE_RE
 from sqlalchemy.exc import IntegrityError, OperationalError
+
 
 LOG = minimal_logger(__name__)
 
@@ -35,6 +37,7 @@ def update_charon_with_local_jobs_status():
             project_id = sample_entry.project_id
             project_base_path = sample_entry.project_base_path
             sample_id = sample_entry.sample_id
+            engine=sample_entry.engine
             # Only one of these will have a value
             slurm_job_id = sample_entry.slurm_job_id
             process_id = sample_entry.process_id
@@ -52,10 +55,12 @@ def update_charon_with_local_jobs_status():
                                                                    sample_id,
                                                                    workflow)
             except IOError as e: # analysis log file is missing!
-                LOG.error('Could not find analysis log file! Cannot update '
+                error_text=('Could not find analysis log file! Cannot update '
                           'Charon for sample run {}/{}: {}'.format(project_id,
                                                                    sample_id,
                                                                    e))
+                LOG.error(error_text)
+                mail_analysis(project_name=project_name, sample_name=sample_id, engine_name=engine, info_text=error_text)
                 continue
             try:
                 if piper_exit_code == 0:
@@ -78,8 +83,10 @@ def update_charon_with_local_jobs_status():
                 elif piper_exit_code == 1:
                     # 1 -> Job failed
                     set_status = "FAILED"
-                    LOG.info('Workflow "{}" for {} failed. Recording status '
+                    info_text=('Workflow "{}" for {} failed. Recording status '
                              '{} in Charon.'.format(workflow, label, set_status))
+                    LOG.info(info_text)
+                    mail_analysis(project_name=project_name, sample_name=sample_id, engine_name=engine, info_text=info_text)
                     charon_session.sample_update(projectid=project_id,
                                                  sampleid=sample_id,
                                                  analysis_status=set_status)
@@ -102,8 +109,10 @@ def update_charon_with_local_jobs_status():
                             JOB_FAILED = True
                     if JOB_FAILED:
                         set_status = "FAILED"
-                        LOG.warn('No exit code found but job not running for '
+                        warn_text=('No exit code found but job not running for '
                                  '{}: setting status to {} in Charon'.format(label, set_status))
+                        LOG.warn(warn_text)
+                        mail_analysis(project_name=project_name, sample_name=sample_id, engine_name=engine, info_text=warn_text)
                         charon_session.sample_update(projectid=project_id,
                                                      sampleid=sample_id,
                                                      analysis_status=set_status)
@@ -111,7 +120,6 @@ def update_charon_with_local_jobs_status():
                         # Job is only deleted if the Charon update succeeds
                         LOG.debug("Deleting local entry {}".format(sample_entry))
                         session.delete(sample_entry)
-                        ## TODO NOTIFY OPERATORS
                     else: # Job still running
                         charon_status = charon_session.sample_get(projectid=project_id,
                                                                   sampleid=sample_id)['analysis_status']
@@ -126,7 +134,9 @@ def update_charon_with_local_jobs_status():
                                                          analysis_status=set_status)
                             recurse_status_for_sample(project_obj, "RUNNING")
             except CharonError as e:
-                LOG.error('Unable to update Charon status for "{}": {}'.format(label, e))
+                error_text=('Unable to update Charon status for "{}": {}'.format(label, e))
+                LOG.error(error_text)
+                mail_analysis(project_name=project_name, sample_name=sample_id, engine_name=engine, info_text=error_text)
         session.commit()
 
 
@@ -154,8 +164,11 @@ def recurse_status_for_sample(project_obj, set_status, update_done=False):
                                              seqrunid=seqrun_id,
                                              alignment_status=set_status)
             except CharonError as e:
-                LOG.error(('Could not update status of project/sample/libprep/seqrun '
+                error_text=(('Could not update status of project/sample/libprep/seqrun '
                            '"{}" in Charon to "{}": {}').format(label, set_status, e))
+                LOG.error(error_text)
+                mail_analysis(project_name=project_id, sample_name=sample_obj.name, info_text=error_text)
+
 
 
 def update_coverage_for_sample_seqruns(project_id, sample_id, piper_qc_dir):
@@ -187,9 +200,11 @@ def update_coverage_for_sample_seqruns(project_id, sample_id, piper_qc_dir):
                                              seqrunid=seqrun_id,
                                              mean_autosomal_coverage=ma_coverage)
             except CharonError as e:
-                LOG.error(('Could not update project/sample/libprep/seqrun "{}" '
+                error_text=(('Could not update project/sample/libprep/seqrun "{}" '
                            'in Charon with mean autosomal coverage '
                            '"{}": {}').format(label, ma_coverage, e))
+                LOG.error(error_text)
+                mail_analysis(project_name=project_id, sample_name=sample_id,engine_name="piper_ngi", info_text=error_text)
 
 
 def parse_mean_autosomal_coverage_for_sample(piper_qc_dir, sample_id):
@@ -393,9 +408,11 @@ def record_process_sample(project, sample, workflow_subtask, analysis_module_nam
                                                            workflow_subtask)
         recurse_status_for_sample(project_obj, "RUNNING")
     except CharonError as e:
-        LOG.warn('Could not update Charon status for project/sample '
+        error_text=('Could not update Charon status for project/sample '
                  '{}/{} due to error: {}'.format(project, sample, e))
 
+        LOG.error(error_text)
+        mail_analysis(project_name=project_id, sample_name=sample_id,engine_name='piper_ngi',info_text=error_text)
 
 def is_sample_analysis_running_local(workflow_subtask, project_id, sample_id):
     """Determine if a sample is currently being analyzed by accessing the local
