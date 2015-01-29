@@ -4,6 +4,7 @@ from __future__ import print_function
 
 import importlib
 import os
+import sys
 
 from ngi_pipeline.conductor.classes import NGIProject
 from ngi_pipeline.database.classes import CharonSession, CharonError
@@ -12,9 +13,34 @@ from ngi_pipeline.database.filesystem import recreate_project_from_db
 from ngi_pipeline.engines.piper_ngi.local_process_tracking import update_charon_with_local_jobs_status
 from ngi_pipeline.log.loggers import minimal_logger
 from ngi_pipeline.utils.classes import with_ngi_config
+from ngi_pipeline.utils.communication import mail_sample_analysis 
 
 
 LOG = minimal_logger(__name__)
+
+@with_ngi_config
+def get_engine_for_BP(project, config=None, config_file_path=None):
+    """returns a .
+
+    :param list projects_to_analyze: The list of projects (Project objects) to analyze
+    """
+    charon_session = CharonSession()
+    best_practice_analysis = charon_session.project_get(project.project_id)["best_practice_analysis"]
+    try:
+        analysis_engine_module_name=config["analysis"]["best_practice_analysis"][best_practice_analysis]["analysis_engine"]
+    except KeyError:
+        error_msg = ('No analysis engine for best practice analysis "{}" '
+                     'specified in configuration file. '
+                     'for project {}'.format(best_practice_analysis, project))
+        raise RuntimeError(error_msg)
+    try:
+        analysis_module = importlib.import_module(analysis_engine_module_name)
+    except ImportError as e:
+        error_msg = ('project "{}" best practice analysis"{}": couldn\'t import '
+                     'module "{}": {}'.format(project, best_practice_analysis,
+                                              analysis_engine_module_name, e))
+        raise RuntimeError(error_msg)
+    return analysis_module
 
 @with_ngi_config
 def launch_analysis(projects_to_analyze, restart_failed_jobs=False,
@@ -25,7 +51,11 @@ def launch_analysis(projects_to_analyze, restart_failed_jobs=False,
     :param dict config: The parsed NGI configuration file; optional/has default.
     :param str config_file_path: The path to the NGI configuration file; optional/has default.
     """
-    update_charon_with_local_jobs_status() # Update Charon with the local state of all the jobs we're running
+    for project in projects_to_analyze: # Get information from Charon regarding which best practice analyses to run
+        engine=get_engine_for_BP(project, config, config_file_path)
+        engine.local_process_tracking.update_charon_with_local_jobs_status()
+    sys.exit(0)
+    
     charon_session = CharonSession()
     for project in projects_to_analyze: # Get information from Charon regarding which best practice analyses to run
         try:
@@ -61,11 +91,11 @@ def launch_analysis(projects_to_analyze, restart_failed_jobs=False,
                 charon_session.sample_update(project.project_id, sample.name,
                                              analysis_status=charon_reported_status)
             # Check Charon to ensure this hasn't already been processed
-            if charon_reported_status in ("RUNNING", "UNDER_ANALYSIS", "DONE"):
+            if charon_reported_status in ("UNDER_ANALYSIS", "ANALYZED"):
                 LOG.info('Charon reports seqrun analysis for project "{}" / sample "{}" '
                          'does not need processing '
                          ' (already "{}")'.format(project, sample, charon_reported_status))
-                # TODO MAIL OPERATORS?
+                mail_sample_analysis(project_name=project.name, sample_name=sample.name, workflow_name=best_practice_analysis)
                 continue
             elif charon_reported_status == "FAILED":
                 if not restart_failed_jobs:
@@ -81,7 +111,7 @@ def launch_analysis(projects_to_analyze, restart_failed_jobs=False,
                                         sample=sample,
                                         exec_mode=exec_mode)
             except Exception as e:
-                ## TODO MAIL OPERATORS
+                # TODO MAIL OPERATORS?
                 LOG.error('Cannot process project "{}" / sample "{}" / '
                           ' best practice analysis "{}" : {}'.format(project,
                                                                      sample,
