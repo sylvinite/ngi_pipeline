@@ -29,9 +29,7 @@ piper:
     load_modules:
         - java/sun_jdk1.7.0_25
         - R/2.15.0
-    sample:
-        required_autosomal_coverage: 28.4
-    threads: 16
+    threads: 8
 
 
 slurm:
