@@ -28,12 +28,13 @@ piper:
     load_modules:
         - java/sun_jdk1.7.0_25
         - R/2.15.0
-    threads: 8
+    threads: 16
 
 
 slurm:
     extra_params:
         "--qos": "seqver"
+    cores: 16
 
 
 supported_genomes:
