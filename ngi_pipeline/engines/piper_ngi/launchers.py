@@ -87,6 +87,7 @@ def analyze(project, sample, exec_mode="sbatch", config=None, config_file_path=N
                                           exit_code_path=exit_code_path,
                                           config=config,
                                           exec_mode=exec_mode)
+                #rotate_previous_analysis(project)
                 if exec_mode == "sbatch":
                     process_id = None
                     slurm_job_id = sbatch_piper_sample([setup_xml_cl, piper_cl],
@@ -341,3 +342,14 @@ def launch_piper_job(command_line, project, log_file_path=None):
         log_process_non_blocking(popen_object.stdout, LOG.info)
         log_process_non_blocking(popen_object.stderr, LOG.warn)
     return popen_object
+
+def rotate_previous_analysis(project_obj):
+    """Rotates the files from the existing analysis starting at 03_merged_aligments"""
+
+    
+    current_datetime = datetime.datetime.now().strftime("%Y-%m-%d_%H:%M:%S:%f")
+    previous_analysis_path=os.join(project.base_path, "ANALYSIS", project.project_id,"previous_analyses")
+    safe_makedir(previous_analysis_path)
+    youngest_analysis_path=os.join(previous_analysis_path, current_datetime)
+    safe_makedir(youngest_analysis_path)
+

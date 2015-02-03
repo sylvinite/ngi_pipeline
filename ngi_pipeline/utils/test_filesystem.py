@@ -5,9 +5,10 @@ import socket
 import subprocess
 import tempfile
 import unittest
+import filecmp
 
 from .filesystem import chdir, curdir_tmpdir, do_rsync, execute_command_line, \
-                        load_modules, safe_makedir
+                        load_modules, safe_makedir, do_hardlink, do_symlink
 
 
 class TestFilesystemUtils(unittest.TestCase):
@@ -41,6 +42,19 @@ class TestFilesystemUtils(unittest.TestCase):
         do_rsync(src_file_paths, dst_dir)
         for dst_file_path in dst_file_paths:
             assert(os.path.exists(dst_file_path))
+
+    def test_do_links(self):
+        src_tmp_dir = tempfile.mkdtemp()
+        dst_tmp_dir = os.path.join(src_tmp_dir, 'dst' )
+        safe_makedir(dst_tmp_dir)
+        src_file_path = os.path.join(src_tmp_dir, 'file1.txt') 
+        dst_file_path = os.path.join(dst_tmp_dir, 'file1.txt') 
+        open(src_file_path, 'w').close()
+        do_hardlink([src_file_path], dst_tmp_dir)
+        assert(filecmp.cmp(src_file_path, dst_file_path))
+        os.remove(dst_file_path)
+        do_symlink([src_file_path], dst_tmp_dir)
+        assert(filecmp.cmp(src_file_path, dst_file_path))
 
     def test_safe_makedir_singledir(self):
         # Should test that this doesn't overwrite an existing dir as well
