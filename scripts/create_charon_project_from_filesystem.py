@@ -79,7 +79,7 @@ def _validate_dangerous_user_thing(action="do SOMETHING that Mario thinks you sh
             return False
 
 if __name__=="__main__":
-    parser = argparse.ArgumentParser("Populate a Charon project with data gleaned from the filesystem.")
+    parser = argparse.ArgumentParser("Populate a Charon project with a flowcell directory")
     parser.add_argument("demux_fcid_dirs", nargs="*",
             help="The path to the fcid containing the project of interest.")
     parser.add_argument("-a", "--already-parsed", action="store_true",
