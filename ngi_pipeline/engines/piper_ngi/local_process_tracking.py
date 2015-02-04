@@ -75,7 +75,7 @@ def update_charon_with_local_jobs_status():
                                   engine_name=engine, level="INFO", info_text=info_text)
                     # Parse seqrun output results / update Charon
                     piper_qc_dir = os.path.join(project_base_path, "ANALYSIS",
-                                                project_id,  "02_preliminary_alignment_qc")
+                                                project_id, "02_preliminary_alignment_qc")
                     update_coverage_for_sample_seqruns(project_id, sample_id, piper_qc_dir)
                     charon_session.sample_update(projectid=project_id,
                                                  sampleid=sample_id,
