@@ -8,11 +8,9 @@ import os
 from ngi_pipeline.conductor.classes import NGIProject
 from ngi_pipeline.database.classes import CharonSession, CharonError
 from ngi_pipeline.database.filesystem import recreate_project_from_db
-## FIXME this needs to be moved out of the engine-specific code and into a generic function
-from ngi_pipeline.engines.piper_ngi.local_process_tracking import update_charon_with_local_jobs_status
 from ngi_pipeline.log.loggers import minimal_logger
 from ngi_pipeline.utils.classes import with_ngi_config
-from ngi_pipeline.utils.communication import mail_analysis 
+from ngi_pipeline.utils.communication import mail_analysis
 
 
 LOG = minimal_logger(__name__)
@@ -58,11 +56,11 @@ def launch_analysis(projects_to_analyze, restart_failed_jobs=False,
     for project in projects_to_analyze: # Get information from Charon regarding which best practice analyses to run
         project_status = charon_session.project_get(project.project_id)['status']
         if not project_status == "OPEN":
-            error_text=('Data found on filesystem for project "{}" but Charon '
-                      'reports its status is not OPEN ("{}"). Not launching '
-                      'analysis for this project.'.format(project, project_status))
+            error_text = ('Data found on filesystem for project "{}" but Charon '
+                          'reports its status is not OPEN ("{}"). Not launching '
+                          'analysis for this project.'.format(project, project_status))
             LOG.error(error_text)
-            mail_analysis(project_name = project.name, info_text = error_text)
+            mail_analysis(project_name=project.name, level="ERROR", info_text=error_text)
             continue
         try:
             analysis_module=get_engine_for_BP(project)
@@ -82,18 +80,22 @@ def launch_analysis(projects_to_analyze, restart_failed_jobs=False,
                                              analysis_status=charon_reported_status)
             # Check Charon to ensure this hasn't already been processed
             if charon_reported_status in ("UNDER_ANALYSIS", "ANALYZED"):
-                error_text = ('Charon reports seqrun analysis for project "{}" / sample "{}" '
-                         'does not need processing '
-                         ' (already "{}")'.format(project, sample, charon_reported_status))
+                error_text = ('Charon reports seqrun analysis for project "{}" '
+                              '/ sample "{}" does not need processing (already '
+                              '"{}")'.format(project, sample, charon_reported_status))
                 LOG.error(error_text)
-                mail_analysis(project_name=project.name, sample_name=sample.name, engine_name=analysis_module.__name__, info_text=error_text)
+                mail_analysis(project_name=project.name, sample_name=sample.name,
+                              engine_name=analysis_module.__name__,
+                              level="ERROR", info_text=error_text)
                 continue
             elif charon_reported_status == "FAILED":
                 if not restart_failed_jobs:
-                    error_text=('FAILED:  Project "{}" / sample "{}" Charon reports FAILURE, manual '
-                              'investigation needed!'.format(project, sample))
+                    error_text = ('FAILED:  Project "{}" / sample "{}" Charon reports '
+                                  'FAILURE, manual investigation needed!'.format(project, sample))
                     LOG.error(error_text)
-                    mail_analysis(project_name=project.name, sample_name=sample.name, engine_name=analysis_module.__name__, info_text=error_text)
+                    mail_analysis(project_name=project.name, sample_name=sample.name,
+                                  engine_name=analysis_module.__name__,
+                                  level="ERROR", info_text=error_text)
                     continue
             try:
                 LOG.info('Attempting to launch sample analysis for '
@@ -103,9 +105,12 @@ def launch_analysis(projects_to_analyze, restart_failed_jobs=False,
                                         sample=sample,
                                         exec_mode=exec_mode)
             except Exception as e:
-                error_text=('Cannot process project "{}" / sample "{}" / '
-                          ' engine "{}" : {}'.format(project,sample,
-                                                    analysis_module.__name__,e))
+                error_text = ('Cannot process project "{}" / sample "{}" / '
+                              'engine "{}" : {}'.format(project, sample,
+                                                        analysis_module.__name__,
+                                                        e))
                 LOG.error(error_text)
-                mail_analysis(project_name=project.name, sample_name=sample.name, engine_name=analysis_module.__name__, info_text=e)
+                mail_analysis(project_name=project.name, sample_name=sample.name,
+                              engine_name=analysis_module.__name__,
+                              level="ERROR", info_text=e)
                 continue

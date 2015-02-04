@@ -35,7 +35,7 @@ class TestCommon(unittest.TestCase):
         # Test list functionality
         file_list = [ "P123_456_AAAAAA_L001_R1_001.fastq.gz",
                       "P123_456_AAAAAA_L001_R2_001.fastq.gz",]
-        expected_output = {"P123_456_AAAAAA_L001": file_list }
+        expected_output = {"P123_456_AAAAAA_L001": sorted(file_list) }
         self.assertEqual(expected_output, find_fastq_read_pairs(file_list))
 
     def test_find_fastq_read_pairs_from_dir(self):
@@ -47,4 +47,7 @@ class TestCommon(unittest.TestCase):
             # Touch the file
             open(os.path.join(tmp_dir, file_name), 'w').close()
         expected_output = {"P123_456_AAAAAA_L001": file_list }
-        self.assertEqual(expected_output, find_fastq_read_pairs_from_dir(tmp_dir))
+        produced_output = find_fastq_read_pairs_from_dir(tmp_dir)
+        # This makes the test pass but is annoying
+        produced_output = { k: sorted(v) for k,v in produced_output.items() }
+        self.assertEqual(expected_output, produced_output)

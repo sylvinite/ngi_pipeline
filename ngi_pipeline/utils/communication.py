@@ -16,11 +16,23 @@ def mail(recipient, subject, text, origin="ngi_pipeline"):
 
 
 def mail_analysis(project_name, sample_name = None, engine_name = None,
+                  level="ERROR", info_text=None,
                   recipient="ngi_pipeline_operators@scilifelab.se",
-                  subject="analysis intervention needed",
-                  origin="ngi_pipeline", info_text=None):
+                  subject=None,
+                  origin="ngi_pipeline"):
     file_name, line_no = traceback.extract_stack(limit=2)[-2][:2]
-    text = "This analysis has encountered an error:"
+    if level.upper() == "WARN":
+        text = "This analysis has produced a warning:"
+        if not subject:  subject = "analysis intervention may be needed"
+        subject = "[WARN] " + subject
+    elif level.upper() == "INFO":
+        text = "Get a load of this:"
+        if not subject: subject = "analysis information / status update"
+        subject = "[INFO] " + subject
+    else: # ERROR
+        text = "This analysis has encountered an error:"
+        if not subject:  subject = "analysis intervention required"
+        subject = "[ERROR] " + subject
     text += "\nProject: {}".format(project_name)
     if sample_name:
         text += "\nSample: {}".format(sample_name)
@@ -29,5 +41,5 @@ def mail_analysis(project_name, sample_name = None, engine_name = None,
     text += "\nFile: {}".format(file_name)
     text += "\nLine: {}".format(line_no)
     if info_text:
-        text = text + "\n\nAdditional information about this error:\n{}\n".format(info_text)
+        text = text + "\n\nAdditional information:\n\n{}\n".format(info_text)
     mail(recipient=recipient, subject=subject, text=text, origin=origin)

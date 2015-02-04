@@ -61,7 +61,7 @@ def update_charon_with_local_jobs_status():
                                                                    e))
                 LOG.error(error_text)
                 mail_analysis(project_name=project_name, sample_name=sample_id,
-                              engine_name=engine, info_text=error_text)
+                              engine_name=engine, level="ERROR", info_text=error_text)
                 continue
             try:
                 if piper_exit_code == 0:
@@ -72,7 +72,7 @@ def update_charon_with_local_jobs_status():
                                                                         set_status))
                     LOG.info(info_text)
                     mail_analysis(project_name=project_name, sample_name=sample_id,
-                                  engine_name=engine, info_text=info_text)
+                                  engine_name=engine, level="INFO", info_text=info_text)
                     # Parse seqrun output results / update Charon
                     piper_qc_dir = os.path.join(project_base_path, "ANALYSIS",project_id,
                                                 "02_preliminary_alignment_qc")
@@ -88,11 +88,11 @@ def update_charon_with_local_jobs_status():
                 elif piper_exit_code == 1:
                     # 1 -> Job failed
                     set_status = "FAILED"
-                    info_text = ('Workflow "{}" for {} failed. Recording status '
+                    error_text = ('Workflow "{}" for {} failed. Recording status '
                                  '{} in Charon.'.format(workflow, label, set_status))
-                    LOG.info(info_text)
+                    LOG.error(error_text)
                     mail_analysis(project_name=project_name, sample_name=sample_id,
-                                  engine_name=engine, info_text=info_text)
+                                  engine_name=engine, level="ERROR", info_text=error_text)
                     charon_session.sample_update(projectid=project_id,
                                                  sampleid=sample_id,
                                                  analysis_status=set_status)
@@ -115,11 +115,11 @@ def update_charon_with_local_jobs_status():
                             JOB_FAILED = True
                     if JOB_FAILED:
                         set_status = "FAILED"
-                        warn_text = ('No exit code found but job not running for '
+                        error_text = ('No exit code found but job not running for '
                                      '{}: setting status to {} in Charon'.format(label, set_status))
-                        LOG.warn(warn_text)
+                        LOG.error(error_text)
                         mail_analysis(project_name=project_name, sample_name=sample_id,
-                                      engine_name=engine, info_text=warn_text)
+                                      engine_name=engine, level="ERROR", info_text=error_text)
                         charon_session.sample_update(projectid=project_id,
                                                      sampleid=sample_id,
                                                      analysis_status=set_status)
@@ -144,7 +144,7 @@ def update_charon_with_local_jobs_status():
                 error_text = ('Unable to update Charon status for "{}": {}'.format(label, e))
                 LOG.error(error_text)
                 mail_analysis(project_name=project_name, sample_name=sample_id,
-                              engine_name=engine, info_text=error_text)
+                              engine_name=engine, level="ERROR", info_text=error_text)
         session.commit()
 
 
@@ -176,7 +176,7 @@ def recurse_status_for_sample(project_obj, set_status, update_done=False):
                              '"{}" in Charon to "{}": {}'.format(label, set_status, e))
                 LOG.error(error_text)
                 mail_analysis(project_name=project_id, sample_name=sample_obj.name,
-                              info_text=error_text)
+                              level="ERROR", info_text=error_text)
 
 
 
@@ -213,7 +213,7 @@ def update_coverage_for_sample_seqruns(project_id, sample_id, piper_qc_dir):
                               '"{}": {}'.format(label, ma_coverage, e))
                 LOG.error(error_text)
                 mail_analysis(project_name=project_id, sample_name=sample_id,
-                              engine_name="piper_ngi", info_text=error_text)
+                              engine_name="piper_ngi", level="ERROR", info_text=error_text)
 
 
 def parse_mean_autosomal_coverage_for_sample(piper_qc_dir, sample_id):
@@ -422,7 +422,7 @@ def record_process_sample(project, sample, workflow_subtask, analysis_module_nam
 
         LOG.error(error_text)
         mail_analysis(project_name=project_id, sample_name=sample_id,
-                      engine_name='piper_ngi', info_text=error_text)
+                      engine_name='piper_ngi', level="ERROR", info_text=error_text)
 
 def is_sample_analysis_running_local(workflow_subtask, project_id, sample_id):
     """Determine if a sample is currently being analyzed by accessing the local
