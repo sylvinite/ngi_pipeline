@@ -14,8 +14,8 @@ from ngi_pipeline.engines.piper_ngi.database import SampleAnalysis, get_db_sessi
 from ngi_pipeline.engines.piper_ngi.utils import create_exit_code_file_path, \
                                                  create_project_obj_from_analysis_log, \
                                                  get_valid_seqruns_for_sample
+from ngi_pipeline.enginers.piper_ngi.results_parsers import parse_qualimap_coverage
 from ngi_pipeline.utils.parsers import get_slurm_job_status, \
-                                       parse_qualimap_results, \
                                        STHLM_UUSNP_SEQRUN_RE, \
                                        STHLM_UUSNP_SAMPLE_RE
 from sqlalchemy.exc import IntegrityError, OperationalError
@@ -77,7 +77,6 @@ def update_charon_with_local_jobs_status():
                     piper_qc_dir = os.path.join(project_base_path, "ANALYSIS",
                                                 project_id,  "02_preliminary_alignment_qc")
                     update_coverage_for_sample_seqruns(project_id, sample_id, piper_qc_dir)
-
                     charon_session.sample_update(projectid=project_id,
                                                  sampleid=sample_id,
                                                  analysis_status=set_status)
@@ -260,8 +259,6 @@ def _parse_mean_coverage_from_qualimap(piper_qc_dir, sample_id, seqrun_id=None, 
             piper_run_id = None
     except IndexError:
         raise ValueError('Can\'t parse FCID from run id ("{}")'.format(seqrun_id))
-    seqrun_dict = {}
-    seqrun_dict["lanes"] = 0
     # Find all the appropriate files
     try:
         os.path.isdir(piper_qc_dir) and os.listdir(piper_qc_dir)
@@ -272,106 +269,16 @@ def _parse_mean_coverage_from_qualimap(piper_qc_dir, sample_id, seqrun_id=None, 
     piper_qc_dirs = glob.glob(piper_qc_path)
     if not piper_qc_dirs: # Something went wrong in the alignment or we can't parse the file format
         raise OSError('Piper qc directories under "{}" are missing or in an unexpected format when updating stats to Charon.'.format(piper_qc_path))
+    mean_autosomal_coverage = 0
     # Examine each lane and update the dict with its alignment metrics
     for qc_lane in piper_qc_dirs:
         genome_result = os.path.join(qc_lane, "genome_results.txt")
         # This means that if any of the lanes are missing results, the sequencing run is marked as a failure.
-        # We should flag this somehow and send an email at some point.
         if not os.path.isfile(genome_result):
             raise OSError('File "genome_results.txt" is missing from Piper result directory "{}"'.format(piper_qc_dir))
         # Get the alignment results for this lane
-        lane_alignment_metrics = parse_qualimap_results(genome_result)
-        # Update the dict for this lane
-        update_seq_run_for_lane(seqrun_dict, lane_alignment_metrics)
-    return seqrun_dict["mean_autosomal_coverage"]
-
-
-def write_to_charon_alignment_results(base_path, project_name, project_id, sample_id, libprep_id, seqrun_id):
-    """Update the status of a sequencing run after alignment.
-
-    :param str project_name: The name of the project (e.g. T.Durden_14_01)
-    :param str project_id: The id of the project (e.g. P1171)
-    :param str sample_id: ...
-    :param str libprep_id: ...
-    :param str seqrun_id: ...
-
-    :raises RuntimeError: If the Charon database could not be updated
-    :raises ValueError: If the output data could not be parsed.
-    """
-    charon_session = CharonSession()
-    try:
-        seqrun_dict = charon_session.seqrun_get(project_id, sample_id, libprep_id, seqrun_id)
-    except CharonError as e:
-        raise CharonError('Error accessing database for project "{}", sample {}; '
-                           'could not update Charon while performing best practice: '
-                           '{}'.format(project_name, sample_id,  e))
-    piper_run_id = seqrun_id.split("_")[3]
-    seqrun_dict["lanes"] = 0
-    if seqrun_dict.get("alignment_status") == "DONE":
-        LOG.warn('Sequencing run "{}" marked as DONE but writing new alignment results; '
-                 'this will overwrite the previous results.'.format(seqrun_id))
-    # Find all the appropriate files
-    piper_result_dir = os.path.join(base_path, "ANALYSIS", project_name,
-                                    "02_preliminary_alignment_qc")
-    try:
-        os.path.isdir(piper_result_dir) and os.listdir(piper_result_dir)
-    except OSError as e:
-        raise ValueError('Piper result directory "{}" inaccessible when updating '
-                         'itats to Charon: {}.'.format(piper_result_dir, e))
-    piper_qc_dir_base = "{}.{}.{}".format(sample_id, piper_run_id, sample_id)
-    piper_qc_path = "{}*/".format(os.path.join(piper_result_dir, piper_qc_dir_base))
-    piper_qc_dirs = glob.glob(piper_qc_path)
-    if not piper_qc_dirs: # Something went wrong in the alignment or we can't parse the file format
-        raise ValueError('Piper qc directories under "{}" are missing or in an '
-                         'unexpected format when updating stats to Charon.'.format(piper_qc_path))
-    # Examine each lane and update the dict with its alignment metrics
-    for qc_lane in piper_qc_dirs:
-        genome_result = os.path.join(qc_lane, "genome_results.txt")
-        # This means that if any of the lanes are missing results, the sequencing run is marked as a failure.
-        # We should flag this somehow and send an email at some point.
-        if not os.path.isfile(genome_result):
-            raise ValueError('File "{}" is missing from Piper result directory '
-                             '"{}"'.format(genome_result, piper_result_dir))
-        # Get the alignment results for this lane
-        lane_alignment_metrics = parse_qualimap_results(genome_result)
-        # Update the dict for this lane
-        update_seq_run_for_lane(seqrun_dict, lane_alignment_metrics)
-    try:
-        # Update the seqrun in the Charon database
-        charon_session.seqrun_update(**seqrun_dict)
-    except CharonError as e:
-        error_msg = ('Failed to update run alignment status for project/sample/'
-                     'libprep/seqrun {}/{}/{}/{} to Charon database: {}'.format(
-                        project_name, sample_id, libprep_id, seqrun_id, e))
-        raise CharonError(error_msg)
-
-
-def update_seq_run_for_lane(seqrun_dict, lane_alignment_metrics):
-    num_lanes = seqrun_dict.get("lanes")    # This gives 0 the first time
-    seqrun_dict["lanes"] = seqrun_dict["lanes"] + 1   # Increment
-    current_lane = re.match(".+\.(\d)\.bam", lane_alignment_metrics["bam_file"]).group(1)
-
-    fields_to_update = ('mean_coverage',
-                        'std_coverage',
-                        'aligned_bases',
-                        'mapped_bases',
-                        'mapped_reads',
-                        'reads_per_lane',
-                        'sequenced_bases',
-                        'bam_file',
-                        'output_file',
-                        'GC_percentage',
-                        'mean_mapping_quality',
-                        'bases_number',
-                        'contigs_number'
-                        )
-    for field in fields_to_update:
-        if not num_lanes:
-            seqrun_dict[field] = {current_lane : lane_alignment_metrics[field]}
-            seqrun_dict["mean_autosomal_coverage"] = 0
-        else:
-            seqrun_dict[field][current_lane] =  lane_alignment_metrics[field]
-    seqrun_dict["mean_autosomal_coverage"] = seqrun_dict.get("mean_autosomal_coverage", 0) + lane_alignment_metrics["mean_autosomal_coverage"]
+        mean_autosomal_coverage += parse_qualimap_coverage(genome_result)
+    return mean_autosomal_coverage
 
 
 def record_process_sample(project, sample, workflow_subtask, analysis_module_name,
