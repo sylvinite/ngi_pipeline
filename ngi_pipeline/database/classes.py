@@ -22,18 +22,28 @@ try:
     if m:
         CHARON_BASE_URL = m.groups()[0]
 except KeyError as e:
-    raise ValueError("Could not get required environmental variable "
-                     "\"{}\"; cannot connect to database.".format(e))
+    raise ValueError('Could not get required environmental variable '
+                     '"{}"; cannot connect to database.'.format(e))
 
 
-## TODO Might be better just to instantiate this when loading the module. Do we neeed a new instance every time? I don't think so
+class Singleton(type):
+    _instances = {}
+    def __call__(cls, *args, **kwargs):
+        if cls not in cls._instances:
+            cls._instances[cls] = super(Singleton, cls).__call__(*args, **kwargs)
+        return cls._instances[cls]
+
+
 class CharonSession(requests.Session):
-    def __init__(self, api_token=None, base_url=None):
+    # Yeah that's right, I'm using __metaclass__
+    # I even looked up how to do it on StackOverflow all by myself
+    __metaclass__ = Singleton
+    def __init__(self):
         super(CharonSession, self).__init__()
 
-        self._api_token = api_token or CHARON_API_TOKEN
+        self._api_token = CHARON_API_TOKEN
         self._api_token_dict = {'X-Charon-API-token': self._api_token}
-        self._base_url = base_url or CHARON_BASE_URL
+        self._base_url = CHARON_BASE_URL
 
         self.get = validate_response(functools.partial(self.get,
                     headers=self._api_token_dict, timeout=3))
@@ -73,7 +83,7 @@ class CharonSession(requests.Session):
 
     def project_get_samples(self, projectid):
         return self.get(self.construct_charon_url('samples', projectid)).json()
-    
+
     def project_update(self, projectid, name=None, status=None, best_practice_analysis=None, sequencing_facility=None):
         l_dict = locals()
         data = { k: l_dict.get(k) for k in self._project_params if l_dict.get(k)}
