@@ -295,7 +295,11 @@ def setup_analysis_directory_structure(fc_dir, projects_to_analyze,
                                                                           libprep_obj,
                                                                           seqrun_obj))
                             LOG.error(error_text)
-                            mail_analysis(project_name=project_name, sample_name=sample_name,engine_name='piper_ngi', info_text=error_text)
+                            mail_analysis(project_name=project_name,
+                                          sample_name=sample_name,
+                                          engine_name='piper_ngi',
+                                          level="ERROR",
+                                          info_text=error_text)
                             continue
     return projects_to_analyze
 
