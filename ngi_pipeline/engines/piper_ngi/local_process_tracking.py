@@ -14,7 +14,7 @@ from ngi_pipeline.engines.piper_ngi.database import SampleAnalysis, get_db_sessi
 from ngi_pipeline.engines.piper_ngi.utils import create_exit_code_file_path, \
                                                  create_project_obj_from_analysis_log, \
                                                  get_valid_seqruns_for_sample
-from ngi_pipeline.enginers.piper_ngi.results_parsers import parse_qualimap_coverage
+from ngi_pipeline.engines.piper_ngi.results_parsers import parse_qualimap_coverage
 from ngi_pipeline.utils.parsers import get_slurm_job_status, \
                                        STHLM_UUSNP_SEQRUN_RE, \
                                        STHLM_UUSNP_SAMPLE_RE

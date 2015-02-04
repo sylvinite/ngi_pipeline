@@ -16,6 +16,7 @@ def parse_results_for_workflow(workflow_name, *args, **kwargs):
 def parse_qualimap_coverage(genome_results_file):
     autosomal_cov_length = 0
     autosomal_cov_bases = 0
+    coverage_section = False
     with open(genome_results_file, 'r') as f:
         for line in f:
             if line.startswith('>>>>>>> Coverage per contig'):
