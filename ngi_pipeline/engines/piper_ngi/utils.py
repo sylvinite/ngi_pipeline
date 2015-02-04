@@ -4,7 +4,10 @@ import yaml
 
 from ngi_pipeline.conductor.classes import NGIProject
 from ngi_pipeline.database.classes import CharonSession
+from ngi_pipeline.loggers import minimal_logger
 from ngi_pipeline.utils.filesystem import rotate_file, safe_makedir
+
+LOG = minimal_logger(__name__)
 
 def get_valid_seqruns_for_sample(project_id, sample_id, include_failed_libpreps=False,
                                  include_done_seqruns=False):
