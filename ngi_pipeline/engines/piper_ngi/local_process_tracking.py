@@ -81,7 +81,8 @@ def update_charon_with_local_jobs_status():
                     charon_session.sample_update(projectid=project_id,
                                                  sampleid=sample_id,
                                                  analysis_status=set_status)
-                    recurse_status_for_sample(project_obj, "DONE")
+                    recurse_status="DONE"
+                    recurse_status_for_sample(project_obj, recurse_status)
                     # Job is only deleted if the Charon update succeeds
                     session.delete(sample_entry)
                 elif piper_exit_code == 1:
