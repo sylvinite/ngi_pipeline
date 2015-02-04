@@ -4,7 +4,7 @@ import yaml
 
 from ngi_pipeline.conductor.classes import NGIProject
 from ngi_pipeline.database.classes import CharonSession
-from ngi_pipeline.loggers import minimal_logger
+from ngi_pipeline.log.loggers import minimal_logger
 from ngi_pipeline.utils.filesystem import rotate_file, safe_makedir
 
 LOG = minimal_logger(__name__)
