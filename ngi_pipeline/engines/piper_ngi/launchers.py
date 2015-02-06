@@ -9,6 +9,7 @@ import shlex
 import shutil
 import subprocess
 import time
+import datetime
 
 from ngi_pipeline.conductor.classes import NGIProject
 from ngi_pipeline.database.classes import CharonSession, CharonError
@@ -35,7 +36,8 @@ from ngi_pipeline.utils.parsers import parse_lane_from_filename, find_fastq_read
 LOG = minimal_logger(__name__)
 
 @with_ngi_config
-def analyze(project, sample, exec_mode="sbatch", config=None, config_file_path=None):
+def analyze(project, sample, exec_mode="sbatch", restart_finished_jobs=False, 
+        config=None, config_file_path=None):
     """Analyze data at the sample level.
 
     :param NGIProject project: the project to analyze
@@ -87,12 +89,14 @@ def analyze(project, sample, exec_mode="sbatch", config=None, config_file_path=N
                                           exit_code_path=exit_code_path,
                                           config=config,
                                           exec_mode=exec_mode)
-                #rotate_previous_analysis(project)
+                rotate_previous_analysis(project)
+
                 if exec_mode == "sbatch":
                     process_id = None
                     slurm_job_id = sbatch_piper_sample([setup_xml_cl, piper_cl],
                                                        workflow_subtask,
-                                                       project, sample)
+                                                       project, sample,
+                                                       restart_finished_jobs=restart_finished_jobs)
                     for x in xrange(10): # Time delay to let sbatch get its act together (takes a few seconds to be visible with sacct)
                         try:
                             get_slurm_job_status(slurm_job_id)
@@ -129,7 +133,8 @@ def analyze(project, sample, exec_mode="sbatch", config=None, config_file_path=N
                 LOG.error(error_msg)
 
 
-def collect_files_for_sample_analysis(project_obj, sample_obj):
+def collect_files_for_sample_analysis(project_obj, sample_obj, 
+                        restart_finished_jobs=False):
     """This function finds all data files relating to a sample and 
     follows a preset decision path to decide which of them to include in
     a sample-level analysis. This can include fastq files, bam files, and
@@ -145,7 +150,7 @@ def collect_files_for_sample_analysis(project_obj, sample_obj):
     valid_libprep_seqruns = get_valid_seqruns_for_sample(project_id=project_obj.project_id,
                                                          sample_id=sample_obj.name,
                                                          include_failed_libpreps=False,
-                                                         include_done_seqruns=False)
+                                                         include_done_seqruns=restart_finished_jobs)
     if not valid_libprep_seqruns: LOG.error("Notify user or whatever. I don't know.")
 
     # Now we find all fastq files that are available and validate them against
@@ -193,7 +198,8 @@ def collect_files_for_sample_analysis(project_obj, sample_obj):
 
 @with_ngi_config
 def sbatch_piper_sample(command_line_list, workflow_name, project, sample,
-                        libprep=None, config=None, config_file_path=None):
+                        libprep=None, restart_finished_jobs=False, 
+                        config=None, config_file_path=None):
     """sbatch a piper sample-level workflow.
 
     :param list command_line_list: The list of command lines to execute (in order)
@@ -241,7 +247,8 @@ def sbatch_piper_sample(command_line_list, workflow_name, project, sample,
             sbatch_text_list.append("module load {}".format(module_name))
 
     project, src_aln_files, src_alnqc_files = \
-            collect_files_for_sample_analysis(project, sample)
+            collect_files_for_sample_analysis(project, sample, 
+                                                restart_finished_jobs)
 
     # Fastq files to copy
     fastq_src_dst_list = []
@@ -289,10 +296,24 @@ def sbatch_piper_sample(command_line_list, workflow_name, project, sample,
     for command_line in command_line_list:
         sbatch_text_list.append(command_line)
 
-    sbatch_text_list.append("\ndate")
-    sbatch_text_list.append("echo -e '\\n\\nCopying back the resulting analysis files'")
-    sbatch_text_list.append("mkdir -p {}".format(perm_analysis_dir))
-    sbatch_text_list.append("rsync -rptoDLv {}/ {}/\n".format(scratch_analysis_dir, perm_analysis_dir))
+
+    piper_status_file=create_exit_code_file_path(workflow_subtask=workflow_name,
+                                                project_base_path=project.base_path,
+                                                project_name=project.dirname,
+                                                project_id=project.project_id,
+                                                sample_id=sample.name)
+    sbatch_text_list.append("\nPIPER_RETURN_CODE=$?")
+    sbatch_text_list.append("echo PIPER_RETURN_CODE > {}".format(piper_status_file))
+    sbatch_text_list.append("date")
+    sbatch_text_list.append("if [[ $PIPER_RETURN_CODE == 0 ]]")
+    sbatch_text_list.append("then")
+    sbatch_text_list.append("  echo -e '\\n\\nCopying back the resulting analysis files'")
+    sbatch_text_list.append("  mkdir -p {}".format(perm_analysis_dir))
+    sbatch_text_list.append("  rsync -rptoDLv {}/ {}/".format(scratch_analysis_dir, perm_analysis_dir))
+    sbatch_text_list.append("else")
+    sbatch_text_list.append("  echo -e '\\n\\nPiper job failed'")
+    sbatch_text_list.append("fi")
+
 
     # Write the sbatch file
     sbatch_dir = os.path.join(perm_analysis_dir, "sbatch")
@@ -346,10 +367,12 @@ def launch_piper_job(command_line, project, log_file_path=None):
 def rotate_previous_analysis(project_obj):
     """Rotates the files from the existing analysis starting at 03_merged_aligments"""
 
-    
-    current_datetime = datetime.datetime.now().strftime("%Y-%m-%d_%H:%M:%S:%f")
-    previous_analysis_path=os.join(project.base_path, "ANALYSIS", project.project_id,"previous_analyses")
-    safe_makedir(previous_analysis_path)
-    youngest_analysis_path=os.join(previous_analysis_path, current_datetime)
-    safe_makedir(youngest_analysis_path)
-
+    project_dir_path = os.path.join(project_obj.base_path, "ANALYSIS", project_obj.project_id)
+    dirs_to_move = glob.glob(os.path.join(project_dir_path, '0[4-9]_*'))
+    if dirs_to_move:
+        current_datetime = datetime.datetime.now().strftime("%Y-%m-%d_%H:%M:%S:%f")
+        previous_analysis_path = os.path.join(project_dir_path, "previous_analyses")
+        youngest_analysis_path = os.path.join(previous_analysis_path, current_datetime)
+        safe_makedir(youngest_analysis_path)
+        for onedir in dirs_to_move:
+            shutil.move(onedir, youngest_analysis_path)

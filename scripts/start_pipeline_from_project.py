@@ -27,6 +27,8 @@ if __name__ == '__main__':
     parser.add_argument("-m", "--execution-mode", choices=("local", "sbatch"),
                         default="sbatch", dest="exec_mode",
             help=("How to execute the jobs (via sbatch or locally); default 'sbatch'"))
+    parser.add_argument("-d", "--restart-done", dest="restart_finished_jobs", action="store_true",
+            help=("Restart jobs marked as DONE in Charon."))
     args_dict = vars(parser.parse_args())
     project = recreate_project_from_filesystem(project_dir=args_dict['project_dir'].pop(),
                                                restrict_to_samples=args_dict['restrict_to_samples'])
@@ -34,4 +36,5 @@ if __name__ == '__main__':
         project.base_path = os.path.split(project.base_path)[0]
     launch_analysis([project],
                     restart_failed_jobs=args_dict["restart_failed_jobs"],
+                    restart_finished_jobs=args_dict["restart_finished_jobs"],
                     exec_mode=args_dict["exec_mode"])

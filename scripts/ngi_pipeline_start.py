@@ -40,6 +40,8 @@ if __name__ == "__main__":
                   "Use flag multiple times for multiple samples."))
     process_fc.add_argument("-f", "--restart-failed", dest="restart_failed_jobs", action="store_true",
             help=("Restart jobs marked as 'FAILED' in Charon"))
+    parser.add_argument("-d", "--restart-done", dest="restart_finished_jobs", action="store_true",
+            help=("Restart jobs marked as DONE in Charon."))
 
     # Add subparser for sample processing
     sample_group = subparsers_process.add_parser('sample', help='Start the analysis of a particular sample')
@@ -53,7 +55,8 @@ if __name__ == "__main__":
         flowcell.process_demultiplexed_flowcell(args.demux_fcid_dir,
                                                 args.restrict_to_projects,
                                                 args.restrict_to_samples,
-                                                args.restart_failed_jobs)
+                                                args.restart_failed_jobs,
+                                                args.restart_finished_jobs)
     elif 'port' in args:
         LOG.info('Starting ngi_pipeline server at port {}'.format(args.port))
         server_main.start(args.port)
