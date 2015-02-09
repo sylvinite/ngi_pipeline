@@ -367,7 +367,7 @@ def rotate_previous_analysis(project_obj):
     """Rotates the files from the existing analysis starting at 03_merged_aligments"""
 
     project_dir_path = os.path.join(project_obj.base_path, "ANALYSIS", project_obj.project_id)
-    dirs_to_move = glob.glob(os.path.join(project_dir_path, '0[4-9]_*'))
+    dirs_to_move = glob.glob(os.path.join(project_dir_path, '0[3-9]_*'))
     if dirs_to_move:
         current_datetime = datetime.datetime.now().strftime("%Y-%m-%d_%H:%M:%S:%f")
         previous_analysis_path = os.path.join(project_dir_path, "previous_analyses")
