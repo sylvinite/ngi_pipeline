@@ -22,12 +22,13 @@ def parse_qualimap_coverage(genome_results_file):
             if line.startswith('>>>>>>> Coverage per contig'):
                 coverage_section = True
                 continue
-            line = line.strip()
-            if coverage_section and line:
-                sections = line.split()
-                if sections[0].isdigit() and int(sections[0]) <= 22:
-                    autosomal_cov_length += float(sections[1])
-                    autosomal_cov_bases += float(sections[2])
+            if coverage_section:
+                line = line.strip()
+                if line:
+                    sections = line.split()
+                    if sections[0].isdigit() and int(sections[0]) <= 22:
+                        autosomal_cov_length += float(sections[1])
+                        autosomal_cov_bases += float(sections[2])
         if autosomal_cov_length and autosomal_cov_bases:
             return autosomal_cov_bases / autosomal_cov_length
         else:
