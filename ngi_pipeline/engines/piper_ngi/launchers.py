@@ -49,12 +49,10 @@ def analyze(project, sample, exec_mode="sbatch", restart_finished_jobs=False,
     :raises ValueError: If exec_mode is an unsupported value
     """
     try:
-        check_for_preexisting_sample_runs(project, sample)
+        check_for_preexisting_sample_runs(project, sample, restart_running_jobs, restart_finished_jobs)
     except RuntimeError as e:
-        # RuntimeError occurs if the jobs are RUNNING or DONE; the user
         # may want to process anyway.
-        if not (restart_finished_jobs or restart_running_jobs):
-            raise RuntimeError('Aborting processing of project/sample "{}/{}": '
+        raise RuntimeError('Aborting processing of project/sample "{}/{}": '
                                '{}'.format(project, sample, e))
     if exec_mode.lower() not in ("sbatch", "local"):
         raise ValueError(('"exec_mode" param must be one of "sbatch" or "local" ')
