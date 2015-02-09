@@ -40,11 +40,11 @@ if __name__ == "__main__":
                   "Use flag multiple times for multiple samples."))
     process_fc.add_argument("-f", "--restart-failed", dest="restart_failed_jobs", action="store_true",
             help=("Restart jobs marked as 'FAILED' in Charon"))
-    parser_fc.add_argument("-d", "--restart-done", dest="restart_finished_jobs", action="store_true",
+    process_fc.add_argument("-d", "--restart-done", dest="restart_finished_jobs", action="store_true",
             help=("Restart jobs marked as DONE in Charon."))
-    parser_fc.add_argument("-r", "--restart-running", dest="restart_running_jobs", action="store_true",
+    process_fc.add_argument("-r", "--restart-running", dest="restart_running_jobs", action="store_true",
             help=("Restart jobs marked as UNDER_ANALYSIS in Charon. Use with care."))
-    parser_fc.add_argument("-a", "--restart-all", dest="restart_all_jobs", action="store_true",
+    process_fc.add_argument("-a", "--restart-all", dest="restart_all_jobs", action="store_true",
             help=("Just start any kind of job you can get your hands on regardless of status."))
 
     # Add subparser for sample processing
