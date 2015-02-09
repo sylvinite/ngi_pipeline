@@ -27,7 +27,8 @@ UPPSALA_PROJECT_RE = re.compile(r'\w{2}-\d{4}')
 
 def process_demultiplexed_flowcell(demux_fcid_dir_path, restrict_to_projects=None,
                                    restrict_to_samples=None, restart_failed_jobs=False,
-                                   restart_finished_jobs=False, config_file_path=None):
+                                   restart_finished_jobs=False, restart_running_jobs=False,
+                                   config_file_path=None):
     """Call process_demultiplexed_flowcells, restricting to a single flowcell.
     Essentially a restrictive wrapper.
 
@@ -46,13 +47,14 @@ def process_demultiplexed_flowcell(demux_fcid_dir_path, restrict_to_projects=Non
         raise ValueError(error_message)
     process_demultiplexed_flowcells([demux_fcid_dir_path], restrict_to_projects,
                                     restrict_to_samples, restart_failed_jobs,
-                                    restart_finished_jobs, config_file_path=config_file_path)
+                                    restart_finished_jobs, restart_running_jobs,
+                                    config_file_path=config_file_path)
 
 
 @with_ngi_config
 def process_demultiplexed_flowcells(demux_fcid_dirs, restrict_to_projects=None,
-                                    restrict_to_samples=None,
-                                    restart_failed_jobs=False, restart_finished_jobs=False,
+                                    restrict_to_samples=None, restart_failed_jobs=False,
+                                    restart_finished_jobs=False, restart_running_jobs=False,
                                     config=None, config_file_path=None):
     """Sort demultiplexed Illumina flowcells into projects and launch their analysis.
 
@@ -114,7 +116,7 @@ def process_demultiplexed_flowcells(demux_fcid_dirs, restrict_to_projects=None,
                         tmp_proj._subitems = {sample.name: sample}
                         tmp_proj._subitems[sample.name]._subitems = {libprep.name: libprep}
                         create_charon_entries_from_project(tmp_proj)
-    launch_analysis(projects_to_analyze, restart_failed_jobs, restart_finished_jobs)
+    launch_analysis(projects_to_analyze, restart_failed_jobs, restart_finished_jobs, restart_running_jobs)
 
 
 @with_ngi_config

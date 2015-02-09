@@ -37,7 +37,7 @@ LOG = minimal_logger(__name__)
 
 @with_ngi_config
 def analyze(project, sample, exec_mode="sbatch", restart_finished_jobs=False, 
-        config=None, config_file_path=None):
+            restart_running_jobs=False, config=None, config_file_path=None):
     """Analyze data at the sample level.
 
     :param NGIProject project: the project to analyze
@@ -48,15 +48,14 @@ def analyze(project, sample, exec_mode="sbatch", restart_finished_jobs=False,
 
     :raises ValueError: If exec_mode is an unsupported value
     """
-    # If seqruns already exist for this sample and are RUNNING or DONE,
-    # I guess for now we're asking for user intervention.
-    # Refuse to process this data.
     try:
         check_for_preexisting_sample_runs(project, sample)
     except RuntimeError as e:
-        raise RuntimeError('Aborting processing of project/sample "{}/{}": '
-                           '{}'.format(project, sample, e))
-
+        # RuntimeError occurs if the jobs are RUNNING or DONE; the user
+        # may want to process anyway.
+        if not (restart_finished_jobs or restart_running_jobs):
+            raise RuntimeError('Aborting processing of project/sample "{}/{}": '
+                               '{}'.format(project, sample, e))
     if exec_mode.lower() not in ("sbatch", "local"):
         raise ValueError(('"exec_mode" param must be one of "sbatch" or "local" ')
                          ('value was "{}"'.format(exec_mode)))
@@ -134,7 +133,7 @@ def analyze(project, sample, exec_mode="sbatch", restart_finished_jobs=False,
 
 
 def collect_files_for_sample_analysis(project_obj, sample_obj, 
-                        restart_finished_jobs=False):
+                                      restart_finished_jobs=False):
     """This function finds all data files relating to a sample and 
     follows a preset decision path to decide which of them to include in
     a sample-level analysis. This can include fastq files, bam files, and
@@ -368,7 +367,7 @@ def rotate_previous_analysis(project_obj):
     """Rotates the files from the existing analysis starting at 03_merged_aligments"""
 
     project_dir_path = os.path.join(project_obj.base_path, "ANALYSIS", project_obj.project_id)
-    dirs_to_move = glob.glob(os.path.join(project_dir_path, '0[4-9]_*'))
+    dirs_to_move = glob.glob(os.path.join(project_dir_path, '0[3-9]_*'))
     if dirs_to_move:
         current_datetime = datetime.datetime.now().strftime("%Y-%m-%d_%H:%M:%S:%f")
         previous_analysis_path = os.path.join(project_dir_path, "previous_analyses")
