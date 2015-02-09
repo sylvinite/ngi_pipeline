@@ -41,8 +41,8 @@ def get_engine_for_BP(project, config=None, config_file_path=None):
 
 @with_ngi_config
 def launch_analysis(projects_to_analyze, restart_failed_jobs=False,
-                    restart_finished_jobs=False, exec_mode="sbatch",
-                    config=None, config_file_path=None):
+                    restart_finished_jobs=False, restart_running_jobs=False,
+                    exec_mode="sbatch", config=None, config_file_path=None):
     """Launch the appropriate analysis for each fastq file in the project.
 
     :param list projects_to_analyze: The list of projects (Project objects) to analyze
@@ -81,14 +81,15 @@ def launch_analysis(projects_to_analyze, restart_failed_jobs=False,
                                              analysis_status=charon_reported_status)
             # Check Charon to ensure this hasn't already been processed
             if charon_reported_status == "UNDER_ANALYSIS":
-                error_text = ('Charon reports seqrun analysis for project "{}" '
-                              '/ sample "{}" does not need processing (already '
-                              '"{}")'.format(project, sample, charon_reported_status))
-                LOG.error(error_text)
-                mail_analysis(project_name=project.name, sample_name=sample.name,
-                              engine_name=analysis_module.__name__,
-                              level="ERROR", info_text=error_text)
-                continue
+                if not restart_running_jobs:
+                    error_text = ('Charon reports seqrun analysis for project "{}" '
+                                  '/ sample "{}" does not need processing (already '
+                                  '"{}")'.format(project, sample, charon_reported_status))
+                    LOG.error(error_text)
+                    mail_analysis(project_name=project.name, sample_name=sample.name,
+                                  engine_name=analysis_module.__name__,
+                                  level="ERROR", info_text=error_text)
+                    continue
             elif charon_reported_status == "ANALYZED":
                 if not restart_finished_jobs:
                     error_text = ('Charon reports seqrun analysis for project "{}" '
@@ -116,6 +117,7 @@ def launch_analysis(projects_to_analyze, restart_failed_jobs=False,
                 analysis_module.analyze(project=project,
                                         sample=sample,
                                         restart_finished_jobs=restart_finished_jobs,
+                                        restart_running_jobs=restart_running_jobs,
                                         exec_mode=exec_mode)
             except Exception as e:
                 error_text = ('Cannot process project "{}" / sample "{}" / '
