@@ -1,3 +1,5 @@
+#!/bin/env
+
 import argparse
 import importlib
 

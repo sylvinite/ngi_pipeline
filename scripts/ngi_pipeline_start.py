@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/bin/env python
 
 """ Main entry point for the ngi_pipeline.
 

@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/bin/env python
 """Kludgy hack. Use at your own risk"""
 from __future__ import print_function
 
