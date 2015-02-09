@@ -64,7 +64,7 @@ def build_piper_cl(project, workflow_name, setup_xml_path, exit_code_path,
     # Blank out the file if it already exists
     safe_makedir(os.path.dirname(exit_code_path))
     open(exit_code_path, 'w').close()
-    return add_exit_code_recording(cl, exit_code_path)
+    return cl 
 
 
 def build_setup_xml(project, sample, local_scratch_mode, config):
