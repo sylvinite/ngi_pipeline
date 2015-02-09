@@ -134,7 +134,7 @@ def analyze(project, sample, exec_mode="sbatch", restart_finished_jobs=False,
 
 
 def collect_files_for_sample_analysis(project_obj, sample_obj, 
-                        restart_finished_jobs=False):
+                                      restart_finished_jobs=False):
     """This function finds all data files relating to a sample and 
     follows a preset decision path to decide which of them to include in
     a sample-level analysis. This can include fastq files, bam files, and
