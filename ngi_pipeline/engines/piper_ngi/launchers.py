@@ -37,7 +37,7 @@ LOG = minimal_logger(__name__)
 
 @with_ngi_config
 def analyze(project, sample, exec_mode="sbatch", restart_finished_jobs=False, 
-        config=None, config_file_path=None):
+            restart_running_jobs=False, config=None, config_file_path=None):
     """Analyze data at the sample level.
 
     :param NGIProject project: the project to analyze
@@ -48,15 +48,14 @@ def analyze(project, sample, exec_mode="sbatch", restart_finished_jobs=False,
 
     :raises ValueError: If exec_mode is an unsupported value
     """
-    # If seqruns already exist for this sample and are RUNNING or DONE,
-    # I guess for now we're asking for user intervention.
-    # Refuse to process this data.
     try:
         check_for_preexisting_sample_runs(project, sample)
     except RuntimeError as e:
-        raise RuntimeError('Aborting processing of project/sample "{}/{}": '
-                           '{}'.format(project, sample, e))
-
+        # RuntimeError occurs if the jobs are RUNNING or DONE; the user
+        # may want to process anyway.
+        if not (restart_finished_jobs or restart_running_jobs):
+            raise RuntimeError('Aborting processing of project/sample "{}/{}": '
+                               '{}'.format(project, sample, e))
     if exec_mode.lower() not in ("sbatch", "local"):
         raise ValueError(('"exec_mode" param must be one of "sbatch" or "local" ')
                          ('value was "{}"'.format(exec_mode)))

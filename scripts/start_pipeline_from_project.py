@@ -45,5 +45,4 @@ if __name__ == '__main__':
     launch_analysis([project],
                     restart_failed_jobs=args_dict["restart_failed_jobs"],
                     restart_finished_jobs=args_dict["restart_finished_jobs"],
-                    restart_running_jobs=args_dict["restart_running_jobs"],
-                    exec_mode=args_dict["exec_mode"])
+                    restart_running_jobs=args_dict["restart_running_jobs"])

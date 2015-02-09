@@ -117,6 +117,7 @@ def launch_analysis(projects_to_analyze, restart_failed_jobs=False,
                 analysis_module.analyze(project=project,
                                         sample=sample,
                                         restart_finished_jobs=restart_finished_jobs,
+                                        restart_running_jobs=restart_running_jobs,
                                         exec_mode=exec_mode)
             except Exception as e:
                 error_text = ('Cannot process project "{}" / sample "{}" / '
