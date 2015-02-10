@@ -300,7 +300,7 @@ def sbatch_piper_sample(command_line_list, workflow_name, project, sample,
                                                 project_id=project.project_id,
                                                 sample_id=sample.name)
     sbatch_text_list.append("\nPIPER_RETURN_CODE=$?")
-    sbatch_text_list.append("echo PIPER_RETURN_CODE > {}".format(piper_status_file))
+    sbatch_text_list.append("echo $PIPER_RETURN_CODE > {}".format(piper_status_file))
     sbatch_text_list.append("date")
     sbatch_text_list.append("if [[ $PIPER_RETURN_CODE == 0 ]]")
     sbatch_text_list.append("then")
