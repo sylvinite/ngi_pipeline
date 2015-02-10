@@ -53,10 +53,10 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
 
-    if args_dict["restart_all_jobs"]:
-        args_dict["restart_failed_jobs"] = True
-        args_dict["restart_finished_jobs"] = True
-        args_dict["restart_running_jobs"] = True
+    if args.restart_all_jobs:
+        args.restart_failed_jobs = True
+        args.restart_finished_jobs = True
+        args.restart_running_jobs = True
 
     # Finally execute corresponding functions
     if 'demux_fcid_dir' in args:

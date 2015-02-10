@@ -1,4 +1,5 @@
 #!/usr/bin/env python
+# -*- coding: utf-8 -*-
 
 
 from __future__ import print_function
@@ -160,8 +161,12 @@ def setup_analysis_directory_structure(fc_dir, projects_to_analyze,
     try:
         fc_dir_structure = parse_casava_directory(fc_dir)
     except (OSError, ValueError) as e:
-        LOG.error("Error when processing flowcell dir \"{}\": {}".format(fc_dir, e))
-        return []
+        #if this fails, maybe if was a xten flowcell
+        try:
+            fc_dir_structure = parse_xten_directory(fc_dir)
+        except (OSError, ValueError) as e:
+            LOG.error("Error when processing flowcell dir \"{}\": {}".format(fc_dir, e))
+            return []
     fc_full_id = fc_dir_structure['fc_full_id']
     if not fc_dir_structure.get('projects'):
         LOG.warn("No projects found in specified flowcell directory \"{}\"".format(fc_dir))
@@ -369,7 +374,6 @@ def parse_casava_directory(fc_dir):
     unaligned_dir_pattern = os.path.join(fc_dir, "Unaligned*")
     # e.g. 131030_SN7001362_0103_BC2PUYACXX/Unaligned_16bp/Project_J__Bjorkegren_13_02/
     project_dir_pattern = os.path.join(unaligned_dir_pattern, "Project_*")
-    print(project_dir_pattern)
     for project_dir in glob.glob(project_dir_pattern):
         LOG.info('Parsing project directory "{}"...'.format(
                             project_dir.split(os.path.split(fc_dir)[0] + "/")[1]))
@@ -382,6 +386,90 @@ def parse_casava_directory(fc_dir):
             LOG.info('Parsing samples directory "{}"...'.format(sample_dir.split(
                                                 os.path.split(fc_dir)[0] + "/")[1]))
             sample_name = os.path.basename(sample_dir).replace('Sample_', '').replace('__','.')
+            fastq_file_pattern = os.path.join(sample_dir, "*.fastq.gz")
+            fastq_files = [os.path.basename(fq) for fq in glob.glob(fastq_file_pattern)]
+
+            project_samples.append({'sample_dir': os.path.basename(sample_dir),
+                                    'sample_name': sample_name,
+                                    'files': fastq_files})
+        if not project_samples:
+            LOG.warn('No samples found for project "{}" in fc {}'.format(project_name, fc_dir))
+        else:
+            projects.append({'data_dir': os.path.relpath(os.path.dirname(project_dir), fc_dir),
+                             'project_dir': os.path.basename(project_dir),
+                             'project_name': project_name,
+                             'samples': project_samples})
+
+    if not projects:
+        raise ValueError('No projects or no projects with sample found in '
+                         'flowcell directory {}'.format(fc_dir))
+    else:
+        return {'fc_dir'    : fc_dir,
+                'fc_full_id': fc_full_id,
+                'projects': projects,
+                'samplesheet_path': samplesheet_path}
+
+def parse_xten_directory(fc_dir):
+    """
+    Traverse a xten-generated directory structure and return a dictionary
+    of the elements it contains.
+    The flowcell directory tree for HiSeq xtenruns has (roughly) the structure:
+
+    ├── Demultiplexing
+    │   ├── J_Lundeberg_14_24
+    │   │   ├── P1775_112
+    │   │   ├── P1775_120
+    │   │   ├── P1775_128
+    │   │   ├── P1775_136
+    │   │   ├── P1775_144
+    │   │   ├── P1775_152
+    │   │   ├── P1775_160
+    │   │   └── P1775_168
+    │   └── Stats
+    ├── PeriodicSaveRates
+    └── Recipe
+
+    :param str fc_dir: The directory created for this flowcell.
+
+    :returns: A dict of information about the flowcell, including project/sample info
+    :rtype: dict
+
+    :raises OSError: If the fc_dir does not exist or cannot be accessed
+    """
+    projects = []
+    fc_dir = os.path.abspath(fc_dir)
+
+    if not os.access(fc_dir, os.F_OK): os_msg = "does not exist"
+    if not os.access(fc_dir, os.R_OK): os_msg = "could not be read (permission denied)"
+    if locals().get('os_msg'): raise OSError("Error with flowcell dir {}: directory {}".format(fc_dir, os_msg))
+
+    LOG.info('Parsing flowcell directory "{}"...'.format(fc_dir))
+    #Samplesheet should be there
+    try:
+        samplesheet_path = os.path.abspath(glob.glob(os.path.join(fc_dir, "SampleSheet.csv"))[0])
+        LOG.debug("SampleSheet.csv found at {}".format(samplesheet_path))
+    except IndexError:
+        LOG.warn("Could not find samplesheet in directory {}".format(fc_dir))
+        samplesheet_path = None
+
+    fc_full_id = os.path.basename(fc_dir)
+    data_dir_pattern = os.path.join(fc_dir, "Demultiplexing")
+    project_dir_pattern = os.path.join(data_dir_pattern, "*")
+    for project_dir in glob.glob(project_dir_pattern):
+        if not os.path.isdir(project_dir) or \
+                project_dir == os.path.join(data_dir_pattern,'Stats'):
+            continue
+        LOG.info('Parsing project directory "{}"...'.format(
+                            project_dir.split(os.path.split(fc_dir)[0] + "/")[1]))
+        project_samples = []
+        sample_dir_pattern = os.path.join(project_dir, "*")
+        project_name = os.path.basename(project_dir)
+
+        # e.g. <Project_dir>/P680_356F_dual56/
+        for sample_dir in glob.glob(sample_dir_pattern):
+            LOG.info('Parsing samples directory "{}"...'.format(sample_dir.split(
+                                                os.path.split(fc_dir)[0] + "/")[1]))
+            sample_name = os.path.basename(sample_dir)
             fastq_file_pattern = os.path.join(sample_dir, "*.fastq.gz")
             fastq_files = [os.path.basename(fq) for fq in glob.glob(fastq_file_pattern)]
 
