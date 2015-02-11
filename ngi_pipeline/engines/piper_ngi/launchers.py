@@ -49,12 +49,10 @@ def analyze(project, sample, exec_mode="sbatch", restart_finished_jobs=False,
     :raises ValueError: If exec_mode is an unsupported value
     """
     try:
-        check_for_preexisting_sample_runs(project, sample)
+        check_for_preexisting_sample_runs(project, sample, restart_running_jobs, restart_finished_jobs)
     except RuntimeError as e:
-        # RuntimeError occurs if the jobs are RUNNING or DONE; the user
         # may want to process anyway.
-        if not (restart_finished_jobs or restart_running_jobs):
-            raise RuntimeError('Aborting processing of project/sample "{}/{}": '
+        raise RuntimeError('Aborting processing of project/sample "{}/{}": '
                                '{}'.format(project, sample, e))
     if exec_mode.lower() not in ("sbatch", "local"):
         raise ValueError(('"exec_mode" param must be one of "sbatch" or "local" ')
@@ -302,7 +300,7 @@ def sbatch_piper_sample(command_line_list, workflow_name, project, sample,
                                                 project_id=project.project_id,
                                                 sample_id=sample.name)
     sbatch_text_list.append("\nPIPER_RETURN_CODE=$?")
-    sbatch_text_list.append("echo PIPER_RETURN_CODE > {}".format(piper_status_file))
+    sbatch_text_list.append("echo $PIPER_RETURN_CODE > {}".format(piper_status_file))
     sbatch_text_list.append("date")
     sbatch_text_list.append("if [[ $PIPER_RETURN_CODE == 0 ]]")
     sbatch_text_list.append("then")

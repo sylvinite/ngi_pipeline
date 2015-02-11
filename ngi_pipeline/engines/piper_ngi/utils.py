@@ -88,14 +88,16 @@ def create_project_obj_from_analysis_log(project_name, project_id,
     return project_obj
 
 
-def check_for_preexisting_sample_runs(project_obj, sample_obj):
+def check_for_preexisting_sample_runs(project_obj, sample_obj, restart_running_jobs, restart_finished_jobs):
     """If any analysis is undergoing or has completed for this sample's
     seqruns, raise a RuntimeError.
 
     :param NGIProject project_obj: The project object
     :param NGISample sample_obj: The sample object
+    :param boolean restart_running_jobs: command line parameter
+    :param boolean restart_finished_jobs: command line parameter
 
-    :raises RuntimeError: If any seqruns for this samples are RUNNING or DONE
+    :raise RuntimeError if the status is RUNNING or DONE and the flags do not allow to continue
     """
     project_id = project_obj.project_id
     sample_id = sample_obj.name
@@ -112,12 +114,11 @@ def check_for_preexisting_sample_runs(project_obj, sample_obj):
                                                    sampleid=sample_id,
                                                    libprepid=libprep_id,
                                                    seqrunid=seqrun_id).get('alignment_status')
-            if aln_status in ("RUNNING, DONE"):
-                raise RuntimeError('Project/Sample "{}/{}" has a preexisting '
-                                   'seqrun "{}" with status "{}"'.format(project_obj,
-                                                                         sample_obj,
-                                                                         seqrun_id,
-                                                                         aln_status))
+            if (aln_status == "RUNNING" and not restart_running_jobs) or \
+                (aln_status == "DONE" and not restart_finished_jobs):
+                    raise RuntimeError('Project/Sample "{}/{}" has a preexisting '
+                          'seqrun "{}" with status "{}"'.format(project_obj,
+                          sample_obj, seqrun_id, aln_status))
 
 
 SBATCH_HEADER = """#!/bin/bash -l
