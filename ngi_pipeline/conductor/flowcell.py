@@ -349,7 +349,7 @@ def parse_casava_directory(fc_dir):
         for sample_dir in glob.glob(sample_dir_pattern):
             LOG.info('Parsing samples directory "{}"...'.format(sample_dir.split(
                                                 os.path.split(fc_dir)[0] + "/")[1]))
-            sample_name = os.path.basename(sample_dir).replace('Sample_', '').replace('__','.')
+            sample_name = os.path.basename(sample_dir).replace('Sample_', '')
             fastq_file_pattern = os.path.join(sample_dir, "*.fastq.gz")
             fastq_files = [os.path.basename(fq) for fq in glob.glob(fastq_file_pattern)]
 
@@ -435,7 +435,7 @@ def parse_xten_directory(fc_dir):
         for sample_dir in glob.glob(sample_dir_pattern):
             LOG.info('Parsing samples directory "{}"...'.format(sample_dir.split(
                                                 os.path.split(fc_dir)[0] + "/")[1]))
-            sample_name = os.path.basename(sample_dir).replace('Sample_', '', 1).replace('__','.')
+            sample_name = os.path.basename(sample_dir).replace('Sample_', '', 1)
             fastq_file_pattern = os.path.join(sample_dir, "*.fastq.gz")
             fastq_files = [os.path.basename(fq) for fq in glob.glob(fastq_file_pattern)]
             project_samples.append({'sample_dir': os.path.basename(sample_dir),
