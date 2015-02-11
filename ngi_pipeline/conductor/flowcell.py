@@ -24,7 +24,7 @@ from ngi_pipeline.utils.parsers import determine_library_prep_from_fcid, \
 LOG = minimal_logger(__name__)
 
 UPPSALA_PROJECT_RE = re.compile(r'\w{2}-\d{4}')
-STHLM_PROJECT_RE = re.compile(r'[A-z][_\.][A-z]+_\d{2}_\d{2}')
+STHLM_PROJECT_RE = re.compile(r'[A-z][_.][A-z]+_\d{2}_\d{2}')
 
 
 def process_demultiplexed_flowcell(demux_fcid_dir_path, restrict_to_projects=None,
