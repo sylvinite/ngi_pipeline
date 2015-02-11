@@ -244,30 +244,13 @@ def setup_analysis_directory_structure(fc_dir, projects_to_analyze,
                 try:
                     libprep_name = determine_library_prep_from_fcid(project_id, sample_name, fc_full_id)
                 except ValueError:
-                    # This flowcell has not got library prep information in Charon and
-                    # is probably an Uppsala project; if so, we can parse the libprep name
-                    # from the SampleSheet.csv
-                    try:
-                        if fc_dir_structure['samplesheet_path']:
-                            lane_num = parse_lane_from_filename(fq_file)
-                            # This throws a ValueError if it can't find anything
-                            libprep_name = determine_libprep_from_uppsala_samplesheet(
-                                                fc_dir_structure['samplesheet_path'],
-                                                project_id=project_id,
-                                                sample_id=sample_name,
-                                                seqrun_id=fc_full_id,
-                                                lane_num=lane_num)
-                        else:
-                            raise ValueError()
-                    except ValueError:
-                        LOG.warn('Project "{}" / sample "{}" / seqrun "{}" / fastq "{}" '
-                                 'has no libprep information in Charon and it '
-                                 'could not be determined from the SampleSheet.csv. '
-                                 'Setting library prep to "Unknown"'.format(project_name,
-                                                                            sample_name,
-                                                                            fc_full_id,
-                                                                            fq_file))
-                        libprep_name = "Unknown"
+                    LOG.warn('Project "{}" / sample "{}" / seqrun "{}" / fastq "{}" '
+                             'has no libprep information in Charon. Setting '
+                             'library prep to "Unknown"'.format(project_name,
+                                                                sample_name,
+                                                                fc_full_id,
+                                                                fq_file))
+                    libprep_name = "Unknown"
                 libprep_object = sample_obj.add_libprep(name=libprep_name,
                                                         dirname=libprep_name)
                 libprep_dir = os.path.join(sample_dir, libprep_name)
