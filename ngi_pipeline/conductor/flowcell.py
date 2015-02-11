@@ -420,8 +420,8 @@ def parse_xten_directory(fc_dir):
         path, base_dir = os.path.split(project_dir)
         if not base_dir: path, base_dir = os.path.split(path)
         if not (os.path.isdir(project_dir) and \
-                UPPSALA_PROJECT_RE.match(base_dir) or \
-                  STHLM_PROJECT_RE.match(base_dir)):
+                (UPPSALA_PROJECT_RE.match(base_dir) or \
+                   STHLM_PROJECT_RE.match(base_dir))):
             continue
         LOG.info('Parsing project directory "{}"...'.format(
                             project_dir.split(os.path.split(fc_dir)[0] + "/")[1]))
