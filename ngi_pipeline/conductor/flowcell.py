@@ -157,11 +157,11 @@ def setup_analysis_directory_structure(fc_dir, projects_to_analyze,
         return []
     # Map the directory structure for this flowcell
     try:
-        fc_dir_structure = parse_xten_directory(fc_dir)
+        fc_dir_structure = parse_bcl2fastq_2_5_directory(fc_dir)
     except (OSError, ValueError) as e:
         # If this fails, try to parse the 2500 structure
         try:
-            fc_dir_structure = parse_casava_directory(fc_dir)
+            fc_dir_structure = parse_bcl2fastq_1_8_directory(fc_dir)
         except (OSError, ValueError) as e:
             LOG.error("Error when processing flowcell dir \"{}\": {}".format(fc_dir, e))
             return []
@@ -279,7 +279,7 @@ def setup_analysis_directory_structure(fc_dir, projects_to_analyze,
     return projects_to_analyze
 
 
-def parse_casava_directory(fc_dir):
+def parse_bcl2fastq_1_8_directory(fc_dir):
     """
     Traverse a CASAVA-1.8-generated directory structure for the HiSeq 2500
     and return a dictionary of the elements it contains.
@@ -373,22 +373,22 @@ def parse_casava_directory(fc_dir):
                 'projects': projects,
                 'samplesheet_path': samplesheet_path}
 
-def parse_xten_directory(fc_dir):
+def parse_bcl2fastq_2_5_directory(fc_dir):
     """
-    Traverse a XTen-generated directory structure and return a dictionary
+    Traverse a CASAVA 2.5 directory structure and return a dictionary
     of the elements it contains.
-    The flowcell directory tree for HiSeq xtenruns has (roughly) the structure:
+    The flowcell directory tree for these has (roughly) the structure:
 
     ├── Demultiplexing
     │   ├── J_Lundeberg_14_24
-    │   │   ├── Sample_P1775_112
-    │   │   ├── Sample_P1775_120
-    │   │   ├── Sample_P1775_128
-    │   │   ├── Sample_P1775_136
-    │   │   ├── Sample_P1775_144
-    │   │   ├── Sample_P1775_152
-    │   │   ├── Sample_P1775_160
-    │   │   └── Sample_P1775_168
+    │   │   ├── P1775_112
+    │   │   ├── P1775_120
+    │   │   ├── P1775_128
+    │   │   ├── P1775_136
+    │   │   ├── P1775_144
+    │   │   ├── P1775_152
+    │   │   ├── P1775_160
+    │   │   └── P1775_168
     │   └── Stats
     ├── PeriodicSaveRates
     └── Recipe
@@ -435,7 +435,7 @@ def parse_xten_directory(fc_dir):
         for sample_dir in glob.glob(sample_dir_pattern):
             LOG.info('Parsing samples directory "{}"...'.format(sample_dir.split(
                                                 os.path.split(fc_dir)[0] + "/")[1]))
-            sample_name = os.path.basename(sample_dir).replace('Sample_', '', 1)
+            sample_name = os.path.basename(sample_dir)
             fastq_file_pattern = os.path.join(sample_dir, "*.fastq.gz")
             fastq_files = [os.path.basename(fq) for fq in glob.glob(fastq_file_pattern)]
             project_samples.append({'sample_dir': os.path.basename(sample_dir),
