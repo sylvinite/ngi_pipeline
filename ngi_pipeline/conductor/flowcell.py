@@ -125,7 +125,6 @@ def process_demultiplexed_flowcells(demux_fcid_dirs, restrict_to_projects=None,
 def setup_analysis_directory_structure(fc_dir, projects_to_analyze,
                                        restrict_to_projects=None, restrict_to_samples=None,
                                        create_files=True,
-                                       ign_only=False,
                                        config=None, config_file_path=None):
     """
     Copy and sort files from their CASAVA-demultiplexed flowcell structure
@@ -136,7 +135,6 @@ def setup_analysis_directory_structure(fc_dir, projects_to_analyze,
     :param dict config: The parsed configuration file.
     :param set projects_to_analyze: A dict (of Project objects, or empty)
     :param bool create_files: Alter the filesystem (as opposed to just parsing flowcells) (default True)
-    :param bool ign_only: Only process IGN projects (default False)
     :param list restrict_to_projects: Specific projects within the flowcell to process exclusively
     :param list restrict_to_samples: Specific samples within the flowcell to process exclusively
 
@@ -148,7 +146,6 @@ def setup_analysis_directory_structure(fc_dir, projects_to_analyze,
     LOG.info("Setting up analysis for demultiplexed data in source folder \"{}\"".format(fc_dir))
     if not restrict_to_projects: restrict_to_projects = []
     if not restrict_to_samples: restrict_to_samples = []
-    if ign_only: charon_session = CharonSession()
     analysis_top_dir = os.path.abspath(config["analysis"]["top_dir"])
     if not os.path.exists(analysis_top_dir):
         error_msg = "Error: Analysis top directory {} does not exist".format(analysis_top_dir)
