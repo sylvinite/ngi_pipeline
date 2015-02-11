@@ -24,6 +24,7 @@ from ngi_pipeline.utils.parsers import determine_library_prep_from_fcid, \
 LOG = minimal_logger(__name__)
 
 UPPSALA_PROJECT_RE = re.compile(r'\w{2}-\d{4}')
+STHLM_PROJECT_RE = re.compile(r'[A-z][_\.][A-z]+_\d{2}_\d{2}')
 
 
 def process_demultiplexed_flowcell(demux_fcid_dir_path, restrict_to_projects=None,
@@ -159,11 +160,11 @@ def setup_analysis_directory_structure(fc_dir, projects_to_analyze,
         return []
     # Map the directory structure for this flowcell
     try:
-        fc_dir_structure = parse_casava_directory(fc_dir)
+        fc_dir_structure = parse_xten_directory(fc_dir)
     except (OSError, ValueError) as e:
-        #if this fails, maybe if was a xten flowcell
+        # If this fails, try to parse the 2500 structure
         try:
-            fc_dir_structure = parse_xten_directory(fc_dir)
+            fc_dir_structure = parse_casava_directory(fc_dir)
         except (OSError, ValueError) as e:
             LOG.error("Error when processing flowcell dir \"{}\": {}".format(fc_dir, e))
             return []
@@ -174,20 +175,6 @@ def setup_analysis_directory_structure(fc_dir, projects_to_analyze,
     for project in fc_dir_structure.get('projects', []):
         project_name = project['project_name']
         # If specific projects are specified, skip those that do not match
-        if ign_only:
-            if not UPPSALA_PROJECT_RE.match(project_name):
-                # We can't determine if Uppsala projects are IGN as we have no
-                # data for Uppsala projects in Charon; process all of them
-                try:
-                    project_bpa = charon_session.project_get(project_name).get("best_practice_analysis")
-                except (CharonError, RuntimeError, ValueError) as e:
-                    LOG.warn('Could not retrieve project id from Charon (record missing?). '
-                     'Probably  project {} is not an IGN (no mixed flowcells) '
-                     '(error: {})'.format(project_name, e))
-                    continue
-                if not project_bpa in config.get('analysis',{}).get('best_practice_analysis',{}):
-                    # If this is not an IGN project, skip it
-                    continue
         if restrict_to_projects and project_name not in restrict_to_projects:
             LOG.debug("Skipping project {}".format(project_name))
             continue
@@ -207,8 +194,8 @@ def setup_analysis_directory_structure(fc_dir, projects_to_analyze,
         project_analysis_dir = os.path.join(analysis_top_dir, "ANALYSIS", project_id)
         project_analysis_sl_dir = os.path.join(analysis_top_dir, "ANALYSIS", project_name)
         if create_files:
-            safe_makedir(project_dir, 0770)
-            safe_makedir(project_analysis_dir, 0770)
+            safe_makedir(project_dir, 0o2770)
+            safe_makedir(project_analysis_dir, 0o2770)
             if not project_dir == project_sl_dir and \
                not os.path.exists(project_sl_dir):
                 os.symlink(project_dir, project_sl_dir)
@@ -224,8 +211,7 @@ def setup_analysis_directory_structure(fc_dir, projects_to_analyze,
             projects_to_analyze[project_dir] = project_obj
         # Iterate over the samples in the project
         for sample in project.get('samples', []):
-            # Stockholm names are like Y__Mom_14_01 for some reason
-            sample_name = sample['sample_name'].replace('__','.')
+            sample_name = sample['sample_name']
             # If specific samples are specified, skip those that do not match
             if restrict_to_samples and sample_name not in restrict_to_samples:
                 LOG.debug("Skipping sample {}: not in specified samples "
@@ -234,7 +220,7 @@ def setup_analysis_directory_structure(fc_dir, projects_to_analyze,
             LOG.info("Setting up sample {}".format(sample_name))
             # Create a directory for the sample if it doesn't already exist
             sample_dir = os.path.join(project_dir, sample_name)
-            if create_files: safe_makedir(sample_dir, 0770)
+            if create_files: safe_makedir(sample_dir, 0o2770)
             # This will only create a new sample object if it doesn't already exist in the project
             sample_obj = project_obj.add_sample(name=sample_name, dirname=sample_name)
             # Get the Library Prep ID for each file
@@ -259,11 +245,11 @@ def setup_analysis_directory_structure(fc_dir, projects_to_analyze,
                 libprep_object = sample_obj.add_libprep(name=libprep_name,
                                                         dirname=libprep_name)
                 libprep_dir = os.path.join(sample_dir, libprep_name)
-                if create_files: safe_makedir(libprep_dir, 0770)
+                if create_files: safe_makedir(libprep_dir, 0o2770)
                 seqrun_object = libprep_object.add_seqrun(name=fc_full_id,
                                                           dirname=fc_full_id)
                 seqrun_dir = os.path.join(libprep_dir, fc_full_id)
-                if create_files: safe_makedir(seqrun_dir, 0770)
+                if create_files: safe_makedir(seqrun_dir, 0o2770)
                 seqrun_object.add_fastq_files(fq_file)
             if fastq_files and create_files:
                 src_sample_dir = os.path.join(fc_dir_structure['fc_dir'],
@@ -298,8 +284,8 @@ def setup_analysis_directory_structure(fc_dir, projects_to_analyze,
 
 def parse_casava_directory(fc_dir):
     """
-    Traverse a CASAVA-1.8-generated directory structure and return a dictionary
-    of the elements it contains.
+    Traverse a CASAVA-1.8-generated directory structure for the HiSeq 2500
+    and return a dictionary of the elements it contains.
     The flowcell directory tree for HiSeq 2500 runs has (roughly) the structure:
 
     |-- Data
@@ -326,8 +312,6 @@ def parse_casava_directory(fc_dir):
             |-- Sample_lane1
             |   ...
             |-- Sample_lane8
-
-    The structure for X-Ten flowcells is close to but not exactly the same
 
     :param str fc_dir: The directory created by CASAVA for this flowcell.
 
@@ -394,20 +378,20 @@ def parse_casava_directory(fc_dir):
 
 def parse_xten_directory(fc_dir):
     """
-    Traverse a xten-generated directory structure and return a dictionary
+    Traverse a XTen-generated directory structure and return a dictionary
     of the elements it contains.
     The flowcell directory tree for HiSeq xtenruns has (roughly) the structure:
 
     ├── Demultiplexing
     │   ├── J_Lundeberg_14_24
-    │   │   ├── P1775_112
-    │   │   ├── P1775_120
-    │   │   ├── P1775_128
-    │   │   ├── P1775_136
-    │   │   ├── P1775_144
-    │   │   ├── P1775_152
-    │   │   ├── P1775_160
-    │   │   └── P1775_168
+    │   │   ├── Sample_P1775_112
+    │   │   ├── Sample_P1775_120
+    │   │   ├── Sample_P1775_128
+    │   │   ├── Sample_P1775_136
+    │   │   ├── Sample_P1775_144
+    │   │   ├── Sample_P1775_152
+    │   │   ├── Sample_P1775_160
+    │   │   └── Sample_P1775_168
     │   └── Stats
     ├── PeriodicSaveRates
     └── Recipe
@@ -421,41 +405,42 @@ def parse_xten_directory(fc_dir):
     """
     projects = []
     fc_dir = os.path.abspath(fc_dir)
-
     if not os.access(fc_dir, os.F_OK): os_msg = "does not exist"
     if not os.access(fc_dir, os.R_OK): os_msg = "could not be read (permission denied)"
     if locals().get('os_msg'): raise OSError("Error with flowcell dir {}: directory {}".format(fc_dir, os_msg))
-
     LOG.info('Parsing flowcell directory "{}"...'.format(fc_dir))
-    #Samplesheet should be there
+    # SampleSheet.csv should be present but if it's not it's not the end of the world
     try:
         samplesheet_path = os.path.abspath(glob.glob(os.path.join(fc_dir, "SampleSheet.csv"))[0])
         LOG.debug("SampleSheet.csv found at {}".format(samplesheet_path))
     except IndexError:
         LOG.warn("Could not find samplesheet in directory {}".format(fc_dir))
         samplesheet_path = None
-
     fc_full_id = os.path.basename(fc_dir)
     data_dir_pattern = os.path.join(fc_dir, "Demultiplexing")
     project_dir_pattern = os.path.join(data_dir_pattern, "*")
     for project_dir in glob.glob(project_dir_pattern):
-        if not os.path.isdir(project_dir) or \
-                project_dir == os.path.join(data_dir_pattern,'Stats'):
+        path, base_dir = os.path.split(project_dir)
+        if not base_dir: path, base_dir = os.path.split(path)
+        if not (os.path.isdir(project_dir) and \
+                UPPSALA_PROJECT_RE.match(base_dir) or \
+                  STHLM_PROJECT_RE.match(base_dir)):
             continue
         LOG.info('Parsing project directory "{}"...'.format(
                             project_dir.split(os.path.split(fc_dir)[0] + "/")[1]))
         project_samples = []
         sample_dir_pattern = os.path.join(project_dir, "*")
         project_name = os.path.basename(project_dir)
-
+        if STHLM_PROJECT_RE.match(project_name):
+            # We need to change J_Lundeberg_15_01 to J.Lundeberg_15_01
+            project_name = project_name.replace('_', '.', 1)
         # e.g. <Project_dir>/P680_356F_dual56/
         for sample_dir in glob.glob(sample_dir_pattern):
             LOG.info('Parsing samples directory "{}"...'.format(sample_dir.split(
                                                 os.path.split(fc_dir)[0] + "/")[1]))
-            sample_name = os.path.basename(sample_dir)
+            sample_name = os.path.basename(sample_dir).replace('Sample_', '', 1).replace('__','.')
             fastq_file_pattern = os.path.join(sample_dir, "*.fastq.gz")
             fastq_files = [os.path.basename(fq) for fq in glob.glob(fastq_file_pattern)]
-
             project_samples.append({'sample_dir': os.path.basename(sample_dir),
                                     'sample_name': sample_name,
                                     'files': fastq_files})
@@ -466,7 +451,6 @@ def parse_xten_directory(fc_dir):
                              'project_dir': os.path.basename(project_dir),
                              'project_name': project_name,
                              'samples': project_samples})
-
     if not projects:
         raise ValueError('No projects or no projects with sample found in '
                          'flowcell directory {}'.format(fc_dir))
