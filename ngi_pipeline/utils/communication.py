@@ -1,8 +1,7 @@
-
 import smtplib
-from email.mime.text import MIMEText
 import traceback
 
+from email.mime.text import MIMEText
 
 
 def mail(recipient, subject, text, origin="ngi_pipeline"):
@@ -14,8 +13,7 @@ def mail(recipient, subject, text, origin="ngi_pipeline"):
      s.sendmail('funk_002@nestor1.uppmax.uu.se', recipient, msg.as_string()) 
      s.quit()
 
-
-def mail_analysis(project_name, sample_name = None, engine_name = None,
+def mail_analysis(project_name, sample_name=None, engine_name=None,
                   level="ERROR", info_text=None,
                   recipient="ngi_pipeline_operators@scilifelab.se",
                   subject=None,
