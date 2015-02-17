@@ -3,7 +3,7 @@
 """ Main entry point for the ngi_pipeline.
 
 It can either start the Tornado server that will trigger analysis on the processing
-cluster (UPPMAX for NGI), or trigger analysis itself. 
+cluster (UPPMAX for NGI), or trigger analysis itself.
 """
 import argparse
 
@@ -53,7 +53,8 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
 
-    if args.restart_all_jobs:
+    # The following option will be available only if the script has been called with the process option
+    if 'restart_all_jobs' in args:
         args.restart_failed_jobs = True
         args.restart_finished_jobs = True
         args.restart_running_jobs = True
