@@ -41,11 +41,15 @@ class NGIHandler(tornado.web.RequestHandler):
 class FlowcellHandler(NGIHandler):
     """ Handler to manage flowcell processing
 
-    GET /flowcell_analysis/(fc_dir)?project=False&sample=False&restart_failed=False
+    GET /flowcell_analysis/(fc_dir)?project=False&sample=False&restart_failed=False&path=path_to_run
     """
     @tornado.web.asynchronous
     @tornado.gen.coroutine
     def get(self, fc_dir):
+        base_path = self.get_argument('path', None)
+        if base_path:
+            fc_dir = os.path.join(base_path, fc_dir)
+        import ipdb; ipdb.set_trace()
         args = ['process', 'flowcell', fc_dir]
         optional = ['--project', '--sample', '--restart_failed']
         [args.append(arg) for arg in optional if self.get_argument(arg[2:], False)]
