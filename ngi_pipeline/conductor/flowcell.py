@@ -436,6 +436,8 @@ def parse_bcl2fastq_2_5_directory(fc_dir):
             LOG.info('Parsing samples directory "{}"...'.format(sample_dir.split(
                                                 os.path.split(fc_dir)[0] + "/")[1]))
             sample_name = os.path.basename(sample_dir)
+            if sample_name.startswith('Sample_'):
+                sample_name=sample_name[7:]
             fastq_file_pattern = os.path.join(sample_dir, "*.fastq.gz")
             fastq_files = [os.path.basename(fq) for fq in glob.glob(fastq_file_pattern)]
             project_samples.append({'sample_dir': os.path.basename(sample_dir),
