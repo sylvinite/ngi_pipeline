@@ -49,7 +49,6 @@ class FlowcellHandler(NGIHandler):
         base_path = self.get_argument('path', None)
         if base_path:
             fc_dir = os.path.join(base_path, fc_dir)
-        import ipdb; ipdb.set_trace()
         args = ['process', 'flowcell', fc_dir]
         optional = ['--project', '--sample', '--restart_failed']
         [args.append(arg) for arg in optional if self.get_argument(arg[2:], False)]
