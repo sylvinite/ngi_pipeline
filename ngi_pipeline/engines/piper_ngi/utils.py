@@ -9,7 +9,44 @@ from ngi_pipeline.utils.filesystem import rotate_file, safe_makedir
 
 LOG = minimal_logger(__name__)
 
-def get_valid_seqruns_for_sample(project_id, sample_id, include_failed_libpreps=False,
+
+def get_finished_seqruns_for_sample(project_id, sample_id,
+                                    include_failed_libpreps=False):
+    """Find all the finished seqruns for a particular sample.
+
+    :param str project_id: The id of the project
+    :param str sample_id: The id of the sample
+
+    :returns: A dict of {libprep_01: [seqrun_01, ..., seqrun_nn], ...}
+    :rtype: dict
+    """
+    charon_session = CharonSession()
+    sample_libpreps = charon_session.sample_get_libpreps(projectid=project_id,
+                                                         sampleid=sample_id)
+    libpreps = collections.defaultdict(list)
+    for libprep in sample_libpreps['libpreps']:
+        if libprep.get('qc') != "FAILED" or include_failed_libpreps:
+            libprep_id = libprep['libprepid']
+            for seqrun in charon_session.libprep_get_seqruns(projectid=project_id,
+                                                             sampleid=sample_id,
+                                                             libprepid=libprep_id)['seqruns']:
+                seqrun_id = seqrun['seqrunid']
+                aln_status = charon_session.seqrun_get(projectid=project_id,
+                                                       sampleid=sample_id,
+                                                       libprepid=libprep_id,
+                                                       seqrunid=seqrun_id).get('alignment_status')
+                if aln_status == "DONE":
+                    libpreps[libprep_id].append(seqrun_id)
+                else:
+                    LOG.info('Skipping seqrun "{}" due to alignment_status '
+                             '"{}"'.format(seqrun_id, aln_status))
+        else:
+            LOG.info('Skipping libprep "{}" due to qc status '
+                     '"{}"'.format(libprep, libprep.get("qc")))
+    return dict(libpreps)
+
+def get_valid_seqruns_for_sample(project_id, sample_id,
+                                 include_failed_libpreps=False,
                                  include_done_seqruns=False):
     """Find all the valid seqruns for a particular sample.
 
