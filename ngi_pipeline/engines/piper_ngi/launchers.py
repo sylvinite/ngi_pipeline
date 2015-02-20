@@ -302,15 +302,14 @@ def sbatch_piper_sample(command_line_list, workflow_name, project, sample,
     sbatch_text_list.append("\nPIPER_RETURN_CODE=$?")
     sbatch_text_list.append("echo $PIPER_RETURN_CODE > {}".format(piper_status_file))
     sbatch_text_list.append("date")
-    sbatch_text_list.append("if [[ $PIPER_RETURN_CODE == 0 ]]")
-    sbatch_text_list.append("then")
-    sbatch_text_list.append("  echo -e '\\n\\nCopying back the resulting analysis files'")
-    sbatch_text_list.append("  mkdir -p {}".format(perm_analysis_dir))
-    sbatch_text_list.append("  rsync -rptoDLv {}/ {}/".format(scratch_analysis_dir, perm_analysis_dir))
-    sbatch_text_list.append("else")
-    sbatch_text_list.append("  echo -e '\\n\\nPiper job failed'")
-    sbatch_text_list.append("fi")
-
+    #sbatch_text_list.append("if [[ $PIPER_RETURN_CODE == 0 ]]")
+    #sbatch_text_list.append("then")
+    sbatch_text_list.append("echo -e '\\n\\nCopying back the resulting analysis files'")
+    sbatch_text_list.append("mkdir -p {}".format(perm_analysis_dir))
+    sbatch_text_list.append("rsync -rptoDLv {}/ {}/".format(scratch_analysis_dir, perm_analysis_dir))
+    #sbatch_text_list.append("else")
+    #sbatch_text_list.append("  echo -e '\\n\\nPiper job failed'")
+    #sbatch_text_list.append("fi")
 
     # Write the sbatch file
     sbatch_dir = os.path.join(perm_analysis_dir, "sbatch")
