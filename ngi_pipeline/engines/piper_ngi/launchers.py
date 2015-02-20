@@ -363,13 +363,31 @@ def launch_piper_job(command_line, project, log_file_path=None):
 
 def rotate_previous_analysis(project_obj):
     """Rotates the files from the existing analysis starting at 03_merged_aligments"""
-
     project_dir_path = os.path.join(project_obj.base_path, "ANALYSIS", project_obj.project_id)
-    dirs_to_move = glob.glob(os.path.join(project_dir_path, '0[3-9]_*'))
-    if dirs_to_move:
+    #analysis_move = glob.glob(os.path.join(project_dir_path, '0[3-9]_*'))
+    for sample in project_obj:
+        # P123_456 is renamed by Piper to P123-456
+        piper_sample_name = sample.name.replace("_", "-", 1)
+        sample_files = glob.glob(os.path.join(project_dir_path, "0[3-9]_*", "{}.*".format(piper_sample_name)))
+    if sample_files:
+        LOG.info('Rotating files for sample {} under {} to '
+                 '"previous_analyses" folder'.format(sample, project_dir_path))
         current_datetime = datetime.datetime.now().strftime("%Y-%m-%d_%H:%M:%S:%f")
-        previous_analysis_path = os.path.join(project_dir_path, "previous_analyses")
-        youngest_analysis_path = os.path.join(previous_analysis_path, current_datetime)
-        safe_makedir(youngest_analysis_path)
-        for onedir in dirs_to_move:
-            shutil.move(onedir, youngest_analysis_path)
+        for sample_file in sample_files:
+            # This will be the project_dir_path, so I guess I'm just being paranoid
+            common_prefix = os.path.commonprefix([os.path.abspath(project_dir_path),
+                                                  os.path.abspath(sample_file)])
+            # This part of the directory tree we need to recreate under previous_analyses
+            # So e.g. with
+            #       /proj/a2015001/Y.Mom_15_01/01_raw_alignments/P123_456.bam
+            # we'd get
+            #       01_raw_alignments/P123_456.bam
+            # and we'd then create
+            #       /proj/a2015001/Y.Mom_15_01/previous_analyses/2015-02-19_16:24:12:640314/01_raw_alignments/
+            # and move the file to this directory.
+            leaf_path = os.path.relpath(sample_file, common_prefix)
+            leaf_base, filename = os.path.split(leaf_path)
+            previous_analysis_dirpath = os.path.join(common_prefix, "previous_analyses", current_datetime, leaf_base)
+            safe_makedir(previous_analysis_dirpath, mode=0o2770)
+            LOG.debug("Moving file {} to directory {}".format(sample_file, previous_analysis_dirpath))
+            shutil.move(sample_file, previous_analysis_dirpath)
