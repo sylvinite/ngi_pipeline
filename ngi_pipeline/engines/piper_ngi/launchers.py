@@ -371,7 +371,7 @@ def rotate_previous_analysis(project_obj):
         sample_files = glob.glob(os.path.join(project_dir_path, "0[3-9]_*", "{}.*".format(piper_sample_name)))
     if sample_files:
         LOG.info('Rotating files for sample {} under {} to '
-                 '"previous_analyses" folder'.format(project_dir_path))
+                 '"previous_analyses" folder'.format(sample, project_dir_path))
         current_datetime = datetime.datetime.now().strftime("%Y-%m-%d_%H:%M:%S:%f")
         for sample_file in sample_files:
             # This will be the project_dir_path, so I guess I'm just being paranoid
