@@ -13,7 +13,7 @@ from ngi_pipeline.utils.communication import mail_analysis
 from ngi_pipeline.engines.piper_ngi.database import SampleAnalysis, get_db_session
 from ngi_pipeline.engines.piper_ngi.utils import create_exit_code_file_path, \
                                                  create_project_obj_from_analysis_log, \
-                                                 get_valid_seqruns_for_sample
+                                                 get_finished_seqruns_for_sample
 from ngi_pipeline.engines.piper_ngi.results_parsers import parse_qualimap_coverage
 from ngi_pipeline.utils.parsers import get_slurm_job_status, \
                                        STHLM_UUSNP_SEQRUN_RE, \
@@ -201,7 +201,7 @@ def update_coverage_for_sample_seqruns(project_id, sample_id, piper_qc_dir):
     :raises RuntimeError: If you specify both the seqrun_id and fcid and they don't match
     :raises ValueError: If arguments are incorrect
     """
-    seqruns_by_libprep = get_valid_seqruns_for_sample(project_id, sample_id)
+    seqruns_by_libprep = get_finished_seqruns_for_sample(project_id, sample_id)
 
     charon_session = CharonSession()
     for libprep_id, seqruns in seqruns_by_libprep.iteritems():
