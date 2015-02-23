@@ -277,8 +277,13 @@ def _parse_mean_coverage_from_qualimap(piper_qc_dir, sample_id, seqrun_id=None, 
     piper_qc_dir_base = "{}.{}.{}".format(sample_id, (piper_run_id or "*"), sample_id)
     piper_qc_path = "{}*/".format(os.path.join(piper_qc_dir, piper_qc_dir_base))
     piper_qc_dirs = glob.glob(piper_qc_path)
-    if not piper_qc_dirs: # Something went wrong in the alignment or we can't parse the file format
-        raise OSError('Piper qc directories under "{}" are missing or in an unexpected format when updating stats to Charon.'.format(piper_qc_path))
+    if not piper_qc_dirs: # Something went wrong, is the sample name with a hyphen or with an underscore ? 
+        piper_qc_dir_base = "{}.{}.{}".format(sample_id.replace('_','-',1), (piper_run_id or "*"), sample_id)
+        piper_qc_path = "{}*/".format(os.path.join(piper_qc_dir, piper_qc_dir_base))
+        piper_qc_dirs = glob.glob(piper_qc_path)
+        
+        if not piper_qc_dirs: # Something went wrong in the alignment or we can't parse the file format
+            raise OSError('Piper qc directories under "{}" are missing or in an unexpected format when updating stats to Charon.'.format(piper_qc_path))
     mean_autosomal_coverage = 0
     # Examine each lane and update the dict with its alignment metrics
     for qc_lane in piper_qc_dirs:
