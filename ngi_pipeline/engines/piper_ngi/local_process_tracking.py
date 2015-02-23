@@ -278,7 +278,7 @@ def _parse_mean_coverage_from_qualimap(piper_qc_dir, sample_id, seqrun_id=None, 
     piper_qc_path = "{}*/".format(os.path.join(piper_qc_dir, piper_qc_dir_base))
     piper_qc_dirs = glob.glob(piper_qc_path)
     if not piper_qc_dirs: # Something went wrong, is the sample name with a hyphen or with an underscore ? 
-        piper_qc_dir_base = "{}.{}.{}".format(sample_id.replace('_','-',1), (piper_run_id or "*"), sample_id)
+        piper_qc_dir_base = "{}.{}.{}".format(sample_id.replace('_','-',1), (piper_run_id or "*"), sample_id.replace('_','-',1))
         piper_qc_path = "{}*/".format(os.path.join(piper_qc_dir, piper_qc_dir_base))
         piper_qc_dirs = glob.glob(piper_qc_path)
         
