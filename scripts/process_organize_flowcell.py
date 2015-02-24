@@ -37,7 +37,6 @@ def main(demux_fcid_dirs, restrict_to_projects=None, restrict_to_samples=None,
                                                                      projects_to_analyze,
                                                                      restrict_to_projects,
                                                                      restrict_to_samples,
-                                                                     create_files=False,
                                                                      config=config)
     if not projects_to_analyze:
         sys.exit("Quitting: no projects found to process in flowcells {}"
