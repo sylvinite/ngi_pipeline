@@ -1,9 +1,9 @@
-#!/usr/bin/env python
+#!/bin/env python
 
 """ Main entry point for the ngi_pipeline.
 
 It can either start the Tornado server that will trigger analysis on the processing
-cluster (UPPMAX for NGI), or trigger analysis itself. 
+cluster (UPPMAX for NGI), or trigger analysis itself.
 """
 import argparse
 
@@ -40,6 +40,12 @@ if __name__ == "__main__":
                   "Use flag multiple times for multiple samples."))
     process_fc.add_argument("-f", "--restart-failed", dest="restart_failed_jobs", action="store_true",
             help=("Restart jobs marked as 'FAILED' in Charon"))
+    process_fc.add_argument("-d", "--restart-done", dest="restart_finished_jobs", action="store_true",
+            help=("Restart jobs marked as DONE in Charon."))
+    process_fc.add_argument("-r", "--restart-running", dest="restart_running_jobs", action="store_true",
+            help=("Restart jobs marked as UNDER_ANALYSIS in Charon. Use with care."))
+    process_fc.add_argument("-a", "--restart-all", dest="restart_all_jobs", action="store_true",
+            help=("Just start any kind of job you can get your hands on regardless of status."))
 
     # Add subparser for sample processing
     sample_group = subparsers_process.add_parser('sample', help='Start the analysis of a particular sample')
@@ -47,13 +53,21 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
 
+    # The following option will be available only if the script has been called with the process option
+    if 'restart_all_jobs' in args:
+        args.restart_failed_jobs = True
+        args.restart_finished_jobs = True
+        args.restart_running_jobs = True
+
     # Finally execute corresponding functions
     if 'demux_fcid_dir' in args:
         LOG.info("Starting flowcell analysis in directory {}".format(args.demux_fcid_dir))
         flowcell.process_demultiplexed_flowcell(args.demux_fcid_dir,
                                                 args.restrict_to_projects,
                                                 args.restrict_to_samples,
-                                                args.restart_failed_jobs)
+                                                args.restart_failed_jobs,
+                                                args.restart_finished_jobs,
+                                                args.restart_running_jobs)
     elif 'port' in args:
         LOG.info('Starting ngi_pipeline server at port {}'.format(args.port))
         server_main.start(args.port)

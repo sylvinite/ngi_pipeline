@@ -41,6 +41,7 @@ def get_engine_for_BP(project, config=None, config_file_path=None):
 
 @with_ngi_config
 def launch_analysis(projects_to_analyze, restart_failed_jobs=False,
+                    restart_finished_jobs=False, restart_running_jobs=False,
                     exec_mode="sbatch", config=None, config_file_path=None):
     """Launch the appropriate analysis for each fastq file in the project.
 
@@ -79,15 +80,26 @@ def launch_analysis(projects_to_analyze, restart_failed_jobs=False,
                 charon_session.sample_update(project.project_id, sample.name,
                                              analysis_status=charon_reported_status)
             # Check Charon to ensure this hasn't already been processed
-            if charon_reported_status in ("UNDER_ANALYSIS", "ANALYZED"):
-                error_text = ('Charon reports seqrun analysis for project "{}" '
+            if charon_reported_status == "UNDER_ANALYSIS":
+                if not restart_running_jobs:
+                    error_text = ('Charon reports seqrun analysis for project "{}" '
+                                  '/ sample "{}" does not need processing (already '
+                                  '"{}")'.format(project, sample, charon_reported_status))
+                    LOG.error(error_text)
+                    mail_analysis(project_name=project.name, sample_name=sample.name,
+                                  engine_name=analysis_module.__name__,
+                                  level="ERROR", info_text=error_text)
+                    continue
+            elif charon_reported_status == "ANALYZED":
+                if not restart_finished_jobs:
+                    error_text = ('Charon reports seqrun analysis for project "{}" '
                               '/ sample "{}" does not need processing (already '
                               '"{}")'.format(project, sample, charon_reported_status))
-                LOG.error(error_text)
-                mail_analysis(project_name=project.name, sample_name=sample.name,
-                              engine_name=analysis_module.__name__,
-                              level="ERROR", info_text=error_text)
-                continue
+                    LOG.error(error_text)
+                    mail_analysis(project_name=project.name, sample_name=sample.name,
+                                  engine_name=analysis_module.__name__,
+                                  level="ERROR", info_text=error_text)
+                    continue
             elif charon_reported_status == "FAILED":
                 if not restart_failed_jobs:
                     error_text = ('FAILED:  Project "{}" / sample "{}" Charon reports '
@@ -101,8 +113,11 @@ def launch_analysis(projects_to_analyze, restart_failed_jobs=False,
                 LOG.info('Attempting to launch sample analysis for '
                          'project "{}" / sample "{}" / engine'
                          '"{}"'.format(project, sample, analysis_module.__name__))
+                #actual analysis launch
                 analysis_module.analyze(project=project,
                                         sample=sample,
+                                        restart_finished_jobs=restart_finished_jobs,
+                                        restart_running_jobs=restart_running_jobs,
                                         exec_mode=exec_mode)
             except Exception as e:
                 error_text = ('Cannot process project "{}" / sample "{}" / '
