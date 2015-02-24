@@ -104,6 +104,7 @@ def workflow_dna_variantcalling(qscripts_dir_path, setup_xml_path, global_config
                  " --scatter_gather {scatter_gather}"
                  " -jobRunner {job_runner}"
                  " --job_walltime {job_walltime}"
+                 " --disableJobReport"
                  " -run")
     if output_dir:
         cl_string += " --output_directory {output_dir}"
