@@ -24,7 +24,7 @@ from ngi_pipeline.utils.parsers import determine_library_prep_from_fcid, \
 LOG = minimal_logger(__name__)
 
 UPPSALA_PROJECT_RE = re.compile(r'(\w{2}-\d{4}|\w{2}\d{2,3})')
-STHLM_PROJECT_RE = re.compile(r'[A-z][_.][A-z]+_\d{2}_\d{2}')
+STHLM_PROJECT_RE = re.compile(r'[A-z][_.][A-z0-9]+_\d{2}_\d{2}')
 
 
 def process_demultiplexed_flowcell(demux_fcid_dir_path, restrict_to_projects=None,
@@ -276,6 +276,17 @@ def setup_analysis_directory_structure(fc_dir, projects_to_analyze,
 
 
 def parse_flowcell(fc_dir):
+    """
+    Traverse a CASAVA-1.8 or 2.5 generated directory structure for the HiSeq 2500
+    and return a dictionary of the elements it contains.
+
+    :param str fc_dir: The directory created by CASAVA for this flowcell.
+
+    :returns: A dict of information about the flowcell, including project/sample info
+    :rtype: dict
+
+    :raises OSError: If the fc_dir does not exist or cannot be accessed
+    """
     projects = []
     fc_dir = os.path.abspath(fc_dir)
     if not os.access(fc_dir, os.F_OK): os_msg = "does not exist"
@@ -292,24 +303,22 @@ def parse_flowcell(fc_dir):
     c2_5_path = os.path.join(fc_dir, "Demultiplexing")
     c1_8_path = os.path.join(fc_dir, "Unaligned*")
     if os.path.exists(c2_5_path):
-        project_dir_pattern = c2_5_path
-    elif os.path.exists(c1_8_path):
-        project_dir_pattern = c1_8_path
+        data_dir = c2_5_path
     else:
-        raise ValueError('No projects or no projects with sample found in '
-                         'flowcell directory {}'.format(fc_dir))
-    for project_dir in glob.glob(project_dir_pattern):
+        data_dir = c1_8_path
+    for project_dir in glob.glob(os.path.join(data_dir, "*")):
         path, base_dir = os.path.split(project_dir)
         if not base_dir: path, base_dir = os.path.split(path)
+        project_name = os.path.basename(base_dir).replace('Project_', '').replace('__', '.')
         if not (os.path.isdir(project_dir) and \
-                (UPPSALA_PROJECT_RE.match(base_dir) or \
-                   STHLM_PROJECT_RE.match(base_dir))):
+                (UPPSALA_PROJECT_RE.match(project_name) or \
+                   STHLM_PROJECT_RE.match(project_name))):
             continue
         LOG.info('Parsing project directory "{}"...'.format(
                             project_dir.split(os.path.split(fc_dir)[0] + "/")[1]))
-        project_name = os.path.basename(project_dir).replace('Project_', '').replace('__', '.')
         project_samples = []
         sample_dir_pattern = os.path.join(project_dir, "*")
+        ## TODO this is kind of sloppy
         if STHLM_PROJECT_RE.match(project_name):
             project_name = project_name.replace('_', '.', 1)
         for sample_dir in glob.glob(sample_dir_pattern):
