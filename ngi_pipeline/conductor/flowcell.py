@@ -76,6 +76,7 @@ def process_demultiplexed_flowcells(demux_fcid_dirs, restrict_to_projects=None,
     # Sort/copy each raw demux FC into project/sample/fcid format -- "analysis-ready"
     projects_to_analyze = dict()
     for demux_fcid_dir in demux_fcid_dirs_set:
+        demux_fcid_dir = os.path.abspath(demux_fcid_dir)
         # These will be a bunch of Project objects each containing Samples, FCIDs, lists of fastq files
         projects_to_analyze = setup_analysis_directory_structure(demux_fcid_dir,
                                                                  projects_to_analyze,
@@ -293,10 +294,9 @@ def parse_flowcell(fc_dir):
     if not os.access(fc_dir, os.R_OK): os_msg = "could not be read (permission denied)"
     if locals().get('os_msg'): raise OSError("Error with flowcell dir {}: directory {}".format(fc_dir, os_msg))
     LOG.info('Parsing flowcell directory "{}"...'.format(fc_dir))
-    try:
-        samplesheet_path = os.path.abspath(glob.glob(os.path.join(fc_dir, "SampleSheet.csv"))[0])
-        LOG.debug("SampleSheet.csv found at {}".format(samplesheet_path))
-    except IndexError:
+    samplesheet_path = os.path.join(fc_dir, "SampleSheet.csv")
+    LOG.debug("SampleSheet.csv found at {}".format(samplesheet_path))
+    if not os.path.exists(samplesheet_path):
         LOG.warn("Could not find samplesheet in directory {}".format(fc_dir))
         samplesheet_path = None
     fc_full_id = os.path.basename(fc_dir)
