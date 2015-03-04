@@ -25,6 +25,7 @@ LOG = minimal_logger(__name__)
 
 UPPSALA_PROJECT_RE = re.compile(r'(\w{2}-\d{4}|\w{2}\d{2,3})')
 STHLM_PROJECT_RE = re.compile(r'[A-z][_.][A-z0-9]+_\d{2}_\d{2}')
+STHLM_X_PROJECT_RE = re.compile(r'[A-z]_[A-z0-9]+_\d{2}_\d{2}')
 
 
 def process_demultiplexed_flowcell(demux_fcid_dir_path, restrict_to_projects=None,
@@ -229,13 +230,29 @@ def setup_analysis_directory_structure(fc_dir, projects_to_analyze,
                 try:
                     libprep_name = determine_library_prep_from_fcid(project_id, sample_name, fc_full_id)
                 except ValueError:
-                    LOG.warn('Project "{}" / sample "{}" / seqrun "{}" / fastq "{}" '
-                             'has no libprep information in Charon. Setting '
-                             'library prep to "Unknown"'.format(project_name,
-                                                                sample_name,
-                                                                fc_full_id,
-                                                                fq_file))
-                    libprep_name = "Unknown"
+                    charon_session = CharonSession()
+                    libpreps = charon_session.sample_get_libpreps(project_id, sample_name).get('libpreps')
+                    if len(libpreps) == 1:
+                        libprep_name = libpreps[0].get('libprepid')
+                        LOG.warn('Project "{}" / sample "{}" / seqrun "{}" / fastq "{}" '
+                                 'has no libprep information in Charon, but only one '
+                                 'library prep is present in Charon ("{}"). Using '
+                                 'this as the library prep.'.format(project_name,
+                                                                    sample_name,
+                                                                    fc_full_id,
+                                                                    fq_file,
+                                                                    libprep_name))
+                    else:
+                        error_text = ('Project "{}" / sample "{}" / seqrun "{}" / fastq "{}" '
+                                      'has no libprep information in Charon. Skipping '
+                                      'analysis.'.format(project_name, sample_name,
+                                                         fc_full_id, fq_file))
+                        LOG.error(error_text)
+                        mail_analysis(project_name=project_name,
+                                      sample_name=sample_name,
+                                      level="ERROR",
+                                      info_text=error_text)
+                        continue
                 libprep_object = sample_obj.add_libprep(name=libprep_name,
                                                         dirname=libprep_name)
                 libprep_dir = os.path.join(sample_dir, libprep_name)
@@ -269,7 +286,6 @@ def setup_analysis_directory_structure(fc_dir, projects_to_analyze,
                             LOG.error(error_text)
                             mail_analysis(project_name=project_name,
                                           sample_name=sample_name,
-                                          engine_name='piper_ngi',
                                           level="ERROR",
                                           info_text=error_text)
                             continue
@@ -318,8 +334,7 @@ def parse_flowcell(fc_dir):
                             project_dir.split(os.path.split(fc_dir)[0] + "/")[1]))
         project_samples = []
         sample_dir_pattern = os.path.join(project_dir, "*")
-        ## TODO this is kind of sloppy
-        if STHLM_PROJECT_RE.match(project_name):
+        if STHLM_X_PROJECT_RE.match(project_name):
             project_name = project_name.replace('_', '.', 1)
         for sample_dir in glob.glob(sample_dir_pattern):
             LOG.info('Parsing samples directory "{}"...'.format(sample_dir.split(
