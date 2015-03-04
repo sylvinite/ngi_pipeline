@@ -31,6 +31,7 @@ def mail_analysis(project_name, sample_name=None, engine_name=None,
         text = "This analysis has encountered an error:"
         if not subject:  subject = "analysis intervention required"
         subject = "[ERROR] " + subject
+    subject = "[{}] ".format(project_name) + subject
     text += "\nProject: {}".format(project_name)
     if sample_name:
         text += "\nSample: {}".format(sample_name)
