@@ -265,8 +265,8 @@ def sbatch_piper_sample(command_line_list, workflow_name, project, sample,
                     dst_file = os.path.join("$SNIC_TMP/DATA/", project_specific_path, fastq)
                     fastq_src_dst_list.append([src_file, dst_file])
 
-    sbatch_text_list.append("\ndate")
-    sbatch_text_list.append("echo -e '\\n\\nCopying fastq files'")
+    sbatch_text_list.append("echo -ne '\\n\\nCopying fastq files at '")
+    sbatch_text_list.append("date")
     if fastq_src_dst_list:
         for directory in directories_to_create:
             sbatch_text_list.append("mkdir -p {}".format(directory))
@@ -283,14 +283,14 @@ def sbatch_piper_sample(command_line_list, workflow_name, project, sample,
                       "Copying any pre-existing alignment qc files"]
     for echo_text, input_files, output_dir in zip(echo_text_list, input_files_list, output_dirs_list):
         if input_files:
-            sbatch_text_list.append("\ndate")
-            sbatch_text_list.append("echo -e '\\n\\n{}'".format(echo_text))
+            sbatch_text_list.append("echo -ne '\\n\\n{}' at ".format(echo_text))
+            sbatch_text_list.append("date")
             sbatch_text_list.append("mkdir -p {}".format(output_dir))
             sbatch_text_list.append(("rsync -rptoDLv {input_files} "
                                      "{output_directory}/").format(input_files=" ".join(input_files),
                                                                   output_directory=output_dir))
-    sbatch_text_list.append("\ndate")
-    sbatch_text_list.append("echo -e '\\n\\nExecuting command lines'")
+    sbatch_text_list.append("echo -ne '\\n\\nExecuting command lines at '")
+    sbatch_text_list.append("date")
     sbatch_text_list.append("# Run the actual commands")
     for command_line in command_line_list:
         sbatch_text_list.append(command_line)
@@ -302,16 +302,18 @@ def sbatch_piper_sample(command_line_list, workflow_name, project, sample,
                                                 project_id=project.project_id,
                                                 sample_id=sample.name)
     sbatch_text_list.append("\nPIPER_RETURN_CODE=$?")
-    sbatch_text_list.append("echo $PIPER_RETURN_CODE > {}".format(piper_status_file))
-    sbatch_text_list.append("date")
     #sbatch_text_list.append("if [[ $PIPER_RETURN_CODE == 0 ]]")
     #sbatch_text_list.append("then")
-    sbatch_text_list.append("echo -e '\\n\\nCopying back the resulting analysis files'")
+    sbatch_text_list.append("echo -ne '\\n\\nCopying back the resulting analysis files at '")
+    sbatch_text_list.append("date")
     sbatch_text_list.append("mkdir -p {}".format(perm_analysis_dir))
     sbatch_text_list.append("rsync -rptoDLv {}/ {}/".format(scratch_analysis_dir, perm_analysis_dir))
     #sbatch_text_list.append("else")
     #sbatch_text_list.append("  echo -e '\\n\\nPiper job failed'")
     #sbatch_text_list.append("fi")
+
+    # Record job completion status
+    sbatch_text_list.append("echo $PIPER_RETURN_CODE > {}".format(piper_status_file))
 
     # Write the sbatch file
     sbatch_dir = os.path.join(perm_analysis_dir, "sbatch")
