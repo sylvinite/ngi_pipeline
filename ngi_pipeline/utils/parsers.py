@@ -146,7 +146,9 @@ def determine_library_prep_from_samplesheet(samplesheet_path, project_id, sample
     lane_num = int(lane_num) # Raises ValueError if it can't convert. Handy
     samplesheet = parse_samplesheet(samplesheet_path)
     for row in samplesheet:
-        ss_project_id = row.get("SampleProject") or row.get("Sample_Project")
+        if not row.get("Description"):
+            continue
+        ss_project_id = row.get("SampleProject") or row.get("Sample_Project") or row.get("Project")
         ss_project_id = ss_project_id.replace('Project_', '')
         ss_sample_id = row.get("SampleID") or row.get("Sample_ID")
         ss_sample_id = ss_sample_id.replace('Sample_', '')
