@@ -1,6 +1,7 @@
 import collections
 import csv
 import glob
+import gzip
 import os
 import re
 import shlex
@@ -177,8 +178,28 @@ def determine_libprep_from_uppsala_samplesheet(samplesheet_path, project_id, sam
 def parse_samplesheet(samplesheet_path):
     """Parses an Illumina SampleSheet.csv and returns a list of dicts
     """
-    with open(samplesheet_path, 'rU') as f:
-        return [ row for row in csv.DictReader(f, dialect="excel") ]
+    try:
+        # try opening as a gzip file (Uppsala)
+        f = gzip.open(samplesheet_path, 'rbU')
+        f.readline()
+        f.seek(0)
+    except IOError: # I would be more comfortable if this had an error code attr. Just sayin'.
+        # Not gzipped
+        f = open(samplesheet_path, 'rbU')
+
+    # Two possible formats: simple csv and not simple weird INI/csv format
+    # Okay this looks kind of bad and will probably break easily, but if you want
+    # it done better you'll have to do it yourself.
+    first_line = f.readline()
+    if first_line.startswith("["): # INI/csv format
+        # Advance to the [DATA] section
+        for line in f:
+            if line.startswith("[Data]"):
+                # The next line will be the actual data section, first line keys
+                break
+            # Won't add incomplete rows (not part of the [DATA] field)
+    return  [ row for row in csv.DictReader(f, dialect="excel", restval=None)
+              if all(map(lambda x: x is not None, row.values())) ] 
 
 
 def find_fastq_read_pairs_from_dir(directory):
