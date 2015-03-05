@@ -120,6 +120,9 @@ def determine_library_prep_from_fcid(project_id, sample_name, fcid):
                     for seqrun in seqruns:
                         seqrun_runid = seqrun["seqrunid"]
                         if seqrun_runid == fcid:
+                            ## BUG if we have one sample with two libpreps on the same flowcell,
+                            ##     this just picks the first one it encounters; instead,
+                            ##     it should raise an Exception. Requires restructuring.
                             return libprep['libprepid']
                 else:
                     raise CharonError("No seqruns found!", 404)
@@ -139,39 +142,34 @@ def determine_library_prep_from_fcid(project_id, sample_name, fcid):
                                                                     e))
 
 
-def determine_libprep_from_uppsala_samplesheet(samplesheet_path, project_id, sample_id, seqrun_id, lane_num):
+def determine_library_prep_from_samplesheet(samplesheet_path, project_id, sample_id, lane_num):
+    lane_num = int(lane_num) # Raises ValueError if it can't convert. Handy
     samplesheet = parse_samplesheet(samplesheet_path)
-    fcid = seqrun_id.split("_")[3][1:]
     for row in samplesheet:
-        ss_project_id = row["SampleProject"]
-        ss_sample_id = row["SampleID"]
-        ss_fcid = row["FCID"]
+        ss_project_id = row.get("SampleProject") or row.get("Sample_Project")
+        ss_project_id = ss_project_id.replace('Project_', '')
+        ss_sample_id = row.get("SampleID") or row.get("Sample_ID")
+        ss_sample_id = ss_sample_id.replace('Sample_', '')
         ss_lane_num = int(row["Lane"])
-
         if project_id == ss_project_id and \
            sample_id == ss_sample_id and \
-           fcid == ss_fcid and \
            lane_num == ss_lane_num:
                # Resembles 'LIBRARY_NAME:SX398_NA11993_Nano'
-               try:
-                   #return row["Description"].split(":")[1]
-                   for keyval in row["Description"].split(";"):
+               for keyval in row["Description"].split(";"):
                        if keyval.split(":")[0] =="LIBRARY_NAME":
                            return keyval.split(":")[1]
-                   #if we have not returned anything yet,raise
-                   raise IndexError
-                        
-               except IndexError:
+               else:
                    error_msg = ('Malformed description in "{}"; cannot get '
                                 'libprep information'.format(samplesheet_path))
                    LOG.warn(error_msg)
                    raise ValueError(error_msg)
-    error_msg = ('No match found in "{}" for project "{}" / sample "{}" / '
-                 'seqrun "{}" / lane number "{}"'.format(samplesheet_path,
-                                                         project_id, sample_id,
-                                                         seqrun_id, lane_num))
-    LOG.warn(error_msg)
-    raise ValueError(error_msg)
+    else:
+        error_msg = ('No match found in "{}" for project "{}" / sample "{}" / '
+                     'lane number "{}"'.format(samplesheet_path,
+                                               project_id, sample_id,
+                                               lane_num))
+        LOG.warn(error_msg)
+        raise ValueError(error_msg)
 
 
 @memoized
@@ -198,6 +196,8 @@ def parse_samplesheet(samplesheet_path):
                 # The next line will be the actual data section, first line keys
                 break
             # Won't add incomplete rows (not part of the [DATA] field)
+    else:
+        f.seek(0)
     return  [ row for row in csv.DictReader(f, dialect="excel", restval=None)
               if all(map(lambda x: x is not None, row.values())) ] 
 
