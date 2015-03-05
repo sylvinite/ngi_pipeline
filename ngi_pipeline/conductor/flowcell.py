@@ -18,7 +18,7 @@ from ngi_pipeline.log.loggers import minimal_logger
 from ngi_pipeline.utils.classes import with_ngi_config
 from ngi_pipeline.utils.filesystem import do_rsync, do_symlink, safe_makedir
 from ngi_pipeline.utils.parsers import determine_library_prep_from_fcid, \
-                                       determine_libprep_from_uppsala_samplesheet, \
+                                       determine_library_prep_from_samplesheet, \
                                        parse_lane_from_filename
 
 LOG = minimal_logger(__name__)
@@ -169,6 +169,8 @@ def setup_analysis_directory_structure(fc_dir, projects_to_analyze,
     # Iterate over the projects in the flowcell directory
     for project in fc_dir_structure.get('projects', []):
         project_name = project['project_name']
+        project_original_name = project['project_original_name']
+        samplesheet_path = fc_dir_structure.get("samplesheet_path")
         # If specific projects are specified, skip those that do not match
         if restrict_to_projects and project_name not in restrict_to_projects:
             LOG.debug("Skipping project {}".format(project_name))
@@ -226,33 +228,45 @@ def setup_analysis_directory_structure(fc_dir, projects_to_analyze,
             # Note again that these objects only get created if they don't yet exist;
             # if they do exist, the existing object is returned
             for fq_file in fastq_files:
-                # Requires Charon access
+                # Try to parse from SampleSheet
                 try:
-                    libprep_name = determine_library_prep_from_fcid(project_id, sample_name, fc_full_id)
-                except ValueError:
-                    charon_session = CharonSession()
-                    libpreps = charon_session.sample_get_libpreps(project_id, sample_name).get('libpreps')
-                    if len(libpreps) == 1:
-                        libprep_name = libpreps[0].get('libprepid')
-                        LOG.warn('Project "{}" / sample "{}" / seqrun "{}" / fastq "{}" '
-                                 'has no libprep information in Charon, but only one '
-                                 'library prep is present in Charon ("{}"). Using '
-                                 'this as the library prep.'.format(project_name,
-                                                                    sample_name,
-                                                                    fc_full_id,
-                                                                    fq_file,
-                                                                    libprep_name))
-                    else:
-                        error_text = ('Project "{}" / sample "{}" / seqrun "{}" / fastq "{}" '
-                                      'has no libprep information in Charon. Skipping '
-                                      'analysis.'.format(project_name, sample_name,
-                                                         fc_full_id, fq_file))
-                        LOG.error(error_text)
-                        mail_analysis(project_name=project_name,
-                                      sample_name=sample_name,
-                                      level="ERROR",
-                                      info_text=error_text)
-                        continue
+                    if not samplesheet_path: raise ValueError()
+                    lane_num = re.match(r'[\w-]+_L\d{2}(\d)_\w+', fq_file).groups()[0]
+                    determine_library_prep_from_samplesheet(samplesheet_path,
+                                                            project_original_name,
+                                                            sample_name,
+                                                            lane_num)
+                except (IndexError, ValueError) as e:
+                    LOG.debug('Unable to determine library prep from sample sheet file '
+                              '("{}"); try to determine from Charon').format(e)
+                else:
+                    try:
+                        # Requires Charon access
+                        libprep_name = determine_library_prep_from_fcid(project_id, sample_name, fc_full_id)
+                    except ValueError:
+                        charon_session = CharonSession()
+                        libpreps = charon_session.sample_get_libpreps(project_id, sample_name).get('libpreps')
+                        if len(libpreps) == 1:
+                            libprep_name = libpreps[0].get('libprepid')
+                            LOG.warn('Project "{}" / sample "{}" / seqrun "{}" / fastq "{}" '
+                                     'has no libprep information in Charon, but only one '
+                                     'library prep is present in Charon ("{}"). Using '
+                                     'this as the library prep.'.format(project_name,
+                                                                        sample_name,
+                                                                        fc_full_id,
+                                                                        fq_file,
+                                                                        libprep_name))
+                        else:
+                            error_text = ('Project "{}" / sample "{}" / seqrun "{}" / fastq "{}" '
+                                          'has no libprep information in Charon. Skipping '
+                                          'analysis.'.format(project_name, sample_name,
+                                                             fc_full_id, fq_file))
+                            LOG.error(error_text)
+                            mail_analysis(project_name=project_name,
+                                          sample_name=sample_name,
+                                          level="ERROR",
+                                          info_text=error_text)
+                            continue
                 libprep_object = sample_obj.add_libprep(name=libprep_name,
                                                         dirname=libprep_name)
                 libprep_dir = os.path.join(sample_dir, libprep_name)
@@ -325,7 +339,8 @@ def parse_flowcell(fc_dir):
     for project_dir in glob.glob(os.path.join(data_dir, "*")):
         path, base_dir = os.path.split(project_dir)
         if not base_dir: path, base_dir = os.path.split(path)
-        project_name = os.path.basename(base_dir).replace('Project_', '').replace('__', '.')
+        project_original_name = os.path.basename(base_dir).replace('Project_', '')
+        project_name = project_original_name.replace('__', '.')
         if not (os.path.isdir(project_dir) and \
                 (UPPSALA_PROJECT_RE.match(project_name) or \
                    STHLM_PROJECT_RE.match(project_name))):
@@ -351,6 +366,7 @@ def parse_flowcell(fc_dir):
             projects.append({'data_dir': os.path.relpath(os.path.dirname(project_dir), fc_dir),
                              'project_dir': os.path.basename(project_dir),
                              'project_name': project_name,
+                             'project_original_name': project_original_name,
                              'samples': project_samples})
     if not projects:
         raise ValueError('No projects or no projects with sample found in '
