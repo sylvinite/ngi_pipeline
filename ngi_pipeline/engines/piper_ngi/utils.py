@@ -89,7 +89,7 @@ def record_analysis_details(project, job_identifier):
     analyzing.
     """
     output_file_path = os.path.join(project.base_path, "ANALYSIS",
-                                    project.dirname, "logs",
+                                    project.dirname, "piper_ngi","logs",
                                     "{}.files".format(job_identifier))
     analysis_dict = {}
     proj_dict = analysis_dict[project.dirname] = {}
@@ -112,7 +112,7 @@ def create_project_obj_from_analysis_log(project_name, project_id,
     """
     analysis_log_filename = "{}-{}-{}.files".format(project_id, sample_id, workflow)
     analysis_log_path = os.path.join(project_base_path, "ANALYSIS",
-                                     project_id, "logs", analysis_log_filename)
+                                     project_id, "piper_ngi", "logs", analysis_log_filename)
     with open(analysis_log_path, 'r') as f:
         analysis_dict = yaml.load(f)
     project_obj = NGIProject(name=project_name, dirname=project_id,
@@ -226,7 +226,7 @@ def create_exit_code_file_path(workflow_subtask, project_base_path, project_name
 
 def _create_generic_output_file_path(workflow_subtask, project_base_path, project_name, project_id,
                                      sample_id=None, libprep_id=None, seqrun_id=None):
-    base_path = os.path.join(project_base_path, "ANALYSIS", project_id, "logs")
+    base_path = os.path.join(project_base_path, "ANALYSIS", project_id, "piper_ngi","logs")
     file_name = project_id
     if sample_id:
         file_name += "-{}".format(sample_id)

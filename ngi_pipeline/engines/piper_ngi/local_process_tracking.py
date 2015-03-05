@@ -86,7 +86,7 @@ def update_charon_with_local_jobs_status():
                     # from the local jobs database, so this will have to be done
                     # manually if you want it done at all.
                     piper_qc_dir = os.path.join(project_base_path, "ANALYSIS",
-                                                project_id,  "02_preliminary_alignment_qc")
+                                                project_id,"piper_ngi",  "02_preliminary_alignment_qc")
                     update_coverage_for_sample_seqruns(project_id, sample_id, piper_qc_dir)
                 elif piper_exit_code == 1:
                     # 1 -> Job failed
