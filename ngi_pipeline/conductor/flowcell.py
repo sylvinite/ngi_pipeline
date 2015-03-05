@@ -16,6 +16,7 @@ from ngi_pipeline.database.communicate import get_project_id_from_name
 from ngi_pipeline.database.filesystem import create_charon_entries_from_project
 from ngi_pipeline.log.loggers import minimal_logger
 from ngi_pipeline.utils.classes import with_ngi_config
+from ngi_pipeline.utils.communication import mail_analysis
 from ngi_pipeline.utils.filesystem import do_rsync, do_symlink, safe_makedir
 from ngi_pipeline.utils.parsers import determine_library_prep_from_fcid, \
                                        determine_library_prep_from_samplesheet, \
@@ -232,14 +233,13 @@ def setup_analysis_directory_structure(fc_dir, projects_to_analyze,
                 try:
                     if not samplesheet_path: raise ValueError()
                     lane_num = re.match(r'[\w-]+_L\d{2}(\d)_\w+', fq_file).groups()[0]
-                    determine_library_prep_from_samplesheet(samplesheet_path,
-                                                            project_original_name,
-                                                            sample_name,
-                                                            lane_num)
+                    libprep_name = determine_library_prep_from_samplesheet(samplesheet_path,
+                                                                           project_original_name,
+                                                                           sample_name,
+                                                                           lane_num)
                 except (IndexError, ValueError) as e:
                     LOG.debug('Unable to determine library prep from sample sheet file '
-                              '("{}"); try to determine from Charon').format(e)
-                else:
+                              '("{}"); try to determine from Charon'.format(e))
                     try:
                         # Requires Charon access
                         libprep_name = determine_library_prep_from_fcid(project_id, sample_name, fc_full_id)
