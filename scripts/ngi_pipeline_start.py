@@ -78,7 +78,7 @@ if __name__ == "__main__":
                                                 args.restart_finished_jobs,
                                                 args.restart_running_jobs)
     elif 'project_dir' in args:
-        project = recreate_project_from_filesystem(project_dir=args.project_dir.pop(),
+        project = recreate_project_from_filesystem(project_dir=args.project_dir,
                                                    restrict_to_samples=args.restrict_to_samples)
         if project and os.path.split(project.base_path)[1] == "DATA":
             project.base_path = os.path.split(project.base_path)[0]
