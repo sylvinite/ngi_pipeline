@@ -114,7 +114,8 @@ def launch_analysis(projects_to_analyze, restart_failed_jobs=False,
                                         sample=sample,
                                         restart_finished_jobs=restart_finished_jobs,
                                         restart_running_jobs=restart_running_jobs,
-                                        exec_mode=exec_mode)
+                                        exec_mode=exec_mode,
+                                        config=config)
             except Exception as e:
                 error_text = ('Cannot process project "{}" / sample "{}" / '
                               'engine "{}" : {}'.format(project, sample,
