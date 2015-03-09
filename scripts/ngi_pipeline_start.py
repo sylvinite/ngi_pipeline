@@ -6,10 +6,13 @@ It can either start the Tornado server that will trigger analysis on the process
 cluster (UPPMAX for NGI), or trigger analysis itself.
 """
 import argparse
+import os
 
 from ngi_pipeline.conductor import flowcell
+from ngi_pipeline.conductor import launchers
 from ngi_pipeline.log.loggers import minimal_logger
 from ngi_pipeline.server import main as server_main
+from ngi_pipeline.utils.filesystem import recreate_project_from_filesystem
 
 LOG = minimal_logger("ngi_pipeline_start")
 
@@ -74,6 +77,15 @@ if __name__ == "__main__":
                                                 args.restart_failed_jobs,
                                                 args.restart_finished_jobs,
                                                 args.restart_running_jobs)
+    elif 'project_dir' in args:
+        project = recreate_project_from_filesystem(project_dir=args.project_dir.pop(),
+                                                   restrict_to_samples=args.restrict_to_samples)
+        if project and os.path.split(project.base_path)[1] == "DATA":
+            project.base_path = os.path.split(project.base_path)[0]
+        launchers.launch_analysis([project],
+                                  restart_failed_jobs=args.restart_failed_jobs,
+                                  restart_finished_jobs=args.restart_finished_jobs,
+                                  restart_running_jobs=args.restart_running_jobs)
     elif 'port' in args:
         LOG.info('Starting ngi_pipeline server at port {}'.format(args.port))
         server_main.start(args.port)
