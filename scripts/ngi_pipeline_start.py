@@ -13,6 +13,22 @@ from ngi_pipeline.server import main as server_main
 
 LOG = minimal_logger("ngi_pipeline_start")
 
+
+class ArgumentParserWithTheFlagsThatIWant(argparse.ArgumentParser):
+    def __init__(self, *args, **kwargs):
+        super(ArgumentParserWithTheFlagsThatIWant, self).__init__(*args, **kwargs)
+        self.add_argument("-f", "--restart-failed", dest="restart_failed_jobs", action="store_true",
+                help=("Restart jobs marked as 'FAILED' in Charon"))
+        self.add_argument("-d", "--restart-done", dest="restart_finished_jobs", action="store_true",
+                help=("Restart jobs marked as DONE in Charon."))
+        self.add_argument("-r", "--restart-running", dest="restart_running_jobs", action="store_true",
+                help=("Restart jobs marked as UNDER_ANALYSIS in Charon. Use with care."))
+        self.add_argument("-a", "--restart-all", dest="restart_all_jobs", action="store_true",
+                help=("Just start any kind of job you can get your hands on regardless of status."))
+        self.add_argument("-s", "--sample", dest= "restrict_to_samples", action="append",
+                help=("Restrict processing to these samples. "
+                      "Use flag multiple times for multiple samples."))
+
 if __name__ == "__main__":
 
     parser = argparse.ArgumentParser(description="Launch NGI pipeline")
@@ -25,7 +41,8 @@ if __name__ == "__main__":
 
     # Add subparser for the process
     parser_process = subparsers.add_parser('process', help="Start some analysis process")
-    subparsers_process = parser_process.add_subparsers(help='Choose unit to process')
+    subparsers_process = parser_process.add_subparsers(parser_class=ArgumentParserWithTheFlagsThatIWant,
+            help='Choose unit to process')
 
     # Another subparser for flowcell processing
     process_fc = subparsers_process.add_parser('flowcell', help='Start analysis of raw flowcells')
@@ -35,26 +52,15 @@ if __name__ == "__main__":
     process_fc.add_argument("-p", "--project", dest="restrict_to_projects", action="append",
             help=("Restrict processing to these projects. "
                   "Use flag multiple times for multiple projects."))
-    process_fc.add_argument("-s", "--sample", dest= "restrict_to_samples", action="append",
-            help=("Restrict processing to these samples. "
-                  "Use flag multiple times for multiple samples."))
-    process_fc.add_argument("-f", "--restart-failed", dest="restart_failed_jobs", action="store_true",
-            help=("Restart jobs marked as 'FAILED' in Charon"))
-    process_fc.add_argument("-d", "--restart-done", dest="restart_finished_jobs", action="store_true",
-            help=("Restart jobs marked as DONE in Charon."))
-    process_fc.add_argument("-r", "--restart-running", dest="restart_running_jobs", action="store_true",
-            help=("Restart jobs marked as UNDER_ANALYSIS in Charon. Use with care."))
-    process_fc.add_argument("-a", "--restart-all", dest="restart_all_jobs", action="store_true",
-            help=("Just start any kind of job you can get your hands on regardless of status."))
 
-    # Add subparser for sample processing
-    sample_group = subparsers_process.add_parser('sample', help='Start the analysis of a particular sample')
-    sample_group.add_argument('sample_dir', action="store", help="The path to the Illumina sample directory")
+    # Add subparser for project processing
+    project_group = subparsers_process.add_parser('project', help='Start the analysis of a pre-parsed project.')
+    project_group.add_argument('project_dir', action='store', help='The path to the project folder to be processed.')
 
     args = parser.parse_args()
 
     # The following option will be available only if the script has been called with the process option
-    if 'restart_all_jobs' in args:
+    if args.__dict__.get('restart_all_jobs'):
         args.restart_failed_jobs = True
         args.restart_finished_jobs = True
         args.restart_running_jobs = True
