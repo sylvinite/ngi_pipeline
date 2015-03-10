@@ -311,10 +311,11 @@ def parse_flowcell(fc_dir):
     if locals().get('os_msg'): raise OSError("Error with flowcell dir {}: directory {}".format(fc_dir, os_msg))
     LOG.info('Parsing flowcell directory "{}"...'.format(fc_dir))
     samplesheet_path = os.path.join(fc_dir, "SampleSheet.csv")
-    LOG.debug("SampleSheet.csv found at {}".format(samplesheet_path))
     if not os.path.exists(samplesheet_path):
         LOG.warn("Could not find samplesheet in directory {}".format(fc_dir))
         samplesheet_path = None
+    else:
+        LOG.debug("SampleSheet.csv found at {}".format(samplesheet_path))
     fc_full_id = os.path.basename(fc_dir)
     c2_5_path = os.path.join(fc_dir, "Demultiplexing")
     c1_8_path = os.path.join(fc_dir, "Unaligned*")
