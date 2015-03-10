@@ -60,7 +60,7 @@ def process_demultiplexed_flowcell(demux_fcid_dir_path, restrict_to_projects=Non
 def process_demultiplexed_flowcells(demux_fcid_dirs, restrict_to_projects=None,
                                     restrict_to_samples=None, restart_failed_jobs=False,
                                     restart_finished_jobs=False, restart_running_jobs=False,
-                                    config=None, config_file_path=None,quiet=False):
+                                    config=None, config_file_path=None, quiet=False):
     """Sort demultiplexed Illumina flowcells into projects and launch their analysis.
 
     :param list demux_fcid_dirs: The CASAVA-produced demux directory/directories.
@@ -115,6 +115,8 @@ def process_demultiplexed_flowcells(demux_fcid_dirs, restrict_to_projects=None,
 def setup_analysis_directory_structure(fc_dir, projects_to_analyze,
                                        restrict_to_projects=None, restrict_to_samples=None,
                                        create_files=True,
+                                       fallback_libprep=None,
+                                       quiet=False,
                                        config=None, config_file_path=None):
     """
     Copy and sort files from their CASAVA-demultiplexed flowcell structure
@@ -125,6 +127,7 @@ def setup_analysis_directory_structure(fc_dir, projects_to_analyze,
     :param dict config: The parsed configuration file.
     :param set projects_to_analyze: A dict (of Project objects, or empty)
     :param bool create_files: Alter the filesystem (as opposed to just parsing flowcells) (default True)
+    :param str fallback_libprep: If libprep cannot be determined, use this value if supplied (default None)
     :param list restrict_to_projects: Specific projects within the flowcell to process exclusively
     :param list restrict_to_samples: Specific samples within the flowcell to process exclusively
 
@@ -136,6 +139,7 @@ def setup_analysis_directory_structure(fc_dir, projects_to_analyze,
     LOG.info("Setting up analysis for demultiplexed data in source folder \"{}\"".format(fc_dir))
     if not restrict_to_projects: restrict_to_projects = []
     if not restrict_to_samples: restrict_to_samples = []
+    config.quiet = quiet # Hack because I enter here from a script sometimes
     analysis_top_dir = os.path.abspath(config["analysis"]["top_dir"])
     if not os.path.exists(analysis_top_dir):
         error_msg = "Error: Analysis top directory {} does not exist".format(analysis_top_dir)
@@ -243,6 +247,17 @@ def setup_analysis_directory_structure(fc_dir, projects_to_analyze,
                                                                         fc_full_id,
                                                                         fq_file,
                                                                         libprep_name))
+                        elif fallback_libprep:
+                            libprep_name = fallback_libprep
+                            LOG.warn('Project "{}" / sample "{}" / seqrun "{}" / fastq "{}" '
+                                     'has no libprep information in Charon, but a fallback '
+                                     'libprep value of "{}" was supplied -- using this '
+                                     'value.'.format(project_name,
+                                                     sample_name,
+                                                     fc_full_id,
+                                                     fq_file,
+                                                     libprep_name,
+                                                     fallback_libprep))
                         else:
                             error_text = ('Project "{}" / sample "{}" / seqrun "{}" / fastq "{}" '
                                           'has no libprep information in Charon. Skipping '
@@ -314,10 +329,11 @@ def parse_flowcell(fc_dir):
     if locals().get('os_msg'): raise OSError("Error with flowcell dir {}: directory {}".format(fc_dir, os_msg))
     LOG.info('Parsing flowcell directory "{}"...'.format(fc_dir))
     samplesheet_path = os.path.join(fc_dir, "SampleSheet.csv")
-    LOG.debug("SampleSheet.csv found at {}".format(samplesheet_path))
     if not os.path.exists(samplesheet_path):
         LOG.warn("Could not find samplesheet in directory {}".format(fc_dir))
         samplesheet_path = None
+    else:
+        LOG.debug("SampleSheet.csv found at {}".format(samplesheet_path))
     fc_full_id = os.path.basename(fc_dir)
     c2_5_path = os.path.join(fc_dir, "Demultiplexing")
     c1_8_path = os.path.join(fc_dir, "Unaligned*")
@@ -350,7 +366,7 @@ def parse_flowcell(fc_dir):
                                     'sample_name': sample_name,
                                     'files': fastq_files})
         if not project_samples:
-            LOG.warn('No samples found for project "{}" in fc {}'.format(project_name, fc_dir))
+            LOG.warn('No samples found for project "{}" in fc "{}"'.format(project_name, fc_dir))
         else:
             projects.append({'data_dir': os.path.relpath(os.path.dirname(project_dir), fc_dir),
                              'project_dir': os.path.basename(project_dir),
