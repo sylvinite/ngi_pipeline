@@ -365,11 +365,10 @@ def launch_piper_job(command_line, project, log_file_path=None):
     return popen_object
 
 def remove_previous_analysis(project_obj):
-    project_dir_path = os.path.join(project_obj.base_path, "ANALYSIS", project_obj.project_id, "piper_ngi")
-    if glob.glob(project_dir_path):
-        LOG.info('deleting previous analysis in {}'.format(project_dir_path))
+    project_dir_path = os.path.join(project_obj.base_path, "ANALYSIS", project_obj.project_id, "piper_ngi", "0*")
+    LOG.info('deleting previous analysis in {}'.format(project_dir_path))
+    for dir in [os.path.abspath(p) for p in glob.glob(project_dir_path)]:
         shutil.rmtree(project_dir_path)
-        safe_makedir(project_dir_path)
 def rotate_previous_analysis(project_obj):
     """Rotates the files from the existing analysis starting at 03_merged_aligments"""
     project_dir_path = os.path.join(project_obj.base_path, "ANALYSIS", project_obj.project_id, "piper_ngi")
