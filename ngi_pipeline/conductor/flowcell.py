@@ -114,6 +114,7 @@ def process_demultiplexed_flowcells(demux_fcid_dirs, restrict_to_projects=None,
 def setup_analysis_directory_structure(fc_dir, projects_to_analyze,
                                        restrict_to_projects=None, restrict_to_samples=None,
                                        create_files=True,
+                                       fallback_libprep=None,
                                        config=None, config_file_path=None):
     """
     Copy and sort files from their CASAVA-demultiplexed flowcell structure
@@ -124,6 +125,7 @@ def setup_analysis_directory_structure(fc_dir, projects_to_analyze,
     :param dict config: The parsed configuration file.
     :param set projects_to_analyze: A dict (of Project objects, or empty)
     :param bool create_files: Alter the filesystem (as opposed to just parsing flowcells) (default True)
+    :param str fallback_libprep: If libprep cannot be determined, use this value if supplied (default None)
     :param list restrict_to_projects: Specific projects within the flowcell to process exclusively
     :param list restrict_to_samples: Specific samples within the flowcell to process exclusively
 
@@ -242,6 +244,17 @@ def setup_analysis_directory_structure(fc_dir, projects_to_analyze,
                                                                         fc_full_id,
                                                                         fq_file,
                                                                         libprep_name))
+                        elif fallback_libprep:
+                            libprep_name = fallback_libprep
+                            LOG.warn('Project "{}" / sample "{}" / seqrun "{}" / fastq "{}" '
+                                     'has no libprep information in Charon, but a fallback '
+                                     'libprep value of "{}" was supplied -- using this '
+                                     'value.'.format(project_name,
+                                                     sample_name,
+                                                     fc_full_id,
+                                                     fq_file,
+                                                     libprep_name,
+                                                     fallback_libprep))
                         else:
                             error_text = ('Project "{}" / sample "{}" / seqrun "{}" / fastq "{}" '
                                           'has no libprep information in Charon. Skipping '
