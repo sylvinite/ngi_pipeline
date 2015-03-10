@@ -75,7 +75,7 @@ def launch_analysis(projects_to_analyze, restart_failed_jobs=False,
                                                                    sample)['analysis_status']
                 # Check Charon to ensure this hasn't already been processed
                 if charon_reported_status == "UNDER_ANALYSIS":
-                    if not restart_running_job:
+                    if not restart_running_jobs:
                         error_text = ('Charon reports seqrun analysis for project "{}" '
                                       '/ sample "{}" does not need processing (already '
                                       '"{}")'.format(project, sample, charon_reported_status))

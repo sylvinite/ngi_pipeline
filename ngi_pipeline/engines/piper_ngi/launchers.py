@@ -86,7 +86,7 @@ def analyze(project, sample, exec_mode="sbatch", restart_finished_jobs=False,
                                           exit_code_path=exit_code_path,
                                           config=config,
                                           exec_mode=exec_mode)
-                rotate_previous_analysis(project)
+                remove_previous_analysis(project)
 
                 if exec_mode == "sbatch":
                     process_id = None
@@ -364,6 +364,12 @@ def launch_piper_job(command_line, project, log_file_path=None):
         log_process_non_blocking(popen_object.stderr, LOG.warn)
     return popen_object
 
+def remove_previous_analysis(project_obj):
+    project_dir_path = os.path.join(project_obj.base_path, "ANALYSIS", project_obj.project_id, "piper_ngi")
+    if glob.glob(project_dir_path):
+        LOG.info('deleting previous analysis in {}'.format(project_dir_path))
+        shutil.rmtree(project_dir_path)
+        safe_makedir(project_dir_path)
 def rotate_previous_analysis(project_obj):
     """Rotates the files from the existing analysis starting at 03_merged_aligments"""
     project_dir_path = os.path.join(project_obj.base_path, "ANALYSIS", project_obj.project_id, "piper_ngi")
