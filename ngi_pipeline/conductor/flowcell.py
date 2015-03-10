@@ -32,7 +32,7 @@ STHLM_X_PROJECT_RE = re.compile(r'[A-z]_[A-z0-9]+_\d{2}_\d{2}')
 def process_demultiplexed_flowcell(demux_fcid_dir_path, restrict_to_projects=None,
                                    restrict_to_samples=None, restart_failed_jobs=False,
                                    restart_finished_jobs=False, restart_running_jobs=False,
-                                   config_file_path=None):
+                                   config_file_path=None, quiet=False):
     """Call process_demultiplexed_flowcells, restricting to a single flowcell.
     Essentially a restrictive wrapper.
 
@@ -52,14 +52,15 @@ def process_demultiplexed_flowcell(demux_fcid_dir_path, restrict_to_projects=Non
     process_demultiplexed_flowcells([demux_fcid_dir_path], restrict_to_projects,
                                     restrict_to_samples, restart_failed_jobs,
                                     restart_finished_jobs, restart_running_jobs,
-                                    config_file_path=config_file_path)
+                                    config_file_path=config_file_path,
+                                    quiet=quiet)
 
 
 @with_ngi_config
 def process_demultiplexed_flowcells(demux_fcid_dirs, restrict_to_projects=None,
                                     restrict_to_samples=None, restart_failed_jobs=False,
                                     restart_finished_jobs=False, restart_running_jobs=False,
-                                    config=None, config_file_path=None):
+                                    config=None, config_file_path=None,quiet=False):
     """Sort demultiplexed Illumina flowcells into projects and launch their analysis.
 
     :param list demux_fcid_dirs: The CASAVA-produced demux directory/directories.
@@ -248,7 +249,8 @@ def setup_analysis_directory_structure(fc_dir, projects_to_analyze,
                                           'analysis.'.format(project_name, sample_name,
                                                              fc_full_id, fq_file))
                             LOG.error(error_text)
-                            mail_analysis(project_name=project_name,
+                            if not config.get('quiet'):
+                                mail_analysis(project_name=project_name,
                                           sample_name=sample_name,
                                           level="ERROR",
                                           info_text=error_text)
@@ -284,7 +286,8 @@ def setup_analysis_directory_structure(fc_dir, projects_to_analyze,
                                                                           libprep_obj,
                                                                           seqrun_obj))
                             LOG.error(error_text)
-                            mail_analysis(project_name=project_name,
+                            if not config.get('quiet'):
+                                mail_analysis(project_name=project_name,
                                           sample_name=sample_name,
                                           level="ERROR",
                                           info_text=error_text)
