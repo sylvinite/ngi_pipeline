@@ -19,7 +19,7 @@ LOG = minimal_logger(__name__)
 def get_engine_for_BP(project, config=None, config_file_path=None):
     """returns a analysis engine module for the given project.
 
-    :param NGIProject  project: The project to get the engine from.
+    :param NGIProject project: The project to get the engine from.
     """
     charon_session = CharonSession()
     best_practice_analysis = charon_session.project_get(project.project_id)["best_practice_analysis"]
@@ -50,9 +50,8 @@ def launch_analysis(projects_to_analyze, restart_failed_jobs=False,
     :param str config_file_path: The path to the NGI configuration file; optional/has default.
     """
     for project in projects_to_analyze: # Get information from Charon regarding which best practice analyses to run
-        engine=get_engine_for_BP(project, config, config_file_path)
+        engine = get_engine_for_BP(project, config, config_file_path)
         engine.local_process_tracking.update_charon_with_local_jobs_status()
-    
     charon_session = CharonSession()
     for project in projects_to_analyze: # Get information from Charon regarding which best practice analyses to run
         project_status = charon_session.project_get(project.project_id)['status']
@@ -69,46 +68,43 @@ def launch_analysis(projects_to_analyze, restart_failed_jobs=False,
             LOG.error('Skipping project "{}" because of error: {}'.format(project, e))
             continue
         for sample in project:
-            label = "{}/{}".format(project, sample)
             try:
+                label = "{}/{}".format(project, sample)
                 charon_reported_status = charon_session.sample_get(project.project_id,
                                                                    sample)['analysis_status']
-            except (CharonError, KeyError) as e:
-                LOG.warn('Unable to get required information from Charon for '
-                          '{} -- forcing it to new: {}'.format(label, e))
-                charon_reported_status = "TO_ANALYZE"
-                charon_session.sample_update(project.project_id, sample.name,
-                                             analysis_status=charon_reported_status)
-            # Check Charon to ensure this hasn't already been processed
-            if charon_reported_status == "UNDER_ANALYSIS":
-                if not restart_running_jobs:
-                    error_text = ('Charon reports seqrun analysis for project "{}" '
+                # Check Charon to ensure this hasn't already been processed
+                if charon_reported_status == "UNDER_ANALYSIS":
+                    if not restart_running_jobs:
+                        error_text = ('Charon reports seqrun analysis for project "{}" '
+                                      '/ sample "{}" does not need processing (already '
+                                      '"{}")'.format(project, sample, charon_reported_status))
+                        LOG.error(error_text)
+                        mail_analysis(project_name=project.name, sample_name=sample.name,
+                                      engine_name=analysis_module.__name__,
+                                      level="ERROR", info_text=error_text)
+                        continue
+                elif charon_reported_status == "ANALYZED":
+                    if not restart_finished_jobs:
+                        error_text = ('Charon reports seqrun analysis for project "{}" '
                                   '/ sample "{}" does not need processing (already '
                                   '"{}")'.format(project, sample, charon_reported_status))
-                    LOG.error(error_text)
-                    mail_analysis(project_name=project.name, sample_name=sample.name,
-                                  engine_name=analysis_module.__name__,
-                                  level="ERROR", info_text=error_text)
-                    continue
-            elif charon_reported_status == "ANALYZED":
-                if not restart_finished_jobs:
-                    error_text = ('Charon reports seqrun analysis for project "{}" '
-                              '/ sample "{}" does not need processing (already '
-                              '"{}")'.format(project, sample, charon_reported_status))
-                    LOG.error(error_text)
-                    mail_analysis(project_name=project.name, sample_name=sample.name,
-                                  engine_name=analysis_module.__name__,
-                                  level="ERROR", info_text=error_text)
-                    continue
-            elif charon_reported_status == "FAILED":
-                if not restart_failed_jobs:
-                    error_text = ('FAILED:  Project "{}" / sample "{}" Charon reports '
-                                  'FAILURE, manual investigation needed!'.format(project, sample))
-                    LOG.error(error_text)
-                    mail_analysis(project_name=project.name, sample_name=sample.name,
-                                  engine_name=analysis_module.__name__,
-                                  level="ERROR", info_text=error_text)
-                    continue
+                        LOG.error(error_text)
+                        mail_analysis(project_name=project.name, sample_name=sample.name,
+                                      engine_name=analysis_module.__name__,
+                                      level="ERROR", info_text=error_text)
+                        continue
+                elif charon_reported_status == "FAILED":
+                    if not restart_failed_jobs:
+                        error_text = ('FAILED:  Project "{}" / sample "{}" Charon reports '
+                                      'FAILURE, manual investigation needed!'.format(project, sample))
+                        LOG.error(error_text)
+                        mail_analysis(project_name=project.name, sample_name=sample.name,
+                                      engine_name=analysis_module.__name__,
+                                      level="ERROR", info_text=error_text)
+                        continue
+            except CharonError as e:
+                LOG.error(e)
+                continue
             try:
                 LOG.info('Attempting to launch sample analysis for '
                          'project "{}" / sample "{}" / engine'
@@ -118,7 +114,8 @@ def launch_analysis(projects_to_analyze, restart_failed_jobs=False,
                                         sample=sample,
                                         restart_finished_jobs=restart_finished_jobs,
                                         restart_running_jobs=restart_running_jobs,
-                                        exec_mode=exec_mode)
+                                        exec_mode=exec_mode,
+                                        config=config)
             except Exception as e:
                 error_text = ('Cannot process project "{}" / sample "{}" / '
                               'engine "{}" : {}'.format(project, sample,

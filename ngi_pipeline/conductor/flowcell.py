@@ -106,22 +106,8 @@ def process_demultiplexed_flowcells(demux_fcid_dirs, restrict_to_projects=None,
             LOG.info('Creating Charon records for Uppsala project "{}" if they '
                      'are missing'.format(project))
             create_charon_entries_from_project(project, sequencing_facility="NGI-U")
-        else:
-            # I hate this
-            for sample in project:
-                for libprep in sample:
-                    if libprep.name == "Unknown":
-                        LOG.info('Populating Charon with records for project/sample/libprep '
-                                 '{}/{}/{}'.format(project, sample, libprep))
-                        # This is horrible what am I doing somebody stop me
-                        tmp_proj = NGIProject(project.name,
-                                              project.dirname,
-                                              project.project_id,
-                                              project.base_path)
-                        tmp_proj._subitems = {sample.name: sample}
-                        tmp_proj._subitems[sample.name]._subitems = {libprep.name: libprep}
-                        create_charon_entries_from_project(tmp_proj)
-    launch_analysis(projects_to_analyze, restart_failed_jobs, restart_finished_jobs, restart_running_jobs)
+    launch_analysis(projects_to_analyze, restart_failed_jobs, restart_finished_jobs,
+                    restart_running_jobs, config=config)
 
 
 @with_ngi_config
