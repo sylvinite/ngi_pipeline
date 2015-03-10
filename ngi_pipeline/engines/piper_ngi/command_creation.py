@@ -84,11 +84,11 @@ def build_setup_xml(project, sample, local_scratch_mode, config):
 
     if local_scratch_mode:
         project_top_level_dir = os.path.join("$SNIC_TMP/DATA/", project.dirname)
-        analysis_dir = os.path.join("$SNIC_TMP/ANALYSIS/", project.dirname)
+        analysis_dir = os.path.join("$SNIC_TMP/ANALYSIS/", project.dirname, "piper_ngi")
         # Can't create these directories ahead of time of course
     else:
         project_top_level_dir = os.path.join(project.base_path, "DATA", project.dirname)
-        analysis_dir = os.path.join(project.base_path, "ANALYSIS", project.dirname)
+        analysis_dir = os.path.join(project.base_path, "ANALYSIS", project.dirname, "piper_ngi")
         safe_makedir(analysis_dir, 0770)
     ## TODO handle this elsewhere
     #safe_makedir(os.path.join(analysis_dir, "logs"))
@@ -117,7 +117,7 @@ def build_setup_xml(project, sample, local_scratch_mode, config):
 
     # setup XML file is always stored in permanent analysis directory
     output_xml_filepath = os.path.join(project.base_path, "ANALYSIS",
-                                       project.dirname, "setup_xml_files",
+                                       project.dirname, "piper_ngi","setup_xml_files",
                                        "{}-{}-setup.xml".format(project, sample))
     safe_makedir(os.path.dirname(output_xml_filepath))
     cl_args["output_xml_filepath"] = output_xml_filepath

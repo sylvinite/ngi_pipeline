@@ -44,6 +44,7 @@ def _validate_dangerous_user_thing(action="do SOMETHING that Mario thinks you sh
             print("No confirmation received; setting force_update to False", file=sys.stderr)
             return False
 
+
 class ArgumentParserWithTheFlagsThatIWant(argparse.ArgumentParser):
     def __init__(self, *args, **kwargs):
         super(ArgumentParserWithTheFlagsThatIWant, self).__init__(*args,
@@ -64,6 +65,8 @@ if __name__ == "__main__":
 
     parser = argparse.ArgumentParser(description="Launch NGI pipeline")
     subparsers = parser.add_subparsers(help="Choose the mode to run")
+    parser.add_argument("-q", "--quiet", dest="quiet", action="store_true",
+            help=("No mails will be sent. "))
 
     # Add subparser for the server
     parser_server = subparsers.add_parser('server', help="Start ngi_pipeline server")
@@ -138,7 +141,8 @@ if __name__ == "__main__":
                                                 args.restrict_to_samples,
                                                 args.restart_failed_jobs,
                                                 args.restart_finished_jobs,
-                                                args.restart_running_jobs)
+                                                args.restart_running_jobs,
+                                                quiet=args.quiet)
 
     ### TODO change to work with multiple projects
     elif 'analyze_project_dir' in args:
@@ -149,7 +153,8 @@ if __name__ == "__main__":
         launchers.launch_analysis([project],
                                   restart_failed_jobs=args.restart_failed_jobs,
                                   restart_finished_jobs=args.restart_finished_jobs,
-                                  restart_running_jobs=args.restart_running_jobs)
+                                  restart_running_jobs=args.restart_running_jobs,
+                                  quiet=args.quiet)
 
     elif 'organize_fc_dirs' in args:
         if args.force_update: args.force_update = validate_force_update()
@@ -170,7 +175,8 @@ if __name__ == "__main__":
                                                                      projects_to_analyze=projects_to_analyze,
                                                                      restrict_to_projects=args.restrict_to_projects,
                                                                      restrict_to_samples=args.restrict_to_samples,
-                                                                     fallback_libprep=args.fallback_libprep)
+                                                                     fallback_libprep=args.fallback_libprep,
+                                                                     quiet=args.quiet)
         if not projects_to_analyze:
             raise ValueError('No projects found to process in flowcells '
                              '"{}" or there was an error gathering required '
@@ -186,6 +192,7 @@ if __name__ == "__main__":
                                                        delete_existing=args.delete_existing)
                 except Exception as e:
                     print(e, file=sys.stderr)
+
 
     elif 'port' in args:
         LOG.info('Starting ngi_pipeline server at port {}'.format(args.port))
