@@ -36,6 +36,8 @@ if __name__ == "__main__":
 
     parser = argparse.ArgumentParser(description="Launch NGI pipeline")
     subparsers = parser.add_subparsers(help="Choose the mode to run")
+    parser.add_argument("-q", "--quiet", dest="quiet", action="store_true",
+            help=("No mails will be sent. "))
 
     # Add subparser for the server
     parser_server = subparsers.add_parser('server', help="Start ngi_pipeline server")
@@ -80,7 +82,8 @@ if __name__ == "__main__":
                                                 args.restrict_to_samples,
                                                 args.restart_failed_jobs,
                                                 args.restart_finished_jobs,
-                                                args.restart_running_jobs)
+                                                args.restart_running_jobs,
+                                                quiet=args.quiet)
     elif 'project_dir' in args:
         project = recreate_project_from_filesystem(project_dir=args.project_dir,
                                                    restrict_to_samples=args.restrict_to_samples)
@@ -89,7 +92,8 @@ if __name__ == "__main__":
         launchers.launch_analysis([project],
                                   restart_failed_jobs=args.restart_failed_jobs,
                                   restart_finished_jobs=args.restart_finished_jobs,
-                                  restart_running_jobs=args.restart_running_jobs)
+                                  restart_running_jobs=args.restart_running_jobs,
+                                  quiet=args.quiet)
     elif 'port' in args:
         LOG.info('Starting ngi_pipeline server at port {}'.format(args.port))
         server_main.start(args.port)
