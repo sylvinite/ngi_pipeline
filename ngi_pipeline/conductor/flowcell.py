@@ -86,7 +86,8 @@ def process_demultiplexed_flowcells(demux_fcid_dirs, restrict_to_projects=None,
                                                                  restrict_to_projects,
                                                                  restrict_to_samples,
                                                                  create_files=True,
-                                                                 config=config)
+                                                                 config=config,
+                                                                 quiet=quiet)
     if not projects_to_analyze:
         if restrict_to_projects:
             error_message = ("No projects found to process: the specified flowcells "
@@ -139,7 +140,7 @@ def setup_analysis_directory_structure(fc_dir, projects_to_analyze,
     LOG.info("Setting up analysis for demultiplexed data in source folder \"{}\"".format(fc_dir))
     if not restrict_to_projects: restrict_to_projects = []
     if not restrict_to_samples: restrict_to_samples = []
-    config.quiet = quiet # Hack because I enter here from a script sometimes
+    config["quiet"] = quiet # Hack because I enter here from a script sometimes
     analysis_top_dir = os.path.abspath(config["analysis"]["top_dir"])
     if not os.path.exists(analysis_top_dir):
         error_msg = "Error: Analysis top directory {} does not exist".format(analysis_top_dir)
