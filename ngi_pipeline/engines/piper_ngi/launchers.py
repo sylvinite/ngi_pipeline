@@ -210,10 +210,12 @@ def sbatch_piper_sample(command_line_list, workflow_name, project, sample,
     # Paths to the various data directories
     project_dirname = project.dirname
     sample_dirname = sample.dirname
-    perm_analysis_dir = os.path.join(project.base_path, "ANALYSIS", project_dirname)
-    scratch_analysis_dir = os.path.join("$SNIC_TMP/ANALYSIS/", project_dirname)
+    perm_analysis_dir = os.path.join(project.base_path, "ANALYSIS", project_dirname, "piper_ngi")
+    scratch_analysis_dir = os.path.join("$SNIC_TMP/ANALYSIS/", project_dirname, "piper_ngi")
     scratch_aln_dir = os.path.join(scratch_analysis_dir, "01_raw_alignments")
     scratch_qc_dir = os.path.join(scratch_analysis_dir, "02_preliminary_alignment_qc")
+    #ensure that the analysis dir exists
+    safe_makedir(perm_analysis_dir)
     try:
         slurm_project_id = config["environment"]["project_id"]
     except KeyError:
@@ -364,7 +366,7 @@ def launch_piper_job(command_line, project, log_file_path=None):
 
 def rotate_previous_analysis(project_obj):
     """Rotates the files from the existing analysis starting at 03_merged_aligments"""
-    project_dir_path = os.path.join(project_obj.base_path, "ANALYSIS", project_obj.project_id)
+    project_dir_path = os.path.join(project_obj.base_path, "ANALYSIS", project_obj.project_id, "piper_ngi")
     #analysis_move = glob.glob(os.path.join(project_dir_path, '0[3-9]_*'))
     for sample in project_obj:
         # P123_456 is renamed by Piper to P123-456
