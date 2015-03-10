@@ -80,10 +80,13 @@ if __name__ == "__main__":
             help='Organize a raw flowcell, populating Charon with relevant data.')
     organize_flowcell.add_argument("organize_fc_dirs", nargs="*",
             help=("The path to the Illumina demultiplexed fc directories to organize"))
+    organize_flowcell.add_argument("-l", "--fallback-libprep",
+            help=("If no libprep is supplied in the SampleSheet.csv or in Charon, "
+                  "use this value when creating records in Charon. (Optional)"))
     ## NOTE this bit of code not currently in use but could use later
     #parser.add_argument("-a", "--already-parsed", action="store_true",
 	#		help="Set this flag if the input path is an already-parsed Project/Sample/Libprep/Seqrun tree, as opposed to a raw flowcell.")
-    organize_flowcell.add_argument("-l", "--sequencing-facility", default="NGI-S", choices=('NGI-S', 'NGI-U'),
+    organize_flowcell.add_argument("-w", "--sequencing-facility", default="NGI-S", choices=('NGI-S', 'NGI-U'),
             help="The facility where sequencing was performed.")
     organize_flowcell.add_argument("-b", "--best_practice_analysis", default="whole_genome_reseq",
 			help="The best practice analysis to run for this project.")
@@ -163,10 +166,11 @@ if __name__ == "__main__":
         #        projects_to_analyze[p.name] = p
         #else: # Raw illumina flowcell
         for organize_fc_dir in organize_fc_dirs_set:
-            projects_to_analyze = setup_analysis_directory_structure(organize_fc_dir,
-                                                                     projects_to_analyze,
-                                                                     args.restrict_to_projects,
-                                                                     args.restrict_to_samples)
+            projects_to_analyze = setup_analysis_directory_structure(fc_dir=organize_fc_dir,
+                                                                     projects_to_analyze=projects_to_analyze,
+                                                                     restrict_to_projects=args.restrict_to_projects,
+                                                                     restrict_to_samples=args.restrict_to_samples,
+                                                                     fallback_libprep=args.fallback_libprep)
         if not projects_to_analyze:
             raise ValueError('No projects found to process in flowcells '
                              '"{}" or there was an error gathering required '
