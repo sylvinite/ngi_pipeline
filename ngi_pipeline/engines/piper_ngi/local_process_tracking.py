@@ -72,7 +72,8 @@ def update_charon_with_local_jobs_status(config=None, config_file_path=None):
                                  'Recording status {} in Charon'.format(workflow, label,
                                                                         set_status))
                     LOG.info(info_text)
-                    mail_analysis(project_name=project_name, sample_name=sample_id,
+                    if not config.get('quiet'):
+                        mail_analysis(project_name=project_name, sample_name=sample_id,
                                   engine_name=engine, level="INFO", info_text=info_text)
                     charon_session.sample_update(projectid=project_id,
                                                  sampleid=sample_id,
@@ -95,7 +96,8 @@ def update_charon_with_local_jobs_status(config=None, config_file_path=None):
                     error_text = ('Workflow "{}" for {} failed. Recording status '
                                  '{} in Charon.'.format(workflow, label, set_status))
                     LOG.error(error_text)
-                    mail_analysis(project_name=project_name, sample_name=sample_id,
+                    if not config.get('quiet'):
+                        mail_analysis(project_name=project_name, sample_name=sample_id,
                                   engine_name=engine, level="ERROR", info_text=error_text)
                     charon_session.sample_update(projectid=project_id,
                                                  sampleid=sample_id,
