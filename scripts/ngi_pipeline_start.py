@@ -29,7 +29,7 @@ class ArgumentParserWithTheFlagsThatIWant(argparse.ArgumentParser):
         self.add_argument("-a", "--restart-all", dest="restart_all_jobs", action="store_true",
                 help=("Just start any kind of job you can get your hands on regardless of status."))
         self.add_argument("-s", "--sample", dest= "restrict_to_samples", action="append",
-                help=("Restrict processing to these samples. "
+                help=("Restrict analysis to these samples. "
                       "Use flag multiple times for multiple samples."))
 
 if __name__ == "__main__":
@@ -41,28 +41,32 @@ if __name__ == "__main__":
     parser_server = subparsers.add_parser('server', help="Start ngi_pipeline server")
     parser_server.add_argument('-p', '--port', type=int, help="Port in where to run the application")
 
+    # Add subparser for organizing a flowcell
+    parser_organize = subparsers.add_parser('organize',
+        help="Organize a flowcell into project/sample/libprep/seqrun format.")
+    subparsers_organize = parser_organize.add_subparsers()
 
-    # Add subparser for the process
-    parser_process = subparsers.add_parser('process', help="Start some analysis process")
-    subparsers_process = parser_process.add_subparsers(parser_class=ArgumentParserWithTheFlagsThatIWant,
-            help='Choose unit to process')
+    # Add subparser for analysis
+    parser_analyze = subparsers.add_parser('analyze', help="Launch analysis.")
+    subparsers_analyze = parser_analyze.add_subparsers(parser_class=ArgumentParserWithTheFlagsThatIWant,
+            help='Choose unit to analyze')
 
-    # Another subparser for flowcell processing
-    process_fc = subparsers_process.add_parser('flowcell', help='Start analysis of raw flowcells')
-    process_fc.add_argument("demux_fcid_dir", action="store",
+    # Another subparser for flowcell analysis
+    analyze_flowcell = subparsers_analyze.add_parser('flowcell', help='Start analysis of raw flowcells')
+    analyze_flowcell.add_argument("demux_fcid_dir", action="store",
             help=("The path to the Illumina demultiplexed fc directories "
-                  "to process."))
-    process_fc.add_argument("-p", "--project", dest="restrict_to_projects", action="append",
-            help=("Restrict processing to these projects. "
+                  "to process and analyze."))
+    analyze_flowcell.add_argument("-p", "--project", dest="restrict_to_projects", action="append",
+            help=("Restrict analysis to these projects. "
                   "Use flag multiple times for multiple projects."))
 
-    # Add subparser for project processing
-    project_group = subparsers_process.add_parser('project', help='Start the analysis of a pre-parsed project.')
-    project_group.add_argument('project_dir', action='store', help='The path to the project folder to be processed.')
+    # Another subparser for project analysis
+    project_group = subparsers_analyze.add_parser('project', help='Start the analysis of a pre-parsed project.')
+    project_group.add_argument('project_dir', action='store', help='The path to the project folder to be analyzed.')
 
     args = parser.parse_args()
 
-    # The following option will be available only if the script has been called with the process option
+    # The following option will be available only if the script has been called with the 'analyze' option
     if args.__dict__.get('restart_all_jobs'):
         args.restart_failed_jobs = True
         args.restart_finished_jobs = True
