@@ -45,7 +45,7 @@ def return_cl_for_workflow(workflow_name, input_files, output_dir, config=None, 
 def workflow_qc(input_files, output_dir, config):
     """Generic qc (includes multiple specific qc utilities)."""
     cl_list = []
-    for workflow_name in "fastqc", "fastqscreen":
+    for workflow_name in "fastqc", "fastq_screen":
         workflow_fn_name = "workflow_{}".format(workflow_name)
         try:
             workflow_function = getattr(sys.modules[__name__], workflow_fn_name)
@@ -72,6 +72,7 @@ def workflow_fastqc(input_files, output_dir, config):
     fastqc_path = config.get("paths", {}).get("fastqc")
     if not fastqc_path:
         if find_on_path("fastqc", config):
+            LOG.info("fastqc found on PATH")
             fastqc_path = "fastqc"
         else:
             raise ValueError('Path to FastQC could not be found and it is not '
@@ -101,6 +102,7 @@ def workflow_fastq_screen(input_files, output_dir, config):
     fastq_screen_path = config.get("paths", {}).get("fastq_screen")
     if not fastq_screen_path:
         if find_on_path("fastq_screen", config):
+            LOG.info("fastq_screen found on PATH")
             fastq_screen_path = "fastq_screen"
         else:
             raise ValueError('Path to fastq_screen could not be found and it is not '
@@ -135,12 +137,13 @@ def workflow_fastq_screen(input_files, output_dir, config):
     # fastq_screen stuff here
     for elt in input_files:
         cl = fastq_screen_path
+        cl += " --aligner bowtie2"
         cl += " --outdir {}".format(output_dir)
         if subsample_reads: cl += " --subset {}".format(subsample_reads)
         if num_threads: cl += " --threads {}".format(num_threads)
         if fastq_screen_config_path: cl += " --conf {}".format(fastq_screen_config_path)
         if type(elt) is list:
-            if len(list) == 2:
+            if len(elt) == 2:
                 # Read pair; run fastq_screen on these together
                 cl += (" --paired {}".format(" ".join(elt)))
             else:
