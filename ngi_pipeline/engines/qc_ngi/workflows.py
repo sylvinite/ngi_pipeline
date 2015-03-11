@@ -19,8 +19,8 @@ def return_cl_for_workflow(workflow_name, input_files, output_dir, config=None, 
     :param list input_files: A flat list of input fastq files or a list of lists of paired files
     :param str output_dir: The directory to which to write output files
 
-    :returns: A list of the bash command line(s) to be executed.
-    :rtype: list
+    :returns: A 2D list of the bash command line(s) to be executed.
+    :rtype: list of lists
     :raises NotImplementedError: If the workflow requested has not been implemented.
     """
     workflow_fn_name = "workflow_{}".format(workflow_name)
@@ -32,19 +32,38 @@ def return_cl_for_workflow(workflow_name, input_files, output_dir, config=None, 
         LOG.error(error_msg)
         raise NotImplementedError(error_msg)
     LOG.info('Building command line for workflow "{}"'.format(workflow_name))
-    return workflow_function(input_files, output_dir, config)
+    cl_list = workflow_function(input_files, output_dir, config)
+    if type(cl_list[0]) is not list:
+        # I know this is stupid. I don't want to talk about it.
+        cl_list = [cl_list]
+    return cl_list
 
 
 def workflow_qc(input_files, output_dir, config):
     """Generic qc (includes multiple specific qc utilities)."""
     cl_list = []
-    cl_list.append(workflow_fastqc(input_files, output_dir, config))
-    cl_list.append(workflow_fastq_screen(input_files, output_dir, config))
+    for workflow_name in "fastqc", "fastqscreen":
+        workflow_fn_name = "workflow_{}".format(workflow_name)
+        try:
+            workflow_function = getattr(sys.modules[__name__], workflow_fn_name)
+            cl_list.append(workflow_function(input_files, output_dir, config))
+        except ValueError as e:
+            LOG.error('Could not create command line for workflow '
+                      '"{}" ({})'.format(workflow_name, e))
     return cl_list
 
 
 def workflow_fastqc(input_files, output_dir, config):
-    """The constructor of the FastQC command line."""
+    """The constructor of the FastQC command line.
+
+    :param list input_files: The list of fastq files to analyze (may be 2D for read pairs)
+    :param str output_dir: The path to the desired output directory (will be created)
+    :param dict config: The parsed system/pipeline configuration file
+
+    :returns: A list of command lines to be executed in the order given
+    :rtype: list
+    :raises ValueError: If the FastQC path is not given or is not on PATH
+    """
 
     # Get the path to the fastqc command
     try:
@@ -67,12 +86,14 @@ def workflow_fastqc(input_files, output_dir, config):
             fastqc_path = "fastqc"
     num_threads = config.get("fastqc", {}).get("threads") or 1
     fastq_files = flatten(input_files) # FastQC cares not for your "read pairs"
-    cl = ('mkdir -p {output_dir} && {fastqc_path} -t {num_threads} '
-          '-o {output_dir} {fastq_files}'.format(output_dir=output_dir,
-                                                 fastqc_path=fastqc_path,
-                                                 num_threads=num_threads,
-                                                 fastq_files=" ".join(fastq_files)))
-    return cl
+    cl_list = []
+    cl_list.append('mkdir -p {output_dir}'.format(output_dir=output_dir))
+    cl_list.append('{fastqc_path} -t {num_threads} -o {output_dir} '
+                   '{fastq_files}'.format(output_dir=output_dir,
+                                          fastqc_path=fastqc_path,
+                                          num_threads=num_threads,
+                                          fastq_files=" ".join(fastq_files)))
+    return cl_list
 
 
 def workflow_fastq_screen(input_files, output_dir, config):
