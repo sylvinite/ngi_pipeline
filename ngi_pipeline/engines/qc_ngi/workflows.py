@@ -14,7 +14,7 @@ LOG = minimal_logger(__name__)
 
 
 @with_ngi_config
-def return_cl_for_workflow(workflow_name, input_files, output_dir, config=None, config_file_path=None):
+def return_cls_for_workflow(workflow_name, input_files, output_dir, config=None, config_file_path=None):
     """Return an executable-ready bash command line.
 
     :param str workflow_name: The name of the workflow to be run.
