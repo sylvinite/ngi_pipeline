@@ -32,7 +32,7 @@ def return_cl_for_workflow(workflow_name, input_files, output_dir, config=None, 
         LOG.error(error_msg)
         raise NotImplementedError(error_msg)
     LOG.info('Building command line for workflow "{}"'.format(workflow_name))
-    return workflow_function(output_dir, config)
+    return workflow_function(input_files, output_dir, config)
 
 
 def workflow_qc(input_files, output_dir, config):
@@ -58,10 +58,11 @@ def workflow_fastqc(input_files, output_dir, config):
             load_modules(modules_to_load)
         try:
             # If we get no error, fastqc is on the PATH
-            subprocess.check_call("fastqc")
-        except OSError:
+            subprocess.check_call("fastqc --version", shell=True)
+        except (OSError, subprocess.CalledProcessError) as e:
             raise ValueError('Path to FastQC could not be found and it is not '
-                             'available on PATH; cannot proceed with FastQC workflow.')
+                             'available on PATH; cannot proceed with FastQC '
+                             'workflow (error "{}")'.format(e))
         else:
             fastqc_path = "fastqc"
     num_threads = config.get("fastqc", {}).get("threads") or 1
@@ -71,6 +72,7 @@ def workflow_fastqc(input_files, output_dir, config):
                                                  fastqc_path=fastqc_path,
                                                  num_threads=num_threads,
                                                  fastq_files=" ".join(fastq_files)))
+    return cl
 
 
 def workflow_fastq_screen(input_files, output_dir, config):
