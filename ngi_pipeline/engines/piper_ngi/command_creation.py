@@ -23,10 +23,10 @@ def build_piper_cl(project, workflow_name, setup_xml_path, exit_code_path,
     :raises ValueError: If a required configuration value is missing.
     """
     if exec_mode == "sbatch":
-        output_dir = os.path.join("$SNIC_TMP/ANALYSIS/", project.dirname)
+        output_dir = os.path.join("$SNIC_TMP/ANALYSIS/", project.dirname, 'piper_ngi')
         # Can't create these directories ahead of time of course
     elif exec_mode == "local":
-        output_dir = os.path.join(project.base_path, "ANALYSIS", project.dirname)
+        output_dir = os.path.join(project.base_path, "ANALYSIS", project.dirname, 'piper_ngi')
         safe_makedir(analysis_dir, 0770)
     else:
         raise ValueError('"exec_mode" must be one of "local", "sbatch" (value '

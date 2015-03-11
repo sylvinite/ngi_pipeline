@@ -26,6 +26,8 @@ class with_ngi_config(object):
             kwargs["config"] = load_yaml_config(kwargs["config_file_path"])
             if kwargs.get("quiet"):
                 kwargs["config"]["quiet"]=True
+            if kwargs.get("manual"):
+                kwargs["config"]["manual"]=True
         return self.f(**kwargs)
 
 
