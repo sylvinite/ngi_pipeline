@@ -392,15 +392,17 @@ def remove_previous_sample_analyses(project_obj):
         sample_files.extend(glob.glob(os.path.join(project_dir_pattern, ".{}*.failed".format(piper_sample_name))))
     if sample_files:
         LOG.info('Deleting files for sample {} under {}'.format(sample, project_dir_path))
+        errors = []
         for sample_file in sample_files:
             LOG.debug("Deleting file {}".format(sample_file))
-            errors = []
             try:
                 os.remove(sample_file)
             except OSError:
                 errors.append(e)
-            if errors:
-                LOG.warn("Error when removing one or more files: {}".format(", ".join(errors)))
+        if errors:
+            LOG.warn("Error when removing one or more files: {}".format(", ".join(errors)))
+    else:
+        LOG.debug("No sample analysis files found to delete for project {} / samples {}".format(project_obj, ", ".join(project_obj.samples)))
 
 
 def rotate_previous_analysis(project_obj):
