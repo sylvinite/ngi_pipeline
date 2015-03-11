@@ -86,7 +86,7 @@ def analyze(project, sample, exec_mode="sbatch", restart_finished_jobs=False,
                                           exit_code_path=exit_code_path,
                                           config=config,
                                           exec_mode=exec_mode)
-                rotate_previous_analysis(project)
+                remove_previous_sample_analyses(project)
 
                 if exec_mode == "sbatch":
                     process_id = None
@@ -308,12 +308,23 @@ def sbatch_piper_sample(command_line_list, workflow_name, project, sample,
     sbatch_text_list.append("date")
     sbatch_text_list.append("mkdir -p {}".format(perm_analysis_dir))
     sbatch_text_list.append("rsync -rptoDLv {}/ {}/".format(scratch_analysis_dir, perm_analysis_dir))
+    sbatch_text_list.append("\nRSYNC_RETURN_CODE=$?")
     #sbatch_text_list.append("else")
     #sbatch_text_list.append("  echo -e '\\n\\nPiper job failed'")
     #sbatch_text_list.append("fi")
 
     # Record job completion status
-    sbatch_text_list.append("echo $PIPER_RETURN_CODE > {}".format(piper_status_file))
+    sbatch_text_list.append("if [[ $RSYNC_RETURN_CODE == 0 ]]")
+    sbatch_text_list.append("then")
+    sbatch_text_list.append("  if [[ $PIPER_RETURN_CODE == 0 ]]")
+    sbatch_text_list.append("  then")
+    sbatch_text_list.append("    echo '0'> {}".format(piper_status_file))
+    sbatch_text_list.append("  else")
+    sbatch_text_list.append("    echo '1'> {}".format(piper_status_file))
+    sbatch_text_list.append("  fi")
+    sbatch_text_list.append("else")
+    sbatch_text_list.append("  echo '2'> {}".format(piper_status_file))
+    sbatch_text_list.append("fi")
 
     # Write the sbatch file
     sbatch_dir = os.path.join(perm_analysis_dir, "sbatch")
@@ -363,6 +374,36 @@ def launch_piper_job(command_line, project, log_file_path=None):
         log_process_non_blocking(popen_object.stdout, LOG.info)
         log_process_non_blocking(popen_object.stderr, LOG.warn)
     return popen_object
+
+
+def remove_previous_sample_analyses(project_obj):
+    """Remove analysis results for a sample, including .failed and .done files.
+    Doesn't throw an error if it can't read a directory, but does if it can't
+    delete a file it knows about.
+    """
+    project_dir_path = os.path.join(project_obj.base_path, "ANALYSIS", project_obj.project_id, "piper_ngi")
+    project_dir_pattern = os.path.join(project_dir_path, "??_*")
+    LOG.info('deleting previous analysis in {}'.format(project_dir_path))
+    for sample in project_obj:
+        # P123_456 is renamed by Piper to P123-456
+        piper_sample_name = sample.name.replace("_", "-", 1)
+        sample_files = glob.glob(os.path.join(project_dir_pattern, "{}.*".format(piper_sample_name)))
+        sample_files.extend(glob.glob(os.path.join(project_dir_pattern, ".{}*.done".format(piper_sample_name))))
+        sample_files.extend(glob.glob(os.path.join(project_dir_pattern, ".{}*.failed".format(piper_sample_name))))
+    if sample_files:
+        LOG.info('Deleting files for samples {} under {}'.format(", ".join(project_obj.samples), project_dir_path))
+        errors = []
+        for sample_file in sample_files:
+            LOG.debug("Deleting file {}".format(sample_file))
+            try:
+                os.remove(sample_file)
+            except OSError:
+                errors.append(e)
+        if errors:
+            LOG.warn("Error when removing one or more files: {}".format(", ".join(errors)))
+    else:
+        LOG.debug("No sample analysis files found to delete for project {} / samples {}".format(project_obj, ", ".join(project_obj.samples)))
+
 
 def rotate_previous_analysis(project_obj):
     """Rotates the files from the existing analysis starting at 03_merged_aligments"""

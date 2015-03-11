@@ -40,7 +40,7 @@ def get_engine_for_bp(project, config=None, config_file_path=None):
 @with_ngi_config
 def launch_analysis(projects_to_analyze, restart_failed_jobs=False,
                     restart_finished_jobs=False, restart_running_jobs=False,
-                    exec_mode="sbatch", config=None, config_file_path=None, quiet=False):
+                    exec_mode="sbatch", config=None, config_file_path=None, quiet=False, manual=False):
     """Launch the appropriate analysis for each fastq file in the project.
 
     :param list projects_to_analyze: The list of projects (Project objects) to analyze
@@ -88,7 +88,7 @@ def launch_analysis(projects_to_analyze, restart_failed_jobs=False,
                                       '/ sample "{}" does not need processing (already '
                                       '"{}")'.format(project, sample, charon_reported_status))
                         LOG.error(error_text)
-                        if not config.get('quiet'):
+                        if not config.get('quiet') and not config.get('manual'):
                             mail_analysis(project_name=project.name, sample_name=sample.name,
                                           engine_name=analysis_module.__name__,
                                           level="ERROR", info_text=error_text)

@@ -142,7 +142,8 @@ if __name__ == "__main__":
                                                 args.restart_failed_jobs,
                                                 args.restart_finished_jobs,
                                                 args.restart_running_jobs,
-                                                quiet=args.quiet)
+                                                quiet=args.quiet,
+                                                manual=True)
 
     ### TODO change to work with multiple projects
     elif 'analyze_project_dir' in args:
@@ -154,7 +155,8 @@ if __name__ == "__main__":
                                   restart_failed_jobs=args.restart_failed_jobs,
                                   restart_finished_jobs=args.restart_finished_jobs,
                                   restart_running_jobs=args.restart_running_jobs,
-                                  quiet=args.quiet)
+                                  quiet=args.quiet,
+                                  manual=True)
 
     elif 'organize_fc_dirs' in args:
         if args.force_update: args.force_update = validate_force_update()

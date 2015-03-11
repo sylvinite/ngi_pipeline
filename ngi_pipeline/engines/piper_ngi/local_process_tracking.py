@@ -61,18 +61,20 @@ def update_charon_with_local_jobs_status(config=None, config_file_path=None):
                                                                    sample_id,
                                                                    e))
                 LOG.error(error_text)
-                mail_analysis(project_name=project_name, sample_name=sample_id,
+                if not config.get('quiet'):
+                    mail_analysis(project_name=project_name, sample_name=sample_id,
                               engine_name=engine, level="ERROR", info_text=error_text)
                 continue
             try:
-                if piper_exit_code == 0:
+                if piper_exit_code and piper_exit_code == 0:
                     # 0 -> Job finished successfully
                     set_status = "ANALYZED"
                     info_text = ('Workflow "{}" for {} finished succesfully. '
                                  'Recording status {} in Charon'.format(workflow, label,
                                                                         set_status))
                     LOG.info(info_text)
-                    mail_analysis(project_name=project_name, sample_name=sample_id,
+                    if not config.get('quiet'):
+                        mail_analysis(project_name=project_name, sample_name=sample_id,
                                   engine_name=engine, level="INFO", info_text=info_text)
                     charon_session.sample_update(projectid=project_id,
                                                  sampleid=sample_id,
@@ -89,13 +91,14 @@ def update_charon_with_local_jobs_status(config=None, config_file_path=None):
                     piper_qc_dir = os.path.join(project_base_path, "ANALYSIS",
                                                 project_id,"piper_ngi",  "02_preliminary_alignment_qc")
                     update_coverage_for_sample_seqruns(project_id, sample_id, piper_qc_dir)
-                elif piper_exit_code == 1:
+                elif piper_exit_code and piper_exit_code >0:
                     # 1 -> Job failed
                     set_status = "FAILED"
                     error_text = ('Workflow "{}" for {} failed. Recording status '
                                  '{} in Charon.'.format(workflow, label, set_status))
                     LOG.error(error_text)
-                    mail_analysis(project_name=project_name, sample_name=sample_id,
+                    if not config.get('quiet'):
+                        mail_analysis(project_name=project_name, sample_name=sample_id,
                                   engine_name=engine, level="ERROR", info_text=error_text)
                     charon_session.sample_update(projectid=project_id,
                                                  sampleid=sample_id,
