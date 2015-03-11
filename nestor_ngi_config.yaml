@@ -37,7 +37,7 @@ piper:
 qc:
     load_modules:
         - bioinfo-tools
-        - fastqc
+        - FastQC
         - fastq_screen
     fastqc:
         threads: 16
