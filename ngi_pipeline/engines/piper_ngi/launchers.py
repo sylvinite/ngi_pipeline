@@ -86,7 +86,7 @@ def analyze(project, sample, exec_mode="sbatch", restart_finished_jobs=False,
                                           exit_code_path=exit_code_path,
                                           config=config,
                                           exec_mode=exec_mode)
-                remove_previous_analysis(project)
+                remove_previous_sample_analyses(project)
 
                 if exec_mode == "sbatch":
                     process_id = None
@@ -365,7 +365,7 @@ def launch_piper_job(command_line, project, log_file_path=None):
     return popen_object
 
 
-def remove_previous_analysis(project_obj):
+def remove_previous_sample_analyses(project_obj):
     """Remove analysis results for a sample, including .failed and .done files.
     Doesn't throw an error if it can't read a directory, but does if it can't
     delete a file it knows about.
