@@ -66,7 +66,7 @@ def update_charon_with_local_jobs_status(config=None, config_file_path=None):
                               engine_name=engine, level="ERROR", info_text=error_text)
                 continue
             try:
-                if piper_exit_code == 0:
+                if piper_exit_code and piper_exit_code == 0:
                     # 0 -> Job finished successfully
                     set_status = "ANALYZED"
                     info_text = ('Workflow "{}" for {} finished succesfully. '
@@ -91,7 +91,7 @@ def update_charon_with_local_jobs_status(config=None, config_file_path=None):
                     piper_qc_dir = os.path.join(project_base_path, "ANALYSIS",
                                                 project_id,"piper_ngi",  "02_preliminary_alignment_qc")
                     update_coverage_for_sample_seqruns(project_id, sample_id, piper_qc_dir)
-                elif piper_exit_code >0:
+                elif piper_exit_code and piper_exit_code >0:
                     # 1 -> Job failed
                     set_status = "FAILED"
                     error_text = ('Workflow "{}" for {} failed. Recording status '
