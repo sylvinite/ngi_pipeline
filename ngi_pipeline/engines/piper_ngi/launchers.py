@@ -397,7 +397,7 @@ def remove_previous_sample_analyses(project_obj):
             LOG.debug("Deleting file {}".format(sample_file))
             try:
                 os.remove(sample_file)
-            except OSError:
+            except OSError as e:
                 errors.append(e)
         if errors:
             LOG.warn("Error when removing one or more files: {}".format(", ".join(errors)))
