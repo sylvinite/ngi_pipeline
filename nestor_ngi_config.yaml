@@ -25,6 +25,14 @@ logging:
     log_file: /proj/a2014205/ngi_resources/ngi_pipeline.log
 
 
+paths: # Hard code paths here if you are that kind of a person
+    binaries:
+        #bowtie2:
+        #fastqc:
+        #fastq_screen:
+    references:
+
+
 piper:
     # Also can be set as an environmental variable $PIPER_QSCRIPTS_DIR
     path_to_piper_qscripts: /proj/a2014205/software/piper/qscripts
@@ -37,12 +45,17 @@ piper:
 qc:
     load_modules:
         - bioinfo-tools
-        - FastQC
-        - fastq_screen
     fastqc:
+        load_modules:
+            - FastQC
         threads: 16
     fastq_screen:
-        threads: 16
+        config_path: "/proj/a2014205/ngi_resources/fastq_screen.nestor.conf"
+        load_modules:
+            - bowtie2
+            - fastq_screen
+        subsample_reads: 200000
+        threads: 1
 
 
 slurm:
