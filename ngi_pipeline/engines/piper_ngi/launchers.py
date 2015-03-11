@@ -391,7 +391,7 @@ def remove_previous_sample_analyses(project_obj):
         sample_files.extend(glob.glob(os.path.join(project_dir_pattern, ".{}*.done".format(piper_sample_name))))
         sample_files.extend(glob.glob(os.path.join(project_dir_pattern, ".{}*.failed".format(piper_sample_name))))
     if sample_files:
-        LOG.info('Deleting files for sample {} under {}'.format(sample, project_dir_path))
+        LOG.info('Deleting files for samples {} under {}'.format(", ".join(project_obj.samples), project_dir_path))
         errors = []
         for sample_file in sample_files:
             LOG.debug("Deleting file {}".format(sample_file))
