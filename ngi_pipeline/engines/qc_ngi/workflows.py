@@ -49,7 +49,8 @@ def workflow_qc(input_files, output_dir, config):
         workflow_fn_name = "workflow_{}".format(workflow_name)
         try:
             workflow_function = getattr(sys.modules[__name__], workflow_fn_name)
-            cl_list.append(workflow_function(input_files, output_dir, config))
+            output_subdir = os.path.join(output_dir, workflow_name)
+            cl_list.append(workflow_function(input_files, output_subdir, config))
         except ValueError as e:
             LOG.error('Could not create command line for workflow '
                       '"{}" ({})'.format(workflow_name, e))
@@ -78,11 +79,15 @@ def workflow_fastqc(input_files, output_dir, config):
                              'workflow.')
     num_threads = config.get("qc", {}).get("fastqc", {}).get("threads") or 1
     fastq_files = flatten(input_files) # FastQC cares not for your "read pairs"
+    # Construct the command lines
     cl_list = []
+    # Module loading
     modules_to_load = get_all_modules_for_workflow("fastqc", config)
     for module in modules_to_load:
         cl_list.append("module load {}".format(module))
+    # Create the output directory
     cl_list.append('mkdir -p {output_dir}'.format(output_dir=output_dir))
+    # Execute fastqc
     cl_list.append('{fastqc_path} -t {num_threads} -o {output_dir} '
                    '{fastq_files}'.format(output_dir=output_dir,
                                           fastqc_path=fastqc_path,
@@ -101,29 +106,57 @@ def workflow_fastq_screen(input_files, output_dir, config):
             raise ValueError('Path to fastq_screen could not be found and it is not '
                              'available on PATH; cannot proceed with fastq_screen '
                              'workflow.')
-    # Get the path to the bowtie2 command (required for fastq_screen)
-    bowtie2_path = config.get("paths", {}).get("bowtie2")
-    if not bowtie2_path:
-        if find_on_path("bowtie2", config):
-            bowtie2_path = "bowtie2"
-        else:
-            raise ValueError('Path to bowtie2 could not be found and it is not '
-                             'available on PATH; cannot proceed with fastq_screen '
-                             'workflow.')
     fastq_screen_config_path = config.get("qc", {}).get("fastq_screen", {}).get("config_path")
+    # We probably should have the path to the fastq_screen config file written down somewhere
     if not fastq_screen_config_path:
         LOG.warn('Path to fastq_screen config file not specified; assuming '
-                 'it is in the same directory as the fastq_screen binary.')
+                 'it is in the same directory as the fastq_screen binary, '
+                 'even though I think this is probably a fairly bad '
+                 'assumption to make. You\'re in charge, whatever.')
+    else:
+        try:
+            open(fastq_screen_config_path, 'r').close()
+        except IOError as e:
+            raise ValueError('Error when accessing fastq_screen configuration '
+                             'file as specified in pipeline config: "{}" (path '
+                             'given was {})'.format(e, fastq_screen_config_path))
+
     num_threads = config.get("qc", {}).get("fastq_screen", {}).get("threads") or 1
     subsample_reads = config.get("qc", {}).get("fastq_screen", {}).get("subsample_reads")
 
+    # Construct the command lines
     cl_list = []
+    # Module loading
     modules_to_load = get_all_modules_for_workflow("fastqc", config)
     for module in modules_to_load:
         cl_list.append("module load {}".format(module))
+    # Make output directory
     cl_list.append('mkdir -p {output_dir}'.format(output_dir=output_dir))
     # fastq_screen stuff here
-    return cl_list
+    for elt in input_files:
+        cl = fastq_screen_path
+        cl += " --outdir {}".format(output_dir)
+        if subsample_reads: cl += " --subset {}".format(subsample_reads)
+        if num_threads: cl += " --threads {}".format(num_threads)
+        if fastq_screen_config_path: cl += " --conf {}".format(fastq_screen_config_path)
+        if type(elt) is list:
+            if len(list) == 2:
+                # Read pair; run fastq_screen on these together
+                cl += (" --paired {}".format(" ".join(elt)))
+            else:
+                LOG.error('Files passed as list but more than two elements; '
+                          'not a read pair? Skipping. ({})'.format(" ".join(elt)))
+        elif type(elt) is str or type(elt) is unicode:
+            cl += " " + elt
+        else:
+            LOG.error("Whatchyoo tryin' to get crazy with ese, "
+                      "don'tchyoo know I'm loco? "
+                      "Ignoring your weird input (not a string, not a list).")
+        cl_list.append(cl)
+    if not cl_list:
+        raise ValueError("No valid input files passed in; skipping fastq_screen analysis.")
+    else:
+        return cl_list
 
 
 def get_all_modules_for_workflow(binary_name, config):
