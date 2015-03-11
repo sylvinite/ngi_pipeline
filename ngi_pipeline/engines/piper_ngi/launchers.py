@@ -398,7 +398,7 @@ def remove_previous_sample_analyses(project_obj):
             try:
                 os.remove(sample_file)
             except OSError as e:
-                errors.append(e)
+                errors.append(e.message)
         if errors:
             LOG.warn("Error when removing one or more files: {}".format(", ".join(errors)))
     else:
