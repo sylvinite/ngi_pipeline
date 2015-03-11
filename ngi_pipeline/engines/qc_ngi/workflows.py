@@ -146,6 +146,8 @@ def workflow_fastq_screen(input_files, output_dir, config):
             if len(elt) == 2:
                 # Read pair; run fastq_screen on these together
                 cl += (" --paired {}".format(" ".join(elt)))
+            elif len(elt) == 1:
+                cl += " " + elt[0]
             else:
                 LOG.error('Files passed as list but more than two elements; '
                           'not a read pair? Skipping. ({})'.format(" ".join(elt)))
