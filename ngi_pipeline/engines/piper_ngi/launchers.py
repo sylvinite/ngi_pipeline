@@ -86,7 +86,7 @@ def analyze(project, sample, exec_mode="sbatch", restart_finished_jobs=False,
                                           exit_code_path=exit_code_path,
                                           config=config,
                                           exec_mode=exec_mode)
-                remove_previous_analysis(project)
+                remove_previous_sample_analyses(project)
 
                 if exec_mode == "sbatch":
                     process_id = None
@@ -375,11 +375,36 @@ def launch_piper_job(command_line, project, log_file_path=None):
         log_process_non_blocking(popen_object.stderr, LOG.warn)
     return popen_object
 
-def remove_previous_analysis(project_obj):
-    project_dir_path = os.path.join(project_obj.base_path, "ANALYSIS", project_obj.project_id, "piper_ngi", "0*")
+
+def remove_previous_sample_analyses(project_obj):
+    """Remove analysis results for a sample, including .failed and .done files.
+    Doesn't throw an error if it can't read a directory, but does if it can't
+    delete a file it knows about.
+    """
+    project_dir_path = os.path.join(project_obj.base_path, "ANALYSIS", project_obj.project_id, "piper_ngi")
+    project_dir_pattern = os.path.join(project_dir_path, "??_*")
     LOG.info('deleting previous analysis in {}'.format(project_dir_path))
-    for dir in [os.path.abspath(p) for p in glob.glob(project_dir_path)]:
-        shutil.rmtree(project_dir_path)
+    for sample in project_obj:
+        # P123_456 is renamed by Piper to P123-456
+        piper_sample_name = sample.name.replace("_", "-", 1)
+        sample_files = glob.glob(os.path.join(project_dir_pattern, "{}.*".format(piper_sample_name)))
+        sample_files.extend(glob.glob(os.path.join(project_dir_pattern, ".{}*.done".format(piper_sample_name))))
+        sample_files.extend(glob.glob(os.path.join(project_dir_pattern, ".{}*.failed".format(piper_sample_name))))
+    if sample_files:
+        LOG.info('Deleting files for sample {} under {}'.format(sample, project_dir_path))
+        errors = []
+        for sample_file in sample_files:
+            LOG.debug("Deleting file {}".format(sample_file))
+            try:
+                os.remove(sample_file)
+            except OSError:
+                errors.append(e)
+        if errors:
+            LOG.warn("Error when removing one or more files: {}".format(", ".join(errors)))
+    else:
+        LOG.debug("No sample analysis files found to delete for project {} / samples {}".format(project_obj, ", ".join(project_obj.samples)))
+
+
 def rotate_previous_analysis(project_obj):
     """Rotates the files from the existing analysis starting at 03_merged_aligments"""
     project_dir_path = os.path.join(project_obj.base_path, "ANALYSIS", project_obj.project_id, "piper_ngi")
