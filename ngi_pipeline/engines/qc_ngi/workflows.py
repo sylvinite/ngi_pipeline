@@ -1,5 +1,7 @@
 """QC workflow-specific code."""
 
+import os
+import shlex
 import subprocess
 import sys
 
@@ -34,7 +36,8 @@ def return_cl_for_workflow(workflow_name, input_files, output_dir, config=None, 
     LOG.info('Building command line for workflow "{}"'.format(workflow_name))
     cl_list = workflow_function(input_files, output_dir, config)
     if type(cl_list[0]) is not list:
-        # I know this is stupid. I don't want to talk about it.
+        # I know this is stupid. Shut up.
+        # I don't want to talk about it.
         cl_list = [cl_list]
     return cl_list
 
@@ -64,29 +67,21 @@ def workflow_fastqc(input_files, output_dir, config):
     :rtype: list
     :raises ValueError: If the FastQC path is not given or is not on PATH
     """
-
     # Get the path to the fastqc command
-    try:
-        fastqc_path = config.get["fastqc"]["path"]
-    except (KeyError, TypeError):
-        LOG.warn('Path to fastqc not specified in config file; '
-                 'checking if it is on PATH')
-        # May need to load modules to find it on PATH
-        modules_to_load = config.get("qc", {}).get("load_modules")
-        if modules_to_load:
-            load_modules(modules_to_load)
-        try:
-            # If we get no error, fastqc is on the PATH
-            subprocess.check_call("fastqc --version", shell=True)
-        except (OSError, subprocess.CalledProcessError) as e:
+    fastqc_path = config.get("paths", {}).get("fastqc")
+    if not fastqc_path:
+        if find_on_path("fastqc", config):
+            fastqc_path = "fastqc"
+        else:
             raise ValueError('Path to FastQC could not be found and it is not '
                              'available on PATH; cannot proceed with FastQC '
-                             'workflow (error "{}")'.format(e))
-        else:
-            fastqc_path = "fastqc"
-    num_threads = config.get("fastqc", {}).get("threads") or 1
+                             'workflow.')
+    num_threads = config.get("qc", {}).get("fastqc", {}).get("threads") or 1
     fastq_files = flatten(input_files) # FastQC cares not for your "read pairs"
     cl_list = []
+    modules_to_load = get_all_modules_for_workflow("fastqc", config)
+    for module in modules_to_load:
+        cl_list.append("module load {}".format(module))
     cl_list.append('mkdir -p {output_dir}'.format(output_dir=output_dir))
     cl_list.append('{fastqc_path} -t {num_threads} -o {output_dir} '
                    '{fastq_files}'.format(output_dir=output_dir,
@@ -97,11 +92,73 @@ def workflow_fastqc(input_files, output_dir, config):
 
 
 def workflow_fastq_screen(input_files, output_dir, config):
-    fastq_screen_path = config["fastq_screen"]["path"]
-    bowtie2_path = config["fastq_screen"]["path_to_bowtie2"]
-    fqs_config_path = config["fastq_screen"]["path_to_config"]
+    # Get the path to the fastq_screen command
+    fastq_screen_path = config.get("paths", {}).get("fastq_screen")
+    if not fastq_screen_path:
+        if find_on_path("fastq_screen", config):
+            fastq_screen_path = "fastq_screen"
+        else:
+            raise ValueError('Path to fastq_screen could not be found and it is not '
+                             'available on PATH; cannot proceed with fastq_screen '
+                             'workflow.')
+    # Get the path to the bowtie2 command (required for fastq_screen)
+    bowtie2_path = config.get("paths", {}).get("bowtie2")
+    if not bowtie2_path:
+        if find_on_path("bowtie2", config):
+            bowtie2_path = "bowtie2"
+        else:
+            raise ValueError('Path to bowtie2 could not be found and it is not '
+                             'available on PATH; cannot proceed with fastq_screen '
+                             'workflow.')
+    fastq_screen_config_path = config.get("qc", {}).get("fastq_screen", {}).get("config_path")
+    if not fastq_screen_config_path:
+        LOG.warn('Path to fastq_screen config file not specified; assuming '
+                 'it is in the same directory as the fastq_screen binary.')
+    num_threads = config.get("qc", {}).get("fastq_screen", {}).get("threads") or 1
+    subsample_reads = config.get("qc", {}).get("fastq_screen", {}).get("subsample_reads")
+
+    cl_list = []
+    modules_to_load = get_all_modules_for_workflow("fastqc", config)
+    for module in modules_to_load:
+        cl_list.append("module load {}".format(module))
+    cl_list.append('mkdir -p {output_dir}'.format(output_dir=output_dir))
+    # fastq_screen stuff here
+    return cl_list
+
+
+def get_all_modules_for_workflow(binary_name, config):
+    general_modules = config.get("qc", {}).get("load_modules")
+    specific_modules = config.get("qc", {}).get(binary_name, {}).get("load_modules")
+    modules_to_load = []
+    if general_modules:
+        modules_to_load.extend(general_modules)
+    if specific_modules:
+        modules_to_load.extend(specific_modules)
+    return modules_to_load
+
+
+def find_on_path(binary_name, config=None):
+    """Determines if the binary in question is on the PATH, loading modules
+    as specified in the qc section of the config file.
+
+    :param str binary_name: The name of the binary (e.g. "bowtie2")
+    :param dict config: The parsed pipeline/system config (optional)
+
+    :returns: True if the binary is on the PATH; False if not
+    :rtype: boolean
+    """
+    if not config: config = {}
+    LOG.info('Path to {} not specified in config file; '
+             'checking if it is on PATH'.format(binary_name))
+    modules_to_load = get_all_modules_for_workflow(binary_name, config)
+    if modules_to_load:
+        load_modules(modules_to_load)
     try:
-        fastq_screen_cl = "{fastq_screen_path}"
-    except KeyError as e:
-        ## FIXME check this e.args[0] thing I'm just faking it
-        raise ValueError('Could not get required value "{}" from config file'.format(e.args[0]))
+        # If we get no error, fastq_screen is on the PATH
+        with open(os.devnull, 'w') as DEVNULL:
+            subprocess.check_call(shlex.split("{} --version".format(binary_name)),
+                                  stdout=DEVNULL, stderr=DEVNULL)
+    except (OSError, subprocess.CalledProcessError) as e:
+        return False
+    else:
+        return True
