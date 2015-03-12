@@ -1,8 +1,7 @@
-
 import smtplib
+import traceback
+
 from email.mime.text import MIMEText
-
-
 
 
 def mail(recipient, subject, text, origin="ngi_pipeline"):
@@ -14,18 +13,32 @@ def mail(recipient, subject, text, origin="ngi_pipeline"):
      s.sendmail('funk_002@nestor1.uppmax.uu.se', recipient, msg.as_string()) 
      s.quit()
 
-
-def mail_sample_analysis(project_name, sample_name, workflow_name,
-        recipient="ngi_pipeline_operators@scilifelab.se",
-        subject="sample_analysis intervention needed", origin="ngi_pipeline", exception_text=None):
-
-    text="""
-    Project {} / Sample {} / Workflow {}
-
-    This sample analysis has encountered an error.
-    Not launching any new analysis.
-    
-    """.format(project_name, sample_name, workflow_name)
-    if exception_text:
-        text = text + "{}\n".format(exception_text)
+def mail_analysis(project_name, sample_name=None, engine_name=None,
+                  level="ERROR", info_text=None,
+                  recipient="ngi_pipeline_operators@scilifelab.se",
+                  subject=None,
+                  origin="ngi_pipeline"):
+    file_name, line_no = traceback.extract_stack(limit=2)[-2][:2]
+    if level.upper() == "WARN":
+        text = "This analysis has produced a warning:"
+        if not subject:  subject = "analysis intervention may be needed"
+        subject = "[WARN] " + subject
+    elif level.upper() == "INFO":
+        text = "Get a load of this:"
+        if not subject: subject = "analysis information / status update"
+        subject = "[INFO] " + subject
+    else: # ERROR
+        text = "This analysis has encountered an error:"
+        if not subject:  subject = "analysis intervention required"
+        subject = "[ERROR] " + subject
+    subject = "[{}] ".format(project_name) + subject
+    text += "\nProject: {}".format(project_name)
+    if sample_name:
+        text += "\nSample: {}".format(sample_name)
+    if engine_name:
+        text += "\nEngine: {}".format(engine_name)
+    text += "\nFile: {}".format(file_name)
+    text += "\nLine: {}".format(line_no)
+    if info_text:
+        text = text + "\n\nAdditional information:\n\n{}\n".format(info_text)
     mail(recipient=recipient, subject=subject, text=text, origin=origin)

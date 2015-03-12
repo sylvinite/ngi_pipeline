@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/bin/env python
 """Kludgy hack. Use at your own risk"""
 from __future__ import print_function
 
@@ -37,7 +37,6 @@ def main(demux_fcid_dirs, restrict_to_projects=None, restrict_to_samples=None,
                                                                      projects_to_analyze,
                                                                      restrict_to_projects,
                                                                      restrict_to_samples,
-                                                                     create_files=False,
                                                                      config=config)
     if not projects_to_analyze:
         sys.exit("Quitting: no projects found to process in flowcells {}"
@@ -79,7 +78,7 @@ def _validate_dangerous_user_thing(action="do SOMETHING that Mario thinks you sh
             return False
 
 if __name__=="__main__":
-    parser = argparse.ArgumentParser("Populate a Charon project with data gleaned from the filesystem.")
+    parser = argparse.ArgumentParser("Populate a Charon project with a flowcell directory")
     parser.add_argument("demux_fcid_dirs", nargs="*",
             help="The path to the fcid containing the project of interest.")
     parser.add_argument("-a", "--already-parsed", action="store_true",

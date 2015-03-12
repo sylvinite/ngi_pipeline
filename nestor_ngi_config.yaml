@@ -6,6 +6,8 @@ analysis:
     best_practice_analysis:
         whole_genome_reseq:
             analysis_engine: ngi_pipeline.engines.piper_ngi
+        qc:
+            analysis_engine: ngi_pipeline.engines.qc_ngi
     top_dir: /proj/a2014205/nobackup/NGI/analysis_ready
 
 
@@ -23,20 +25,43 @@ logging:
     log_file: /proj/a2014205/ngi_resources/ngi_pipeline.log
 
 
+paths: # Hard code paths here if you are that kind of a person
+    binaries:
+        #bowtie2:
+        #fastqc:
+        #fastq_screen:
+    references:
+
+
 piper:
     # Also can be set as an environmental variable $PIPER_QSCRIPTS_DIR
     path_to_piper_qscripts: /proj/a2014205/software/piper/qscripts
     load_modules:
         - java/sun_jdk1.7.0_25
         - R/2.15.0
-    sample:
-        required_autosomal_coverage: 28.4
     threads: 16
+
+
+qc:
+    load_modules:
+        - bioinfo-tools
+    fastqc:
+        load_modules:
+            - FastQC
+        threads: 16
+    fastq_screen:
+        config_path: "/proj/a2014205/ngi_resources/fastq_screen.nestor.conf"
+        load_modules:
+            - bowtie2
+            - fastq_screen
+        subsample_reads: 200000
+        threads: 1
 
 
 slurm:
     extra_params:
         "--qos": "seqver"
+    cores: 16
 
 
 supported_genomes:

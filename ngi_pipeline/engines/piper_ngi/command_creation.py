@@ -23,10 +23,10 @@ def build_piper_cl(project, workflow_name, setup_xml_path, exit_code_path,
     :raises ValueError: If a required configuration value is missing.
     """
     if exec_mode == "sbatch":
-        output_dir = os.path.join("$SNIC_TMP/ANALYSIS/", project.dirname)
+        output_dir = os.path.join("$SNIC_TMP/ANALYSIS/", project.dirname, 'piper_ngi')
         # Can't create these directories ahead of time of course
     elif exec_mode == "local":
-        output_dir = os.path.join(project.base_path, "ANALYSIS", project.dirname)
+        output_dir = os.path.join(project.base_path, "ANALYSIS", project.dirname, 'piper_ngi')
         safe_makedir(analysis_dir, 0770)
     else:
         raise ValueError('"exec_mode" must be one of "local", "sbatch" (value '
@@ -64,7 +64,7 @@ def build_piper_cl(project, workflow_name, setup_xml_path, exit_code_path,
     # Blank out the file if it already exists
     safe_makedir(os.path.dirname(exit_code_path))
     open(exit_code_path, 'w').close()
-    return add_exit_code_recording(cl, exit_code_path)
+    return cl 
 
 
 def build_setup_xml(project, sample, local_scratch_mode, config):
@@ -84,11 +84,11 @@ def build_setup_xml(project, sample, local_scratch_mode, config):
 
     if local_scratch_mode:
         project_top_level_dir = os.path.join("$SNIC_TMP/DATA/", project.dirname)
-        analysis_dir = os.path.join("$SNIC_TMP/ANALYSIS/", project.dirname)
+        analysis_dir = os.path.join("$SNIC_TMP/ANALYSIS/", project.dirname, "piper_ngi")
         # Can't create these directories ahead of time of course
     else:
         project_top_level_dir = os.path.join(project.base_path, "DATA", project.dirname)
-        analysis_dir = os.path.join(project.base_path, "ANALYSIS", project.dirname)
+        analysis_dir = os.path.join(project.base_path, "ANALYSIS", project.dirname, "piper_ngi")
         safe_makedir(analysis_dir, 0770)
     ## TODO handle this elsewhere
     #safe_makedir(os.path.join(analysis_dir, "logs"))
@@ -117,7 +117,7 @@ def build_setup_xml(project, sample, local_scratch_mode, config):
 
     # setup XML file is always stored in permanent analysis directory
     output_xml_filepath = os.path.join(project.base_path, "ANALYSIS",
-                                       project.dirname, "setup_xml_files",
+                                       project.dirname, "piper_ngi","setup_xml_files",
                                        "{}-{}-setup.xml".format(project, sample))
     safe_makedir(os.path.dirname(output_xml_filepath))
     cl_args["output_xml_filepath"] = output_xml_filepath

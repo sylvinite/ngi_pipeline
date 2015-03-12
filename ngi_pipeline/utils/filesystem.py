@@ -100,11 +100,21 @@ def execute_command_line(cl, shell=False, stdout=None, stderr=None, cwd=None):
     return p_handle
 
 def do_symlink(src_files, dst_dir):
+    do_link(src_files, dst_dir, 'soft')
+
+def do_hardlink(src_files, dst_dir):
+    do_link(src_files, dst_dir, 'hard')
+
+def do_link(src_files, dst_dir, link_type='soft'):
+    if link_type == 'hard':
+        link_f=os.link
+    else:
+        link_f=os.symlink
     for src_file in src_files:
-        base_fastq_file = os.path.basename(src_file)
-        dst_file = os.path.join(dst_dir, base_fastq_file)
+        base_file = os.path.basename(src_file)
+        dst_file = os.path.join(dst_dir, base_file)
         if not os.path.isfile(dst_file):
-            os.symlink(src_file, dst_file)
+            link_f(src_file, dst_file)
 
 
 def do_rsync(src_files, dst_dir):
@@ -122,7 +132,7 @@ def do_rsync(src_files, dst_dir):
     return [ os.path.join(dst_dir,os.path.basename(f)) for f in src_files ]
 
 
-def safe_makedir(dname, mode=0777):
+def safe_makedir(dname, mode=0o2770):
     """Make a directory (tree) if it doesn't exist, handling concurrent race
     conditions.
     """

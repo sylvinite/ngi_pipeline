@@ -4,9 +4,49 @@ import yaml
 
 from ngi_pipeline.conductor.classes import NGIProject
 from ngi_pipeline.database.classes import CharonSession
+from ngi_pipeline.log.loggers import minimal_logger
 from ngi_pipeline.utils.filesystem import rotate_file, safe_makedir
 
-def get_valid_seqruns_for_sample(project_id, sample_id, include_failed_libpreps=False,
+LOG = minimal_logger(__name__)
+
+
+def get_finished_seqruns_for_sample(project_id, sample_id,
+                                    include_failed_libpreps=False):
+    """Find all the finished seqruns for a particular sample.
+
+    :param str project_id: The id of the project
+    :param str sample_id: The id of the sample
+
+    :returns: A dict of {libprep_01: [seqrun_01, ..., seqrun_nn], ...}
+    :rtype: dict
+    """
+    charon_session = CharonSession()
+    sample_libpreps = charon_session.sample_get_libpreps(projectid=project_id,
+                                                         sampleid=sample_id)
+    libpreps = collections.defaultdict(list)
+    for libprep in sample_libpreps['libpreps']:
+        if libprep.get('qc') != "FAILED" or include_failed_libpreps:
+            libprep_id = libprep['libprepid']
+            for seqrun in charon_session.libprep_get_seqruns(projectid=project_id,
+                                                             sampleid=sample_id,
+                                                             libprepid=libprep_id)['seqruns']:
+                seqrun_id = seqrun['seqrunid']
+                aln_status = charon_session.seqrun_get(projectid=project_id,
+                                                       sampleid=sample_id,
+                                                       libprepid=libprep_id,
+                                                       seqrunid=seqrun_id).get('alignment_status')
+                if aln_status == "DONE":
+                    libpreps[libprep_id].append(seqrun_id)
+                else:
+                    LOG.debug('Skipping seqrun "{}" due to alignment_status '
+                              '"{}"'.format(seqrun_id, aln_status))
+        else:
+            LOG.info('Skipping libprep "{}" due to qc status '
+                     '"{}"'.format(libprep, libprep.get("qc")))
+    return dict(libpreps)
+
+def get_valid_seqruns_for_sample(project_id, sample_id,
+                                 include_failed_libpreps=False,
                                  include_done_seqruns=False):
     """Find all the valid seqruns for a particular sample.
 
@@ -49,7 +89,7 @@ def record_analysis_details(project, job_identifier):
     analyzing.
     """
     output_file_path = os.path.join(project.base_path, "ANALYSIS",
-                                    project.dirname, "logs",
+                                    project.dirname, "piper_ngi","logs",
                                     "{}.files".format(job_identifier))
     analysis_dict = {}
     proj_dict = analysis_dict[project.dirname] = {}
@@ -72,7 +112,7 @@ def create_project_obj_from_analysis_log(project_name, project_id,
     """
     analysis_log_filename = "{}-{}-{}.files".format(project_id, sample_id, workflow)
     analysis_log_path = os.path.join(project_base_path, "ANALYSIS",
-                                     project_id, "logs", analysis_log_filename)
+                                     project_id, "piper_ngi", "logs", analysis_log_filename)
     with open(analysis_log_path, 'r') as f:
         analysis_dict = yaml.load(f)
     project_obj = NGIProject(name=project_name, dirname=project_id,
@@ -85,14 +125,16 @@ def create_project_obj_from_analysis_log(project_name, project_id,
     return project_obj
 
 
-def check_for_preexisting_sample_runs(project_obj, sample_obj):
+def check_for_preexisting_sample_runs(project_obj, sample_obj, restart_running_jobs, restart_finished_jobs):
     """If any analysis is undergoing or has completed for this sample's
     seqruns, raise a RuntimeError.
 
     :param NGIProject project_obj: The project object
     :param NGISample sample_obj: The sample object
+    :param boolean restart_running_jobs: command line parameter
+    :param boolean restart_finished_jobs: command line parameter
 
-    :raises RuntimeError: If any seqruns for this samples are RUNNING or DONE
+    :raise RuntimeError if the status is RUNNING or DONE and the flags do not allow to continue
     """
     project_id = project_obj.project_id
     sample_id = sample_obj.name
@@ -109,12 +151,11 @@ def check_for_preexisting_sample_runs(project_obj, sample_obj):
                                                    sampleid=sample_id,
                                                    libprepid=libprep_id,
                                                    seqrunid=seqrun_id).get('alignment_status')
-            if aln_status in ("RUNNING, DONE"):
-                raise RuntimeError('Project/Sample "{}/{}" has a preexisting '
-                                   'seqrun "{}" with status "{}"'.format(project_obj,
-                                                                         sample_obj,
-                                                                         seqrun_id,
-                                                                         aln_status))
+            if (aln_status == "RUNNING" and not restart_running_jobs) or \
+                (aln_status == "DONE" and not restart_finished_jobs):
+                    raise RuntimeError('Project/Sample "{}/{}" has a preexisting '
+                          'seqrun "{}" with status "{}"'.format(project_obj,
+                          sample_obj, seqrun_id, aln_status))
 
 
 SBATCH_HEADER = """#!/bin/bash -l
@@ -185,7 +226,7 @@ def create_exit_code_file_path(workflow_subtask, project_base_path, project_name
 
 def _create_generic_output_file_path(workflow_subtask, project_base_path, project_name, project_id,
                                      sample_id=None, libprep_id=None, seqrun_id=None):
-    base_path = os.path.join(project_base_path, "ANALYSIS", project_id, "logs")
+    base_path = os.path.join(project_base_path, "ANALYSIS", project_id, "piper_ngi","logs")
     file_name = project_id
     if sample_id:
         file_name += "-{}".format(sample_id)
