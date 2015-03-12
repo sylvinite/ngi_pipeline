@@ -7,7 +7,7 @@ import subprocess
 from ngi_pipeline.engines.qc_ngi.workflows import return_cls_for_workflow
 from ngi_pipeline.log.loggers import log_process_non_blocking, minimal_logger
 from ngi_pipeline.utils.classes import with_ngi_config
-from ngi_pipeline.utils.filesystem import rotate_file, safe_makedir
+from ngi_pipeline.utils.filesystem import execute_command_line, rotate_file, safe_makedir
 from ngi_pipeline.utils.parsers import find_fastq_read_pairs
 
 LOG = minimal_logger(__name__)
