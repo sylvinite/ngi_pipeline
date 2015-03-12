@@ -59,7 +59,7 @@ def launch_analysis(projects_to_analyze, restart_failed_jobs=False,
     """
     for project in projects_to_analyze: # Get information from Charon regarding which best practice analyses to run
         engine = get_engine_for_bp(project, config, config_file_path)
-        engine.local_process_tracking.update_charon_with_local_jobs_status()
+        engine.local_process_tracking.update_charon_with_local_jobs_status(config=config)
     charon_session = CharonSession()
     for project in projects_to_analyze: # Get information from Charon regarding which best practice analyses to run
         project_status = charon_session.project_get(project.project_id)['status']
