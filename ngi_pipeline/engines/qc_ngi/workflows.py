@@ -192,7 +192,6 @@ def find_on_path(binary_name, config=None):
     if modules_to_load:
         load_modules(modules_to_load)
     try:
-        # If we get no error, fastq_screen is on the PATH
         with open(os.devnull, 'w') as DEVNULL:
             subprocess.check_call(shlex.split("{} --version".format(binary_name)),
                                   stdout=DEVNULL, stderr=DEVNULL)
