@@ -101,7 +101,7 @@ def create_sbatch_file(cl_list, project, sample, config):
     log_dir_path = os.path.join(project_analysis_path, "logs")
     sbatch_dir_path = os.path.join(project_analysis_path, "sbatch")
     job_label = "{}-{}".format(project.project_id, sample)
-    sbatch_file_path = os.path.join(sbatch_dir_path, job_label)
+    sbatch_file_path = os.path.join(sbatch_dir_path, "{}.sbatch".format(job_label))
     safe_makedir(log_dir_path)
     safe_makedir(sbatch_dir_path)
     # sbatch parameters
