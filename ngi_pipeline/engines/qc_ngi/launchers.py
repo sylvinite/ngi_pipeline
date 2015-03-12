@@ -133,7 +133,7 @@ def create_sbatch_file(cl_list, project, sample, config):
     # we're writing results directly to permanent storage and thus
     # it is not necessary to copy results back from anywhere
     sbatch_text_list.append("# Run the actual commands")
-    for command_line_sublist in command_line_list:
+    for command_line_sublist in cl_list:
         for command_line in command_line_sublist:
             sbatch_text_list.append(command_line)
     rotate_file(sbatch_file_path)
