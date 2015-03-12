@@ -85,7 +85,7 @@ def launch_analysis(projects_to_analyze, restart_failed_jobs=False,
             try:
                 LOG.info('Attempting to launch sample QC analysis '
                          'for project "{}" / sample "{}" / engine '
-                         '"{}"'.format(project, sample, analysis_module.__name__))
+                         '"{}"'.format(project, sample, qc_analysis_module.__name__))
                 qc_analysis_module .analyze(project=project,
                                             sample=sample,
                                             config=config)
