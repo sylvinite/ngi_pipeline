@@ -4,7 +4,7 @@ fastq_screen."""
 import os
 import subprocess
 
-from ngi_pipeline.engines.qc_ngi.workflows import return_cl_for_workflow
+from ngi_pipeline.engines.qc_ngi.workflows import return_cls_for_workflow
 from ngi_pipeline.log.loggers import log_process_non_blocking, minimal_logger
 from ngi_pipeline.utils.classes import with_ngi_config
 from ngi_pipeline.utils.filesystem import rotate_file, safe_makedir
@@ -103,7 +103,6 @@ def create_sbatch_file(cl_list, project, sample, config):
     sbatch_file_path = os.path.join(sbatch_dir_path, sbatch_job_label)
     safe_makedir(log_dir_path)
     safe_makedir(sbatch_dir_path)
-
     # sbatch parameters
     try:
         slurm_project_id = config["environment"]["project_id"]
@@ -128,15 +127,15 @@ def create_sbatch_file(cl_list, project, sample, config):
     sbatch_extra_params = config.get("slurm", {}).get("extra_params", {})
     for param, value in sbatch_extra_params.iteritems():
         sbatch_text_list.append("#SBATCH {} {}\n\n".format(param, value))
-
     sbatch_text_list.append("echo -ne '\\n\\nExecuting command lines at '")
     sbatch_text_list.append("date")
+    # Note that because these programs have such small output,
+    # we're writing results directly to permanent storage and thus
+    # it is not necessary to copy results back from anywhere
     sbatch_text_list.append("# Run the actual commands")
     for command_line_sublist in command_line_list:
         for command_line in command_line_sublist:
             sbatch_text_list.append(command_line)
-
-
     rotate_file(sbatch_file_path)
     LOG.info("Writing sbatch file to {}".format(sbatch_file_path))
     with open(sbatch_file_path, 'w') as f:
