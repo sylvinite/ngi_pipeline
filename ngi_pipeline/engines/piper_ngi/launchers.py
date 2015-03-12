@@ -344,7 +344,6 @@ def sbatch_piper_sample(command_line_list, workflow_name, project, sample,
     except AttributeError:
         raise RuntimeError('Could not submit sbatch job for workflow "{}": '
                            '{}'.format(job_identifier, p_err))
-    # Detail which seqruns we've started analyzing so we can update statuses later
     record_analysis_details(project, job_identifier)
     return int(slurm_job_id)
 
