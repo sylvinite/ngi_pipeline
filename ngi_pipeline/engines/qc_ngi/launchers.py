@@ -49,7 +49,7 @@ def analyze(project, sample, config=None, config_file_path=None):
                                                  seqrun.name,
                                                  fastq_file)
                 # his woods
-                fastq_files_to_process.append(path_to_src_fastqc)
+                fastq_files_to_process.append(path_to_src_fastq)
     # fill up
     paired_fastq_files = find_fastq_read_pairs(fastq_files_to_process).values()
     # with snow
