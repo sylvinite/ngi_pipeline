@@ -78,7 +78,6 @@ def queue_sbatch_file(sbatch_file_path):
     except AttributeError:
         raise RuntimeError('Could not submit sbatch job for workflow "{}": '
                            '{}'.format(job_identifier, p_err))
-    # Detail which seqruns we've started analyzing so we can update statuses later
     return int(slurm_job_id)
 
 
