@@ -22,20 +22,30 @@ def get_engine_for_bp(project, config=None, config_file_path=None):
     charon_session = CharonSession()
     best_practice_analysis = charon_session.project_get(project.project_id)["best_practice_analysis"]
     try:
+        analysis_module = load_engine_module(best_practice_analysis, config)
+    except RuntimeError as e:
+        raise RuntimeError('Project "{}": {}'.format(project, e))
+    else:
+        return analysis_module
+
+
+def load_engine_module(best_practice_analysis, config):
+    try:
         analysis_engine_module_name = config["analysis"]["best_practice_analysis"][best_practice_analysis]["analysis_engine"]
     except KeyError:
         error_msg = ('No analysis engine for best practice analysis "{}" '
-                     'specified in configuration file. '
-                     'for project {}'.format(best_practice_analysis, project))
+                     'specified in configuration file.'.format(best_practice_analysis))
         raise RuntimeError(error_msg)
     try:
         analysis_module = importlib.import_module(analysis_engine_module_name)
     except ImportError as e:
-        error_msg = ('project "{}" best practice analysis"{}": couldn\'t import '
-                     'module "{}": {}'.format(project, best_practice_analysis,
+        error_msg = ('best practice analysis "{}": couldn\'t import '
+                     'module "{}": {}'.format(best_practice_analysis,
                                               analysis_engine_module_name, e))
         raise RuntimeError(error_msg)
-    return analysis_module
+    else:
+        return analysis_module
+
 
 @with_ngi_config
 def launch_analysis(projects_to_analyze, restart_failed_jobs=False,
@@ -49,7 +59,7 @@ def launch_analysis(projects_to_analyze, restart_failed_jobs=False,
     """
     for project in projects_to_analyze: # Get information from Charon regarding which best practice analyses to run
         engine = get_engine_for_bp(project, config, config_file_path)
-        engine.local_process_tracking.update_charon_with_local_jobs_status()
+        engine.local_process_tracking.update_charon_with_local_jobs_status(config=config)
     charon_session = CharonSession()
     for project in projects_to_analyze: # Get information from Charon regarding which best practice analyses to run
         project_status = charon_session.project_get(project.project_id)['status']
@@ -66,7 +76,30 @@ def launch_analysis(projects_to_analyze, restart_failed_jobs=False,
         except (RuntimeError, KeyError, CharonError) as e: # BPA missing from Charon?
             LOG.error('Skipping project "{}" because of error: {}'.format(project, e))
             continue
+        try:
+            qc_analysis_module = load_engine_module("qc")
+        except RuntimeError as e:
+            LOG.error("Could not launch qc analysis: {}".format(e))
         for sample in project:
+            # Launch QC analysis
+            try:
+                LOG.info('Attempting to launch sample QC analysis '
+                         'for project "{}" / sample "{}" / engine '
+                         '"{}"'.format(project, sample, qc_analysis_module.__name__))
+                qc_analysis_module .analyze(project=project,
+                                            sample=sample,
+                                            config=config)
+            except Exception as e:
+                error_text = ('Cannot process project "{}" / sample "{}" / '
+                              'engine "{}" : {}'.format(project, sample,
+                                                        analysis_module.__name__,
+                                                        e))
+                LOG.error(error_text)
+                if not config.get("quiet"):
+                    mail_analysis(project_name=project.name, sample_name=sample.name,
+                                  engine_name=analysis_module.__name__,
+                                  level="ERROR", info_text=e)
+            # Launch actual best-practice analysis
             try:
                 charon_reported_status = charon_session.sample_get(project.project_id,
                                                                    sample)['analysis_status']

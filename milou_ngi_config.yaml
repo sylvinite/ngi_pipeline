@@ -6,6 +6,8 @@ analysis:
     best_practice_analysis:
         whole_genome_reseq:
             analysis_engine: ngi_pipeline.engines.piper_ngi
+        qc:
+            analysis_engine: ngi_pipeline.engines.qc_ngi
     top_dir: /proj/a2014205/nobackup/NGI/analysis_ready
 
 
@@ -29,6 +31,17 @@ piper:
         - java/sun_jdk1.7.0_25
         - R/2.15.0
     threads: 16
+
+
+qc:
+    load_modules:
+        - bioinfo-tools
+        - FastQC
+        - fastq_screen
+    fastqc:
+        threads: 16
+    fastq_screen:
+        threads: 16
 
 
 slurm:
