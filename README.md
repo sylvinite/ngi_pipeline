@@ -114,50 +114,43 @@ In the folder: `/proj/a2014205/software/ngi_pipeline/scripts/` there are a coupl
 
 Let us see how to run analysis for M.Kaller_14_06:
 
-Run level analysis
+Analysis
 -----------
 
 In the current workflow we want to start alignments every time data is generated. In this context we want to automatically start the pipeline every time data is produced. 
 For now we need to simulate this, and this can be done with the script
 
-    start_flowcell_analysis.py
+    ngi_pipeline_start.py analyze flowcell </path/to/flowcell>
 
-This script starts the alignment of all IGN project (i.e., projects in charon or produced from uppsala) that are present in the flowcell.
+This script starts the alignment of all human WGS project (i.e., projects in charon or produced from uppsala) that are present in the flowcell.
 
-The command first checks for the local_db to check what processes are running. This is done in order to avoid to start analysis on flowcells that are already under analysis.
+The command first checks the local_db to check what processes are running. This is done in order to avoid starting analysis of flowcells that are already under analysis.
 
-The local_db is checked and charon is updated, once this is done ngi_pipeline tries to start the analysis for the current flowcell (if any analysis is needed). 
+The local_db is checked and charon are updated; once this is done, ngi_pipeline attmepts to launch the analysis for the current flowcell (if any analysis is needed).
 
-N.B. after the analysis are started the local_db is updated but not charon. Therefore, if we run the script on a flowcelll it will happen that charon status will not change. By rerunning the same command you will see that the pipeline will refuse to start analysis as they are already running. When running the command for the second time ngi_pipeline will first (like before) check the current status of local_db and update charon. So only at this point it will be possible to see on charon that the status of the flowcell is RUNNING.
-
-Once the pipeline will be totally in production this will no be longer a problem as there will be a cronjob monitoring the local db and updating charon status (or something similar to this).
+In general, analyses are triggered automatically through a REST API. An example of how to launch analyses manually follows:
 
     #### M.KALLER_14_05 and M.Kaller_14_08
-    python /proj/a2014205/software/ngi_pipeline/scripts/start_flowcell_analysis.py /proj/a2014205/INBOX/140815_SN1025_0222_AC4HA6ACXX
-    python  /proj/a2014205/software/ngi_pipeline/scripts/start_flowcell_analysis.py /proj/a2014205/INBOX/140815_SN1025_0223_BC4HAPACXX
-    python  /proj/a2014205/software/ngi_pipeline/scripts/start_flowcell_analysis.py  /proj/a2014205/INBOX/140919_SN1018_0203_BHA3THADXX
+    FCARRAY=()
+    FCARRAY+=("/proj/a2014205/INBOX/140815_SN1025_0222_AC4HA6ACXX")
+    FCARRAY+=("/proj/a2014205/INBOX/140815_SN1025_0223_BC4HAPACXX")
+    FCARRAY+=("/proj/a2014205/INBOX/140919_SN1018_0203_BHA3THADXX")
     #### M.Kaller_14_06
-    python  /proj/a2014205/software/ngi_pipeline/scripts/start_flowcell_analysis.py /proj/a2014205/INBOX/140702_D00415_0052_AC41A2ANXX
-    python  /proj/a2014205/software/ngi_pipeline/scripts/start_flowcell_analysis.py  /proj/a2014205/INBOX/140905_D00415_0057_BC45KVANXX
-    ##### Uppsala
-    python  /proj/a2014205/software/ngi_pipeline/scripts/start_flowcell_analysis.py /proj/a2014205/INBOX/140821_D00458_0029_AC45JGANXX
-    python  /proj/a2014205/software/ngi_pipeline/scripts/start_flowcell_analysis.py  /proj/a2014205/INBOX/140917_D00458_0034_AC4FF3ANXX
+    FCARRAY+=("/proj/a2014205/INBOX/140702_D00415_0052_AC41A2ANXX")
+    FCARRAY+=("/proj/a2014205/INBOX/140905_D00415_0057_BC45KVANXX")
+    ##### Uppsala projects
+    FCARRAY+=("/proj/a2014205/INBOX/140821_D00458_0029_AC45JGANXX")
+    FCARRAY+=("/proj/a2014205/INBOX/140917_D00458_0034_AC4FF3ANXX")
+    for flowcell in ${FCARRAY[@]}; do
+        ngi_pipeline_start.py analyze flowcell $flowcell
+    done
 
+    (Very soon this script will take as input mulitple flowcells, but now you know how bash arrays work. You're welcome!)
 
-Sample level analysis
-----------------------
-Again, this is likely to change but this commands or similar will be run in order to force re-runs or to process problematic samples: the idea is to start here sample level analysis 
-or the so called variant calling step. 
-
-    python /proj/a2014205/software/ngi_pipeline/scripts/start_pipeline_from_project.py --sample_only /proj/a2014205/nobackup/NGI/analysis_ready/DATA/M.Kaller_14_05/
-    python /proj/a2014205/software/ngi_pipeline/scripts/start_pipeline_from_project.py --sample_only /proj/a2014205/nobackup/NGI/analysis_ready/DATA/M.Kaller_14_06/
-    python /proj/a2014205/software/ngi_pipeline/scripts/start_pipeline_from_project.py --sample_only /proj/a2014205/nobackup/NGI/analysis_ready/DATA/M.Kaller_14_08/
-    python /proj/a2014205/software/ngi_pipeline/scripts/start_pipeline_from_project.py --sample_only /proj/a2014205/nobackup/NGI/analysis_ready/DATA/ND-0522/
 
 Rerunning failed jobs
 ---------------------
 In the case a sample failed you can force the re-run:
 
-    python /proj/a2014205/software/ngi_pipeline/scripts/start_pipeline_from_project.py —sample P1170_105 --restart-failed  --sample_only /proj/a2014205/nobackup/NGI/analysis_ready/DATA/M.Kaller_14_05/
-    
+    ngi_pipeline_start.py analyze project —-sample P1170_105 --restart-failed /proj/a2014205/nobackup/NGI/analysis_ready/DATA/M.Kaller_14_05/
 
