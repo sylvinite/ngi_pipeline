@@ -68,7 +68,7 @@ def analyze(project, sample, config=None, config_file_path=None):
 
 
 def queue_sbatch_file(sbatch_file_path):
-    LOG.info("Queueing sbatch file {} for job {}".format(sbatch_outfile, job_identifier))
+    LOG.info("Queueing sbatch file {}".format(sbatch_file_path))
     p_handle = execute_command_line("sbatch {}".format(sbatch_file_path),
                                     stdout=subprocess.PIPE,
                                     stderr=subprocess.PIPE)
@@ -76,8 +76,8 @@ def queue_sbatch_file(sbatch_file_path):
     try:
         slurm_job_id = re.match(r'Submitted batch job (\d+)', p_out).groups()[0]
     except AttributeError:
-        raise RuntimeError('Could not submit sbatch job for workflow "{}": '
-                           '{}'.format(job_identifier, p_err))
+        raise RuntimeError('Could not submit sbatch file "{}": '
+                           '{}'.format(sbatch_file_path, p_err))
     return int(slurm_job_id)
 
 
