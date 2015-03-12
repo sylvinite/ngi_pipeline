@@ -101,7 +101,7 @@ def create_sbatch_file(cl_list, project, sample, config):
     log_dir_path = os.path.join(project_analysis_path, "logs")
     sbatch_dir_path = os.path.join(project_analysis_path, "sbatch")
     job_label = "{}-{}".format(project.project_id, sample)
-    sbatch_file_path = os.path.join(sbatch_dir_path, job_label)
+    sbatch_file_path = os.path.join(sbatch_dir_path, "{}.sbatch".format(job_label))
     safe_makedir(log_dir_path)
     safe_makedir(sbatch_dir_path)
     # sbatch parameters
@@ -113,7 +113,7 @@ def create_sbatch_file(cl_list, project, sample, config):
     slurm_queue = config.get("slurm", {}).get("queue") or "core"
     num_cores = config.get("slurm", {}).get("cores") or 16
     slurm_time = config.get("qc", {}).get("job_walltime", {}) or "1-00:00:00"
-    slurm_out_log = os.path.join(sbatch_dir_path, "{}_sbatch.out".format(job_label))
+    slurm_out_log = os.path.join(log_dir_path, "{}_sbatch.out".format(job_label))
     slurm_err_log = os.path.join(log_dir_path, "{}_sbatch.err".format(job_label))
     for log_file in slurm_out_log, slurm_err_log:
         rotate_file(log_file)

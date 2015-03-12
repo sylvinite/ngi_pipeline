@@ -77,7 +77,7 @@ def launch_analysis(projects_to_analyze, restart_failed_jobs=False,
             LOG.error('Skipping project "{}" because of error: {}'.format(project, e))
             continue
         try:
-            qc_analysis_module = load_engine_module("qc")
+            qc_analysis_module = load_engine_module("qc", config)
         except RuntimeError as e:
             LOG.error("Could not launch qc analysis: {}".format(e))
         for sample in project:
