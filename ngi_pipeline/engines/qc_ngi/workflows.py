@@ -129,7 +129,7 @@ def workflow_fastq_screen(input_files, output_dir, config):
     # Construct the command lines
     cl_list = []
     # Module loading
-    modules_to_load = get_all_modules_for_workflow("fastqc", config)
+    modules_to_load = get_all_modules_for_workflow("fastq_screen", config)
     for module in modules_to_load:
         cl_list.append("module load {}".format(module))
     # Make output directory
