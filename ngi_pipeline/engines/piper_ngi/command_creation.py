@@ -96,7 +96,7 @@ def build_setup_xml(project, sample, local_scratch_mode, config):
     try:
         cl_args["sequencing_center"] = CharonSession().project_get(project.project_id)["sequencing_facility"]
     except (IndexError, CharonError) as e:
-        LOG.warn("Could not determine sequencing center from Charon ({}); setting to blank ("").".format(e))
+        LOG.warn('Could not determine sequencing center from Charon ({}); setting to blank ("").'.format(e))
         cl_args["sequencing_center"] == ""
     cl_args["sequencing_tech"] = "Illumina"
     ## TODO load these from (ngi_pipeline) config file
