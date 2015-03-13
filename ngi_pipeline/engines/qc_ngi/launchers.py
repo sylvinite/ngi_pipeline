@@ -137,6 +137,8 @@ def create_sbatch_file(cl_list, project, sample, config):
     for command_line_sublist in cl_list:
         for command_line in command_line_sublist:
             sbatch_text_list.append(command_line)
+    sbatch_text_list.append("echo -ne '\\n\\nFinished execution at '")
+    sbatch_text_list.append("date")
     rotate_file(sbatch_file_path)
     LOG.info("Writing sbatch file to {}".format(sbatch_file_path))
     with open(sbatch_file_path, 'w') as f:
