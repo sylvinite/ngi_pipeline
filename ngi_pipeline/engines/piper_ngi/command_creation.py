@@ -1,5 +1,6 @@
 import os
 
+from ngi_pipeline.database.classes import CharonSession, CharonError
 from ngi_pipeline.engines.piper_ngi import workflows
 from ngi_pipeline.engines.piper_ngi.utils import add_exit_code_recording
 from ngi_pipeline.log.loggers import minimal_logger
@@ -92,15 +93,18 @@ def build_setup_xml(project, sample, local_scratch_mode, config):
         safe_makedir(analysis_dir, 0770)
 
     cl_args = {'project': project.dirname}
-    ## BUGFIX Phil wants you to actually populate this from the configuration file
-    cl_args["sequencing_center"] = "NGI"
+    try:
+        cl_args["sequencing_center"] = CharonSession().project_get(project.project_id)["sequencing_facility"]
+    except (IndexError, CharonError) as e:
+        LOG.warn("Could not determine sequencing center from Charon ({}); setting to blank ("").".format(e))
+        cl_args["sequencing_center"] == ""
     cl_args["sequencing_tech"] = "Illumina"
     ## TODO load these from (ngi_pipeline) config file
     slurm_qos = config.get("slurm", {}).get("extra_params", {}).get("--qos")
     if slurm_qos:
         cl_args["qos"] = slurm_qos
 
-    # Eventually this will be loaded from e.g. Charon
+    # TODO Eventually this will be loaded from e.g. Charon
     reference_genome = 'GRCh37'
     try:
         cl_args["reference_path"] = config['supported_genomes'][reference_genome]
