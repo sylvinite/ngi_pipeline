@@ -90,14 +90,15 @@ def build_setup_xml(project, sample, local_scratch_mode, config):
         project_top_level_dir = os.path.join(project.base_path, "DATA", project.dirname)
         analysis_dir = os.path.join(project.base_path, "ANALYSIS", project.dirname, "piper_ngi")
         safe_makedir(analysis_dir, 0770)
-    ## TODO handle this elsewhere
-    #safe_makedir(os.path.join(analysis_dir, "logs"))
 
     cl_args = {'project': project.dirname}
+    ## BUGFIX Phil wants you to actually populate this from the configuration file
     cl_args["sequencing_center"] = "NGI"
     cl_args["sequencing_tech"] = "Illumina"
     ## TODO load these from (ngi_pipeline) config file
-    cl_args["qos"] = "seqver"
+    slurm_qos = config.get("slurm", {}).get("extra_params", {}).get("--qos")
+    if slurm_qos:
+        cl_args["qos"] = slurm_qos
 
     # Eventually this will be loaded from e.g. Charon
     reference_genome = 'GRCh37'
