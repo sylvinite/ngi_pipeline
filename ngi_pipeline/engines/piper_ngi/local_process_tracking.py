@@ -29,7 +29,6 @@ def update_charon_with_local_jobs_status(config=None, config_file_path=None):
     """Check the status of all locally-tracked jobs and update Charon accordingly.
     """
     LOG.info("Updating Charon with the status of all locally-tracked jobs...")
-    import ipdb; ipdb.set_trace()
     with get_db_session() as session:
         charon_session = CharonSession()
         for sample_entry in session.query(SampleAnalysis).all():
