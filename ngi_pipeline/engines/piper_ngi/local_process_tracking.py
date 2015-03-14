@@ -121,9 +121,18 @@ def update_charon_with_local_jobs_status(config=None, config_file_path=None):
                             # Job did not write an exit code and is also not running
                             JOB_FAILED = True
                     if JOB_FAILED:
+                        exit_code_file_path = \
+                                create_exit_code_file_path(workflow_subtask=workflow,
+                                                           project_base_path=project_base_path,
+                                                           project_name=project_name,
+                                                           project_id=project_id,
+                                                           sample_id=sample_id)
                         set_status = "FAILED"
                         error_text = ('No exit code found but job not running for '
-                                      '{}: setting status to {} in Charon'.format(label, set_status))
+                                      '{}: setting status to {} in Charon (slurm '
+                                      'job id "{}", exit code file path '
+                                      '"{}")'.format(label, set_status, slurm_job_id,
+                                                     exit_code_file_path))
                         LOG.error(error_text)
                         if not config.get('quiet'):
                             mail_analysis(project_name=project_name, sample_name=sample_id,
