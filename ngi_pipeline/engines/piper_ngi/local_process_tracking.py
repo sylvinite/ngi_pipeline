@@ -123,7 +123,7 @@ def update_charon_with_local_jobs_status(config=None, config_file_path=None):
                     if JOB_FAILED:
                         set_status = "FAILED"
                         error_text = ('No exit code found but job not running for '
-                                      '{}: setting status to {} in Charon')
+                                      '{}: setting status to {} in Charon'.format(label, set_status))
                         if slurm_job_id:
                             exit_code_file_path = \
                                 create_exit_code_file_path(workflow_subtask=workflow,
