@@ -29,6 +29,7 @@ def update_charon_with_local_jobs_status(config=None, config_file_path=None):
     """Check the status of all locally-tracked jobs and update Charon accordingly.
     """
     LOG.info("Updating Charon with the status of all locally-tracked jobs...")
+    import ipdb; ipdb.set_trace()
     with get_db_session() as session:
         charon_session = CharonSession()
         for sample_entry in session.query(SampleAnalysis).all():
@@ -66,7 +67,7 @@ def update_charon_with_local_jobs_status(config=None, config_file_path=None):
                               engine_name=engine, level="ERROR", info_text=error_text)
                 continue
             try:
-                if piper_exit_code and piper_exit_code == 0:
+                if piper_exit_code == 0:
                     # 0 -> Job finished successfully
                     set_status = "ANALYZED"
                     info_text = ('Workflow "{}" for {} finished succesfully. '
@@ -91,7 +92,7 @@ def update_charon_with_local_jobs_status(config=None, config_file_path=None):
                     piper_qc_dir = os.path.join(project_base_path, "ANALYSIS",
                                                 project_id,"piper_ngi",  "02_preliminary_alignment_qc")
                     update_coverage_for_sample_seqruns(project_id, sample_id, piper_qc_dir)
-                elif piper_exit_code and piper_exit_code >0:
+                elif type(piper_exit_code) is int and piper_exit_code > 0:
                     # 1 -> Job failed
                     set_status = "FAILED"
                     error_text = ('Workflow "{}" for {} failed. Recording status '
@@ -299,7 +300,6 @@ def _parse_mean_coverage_from_qualimap(piper_qc_dir, sample_id, seqrun_id=None, 
         piper_qc_dir_base = "{}.{}.{}".format(sample_id.replace('_','-',1), (piper_run_id or "*"), sample_id.replace('_','-',1))
         piper_qc_path = "{}*/".format(os.path.join(piper_qc_dir, piper_qc_dir_base))
         piper_qc_dirs = glob.glob(piper_qc_path)
-        
         if not piper_qc_dirs: # Something went wrong in the alignment or we can't parse the file format
             raise OSError('Piper qc directories under "{}" are missing or in an unexpected format when updating stats to Charon.'.format(piper_qc_path))
     mean_autosomal_coverage = 0
@@ -400,7 +400,8 @@ def get_exit_code(workflow_name, project_base_path, project_name, project_id,
                 exit_code = int(exit_code)
             return exit_code
     except IOError as e:
-        if e.errno == 2:    # No such file or directory
-            return None     # Process is not yet complete
+        return None     # Process is not yet complete
     except ValueError as e:
         raise ValueError('Could not determine job exit status: not an integer ("{}")'.format(e))
+    else:
+        return None
