@@ -176,10 +176,12 @@ def update_charon_with_local_jobs_status(config=None, config_file_path=None):
 
 @with_ngi_config
 def recurse_status_for_sample(project_obj, set_status, update_done=False,
-                              extra_args={},config=None, config_file_path=None):
+                              extra_args=None,config=None, config_file_path=None):
     """Set seqruns under sample to have status "set_status"
     """
 
+    if not extra_args:
+        extra_args={}
     charon_session = CharonSession()
     project_id = project_obj.project_id
     for sample_obj in project_obj:
