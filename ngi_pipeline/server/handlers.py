@@ -50,8 +50,6 @@ class FlowcellHandler(NGIHandler):
         if base_path:
             fc_dir = os.path.join(base_path, fc_dir)
         args = ['analyze', 'flowcell', fc_dir]
-        optional = ['--project', '--sample', '--restart_failed']
-        [args.append(arg) for arg in optional if self.get_argument(arg[2:], False)]
         run_id = yield tornado.gen.Task(self.run_ngi_pipeline, args)
         self.write(run_id)
         self.finish()
