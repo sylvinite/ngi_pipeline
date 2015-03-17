@@ -41,7 +41,7 @@ class NGIHandler(tornado.web.RequestHandler):
 class FlowcellHandler(NGIHandler):
     """ Handler to manage flowcell processing
 
-    GET /flowcell_analysis/(fc_dir)?project=False&sample=False&restart_failed=False&path=path_to_run
+    GET /flowcell_analysis/(fc_dir)?path=path_to_run
     """
     @tornado.web.asynchronous
     @tornado.gen.coroutine
