@@ -82,7 +82,30 @@ def process_demultiplexed_flowcells(demux_fcid_dirs, restrict_to_projects=None,
     # Sort/copy each raw demux FC into project/sample/fcid format -- "analysis-ready"
     projects_to_analyze = dict()
     for demux_fcid_dir in demux_fcid_dirs_set:
-        demux_fcid_dir = os.path.abspath(demux_fcid_dir)
+        # Check if this is just a flowcell name or a full path
+        if not os.path.exists(demux_fcid_dir):
+            LOG.info('Flowcell directory ("{}") does not appear to be an absolute '
+                     'path; try to load flowcell_inbox directory from config '
+                     'file...'.format(demux_fcid_dir))
+            try:
+                flowcell_inbox_dir = config["environment"]["flowcell_inbox"]
+            except (KeyError, TypeError) as e:
+                LOG.error('Path to incoming flowcell directory not available in '
+                          'config file (environment.flowcell_inbox) and flowcell '
+                          'is not an absolute path ({}); skipping.'.format(demux_fcid_dir))
+                continue
+            else:
+                demux_fcid_dir = os.path.join(flowcell_inbox_dir, demux_fcid_dir)
+                LOG.info('Succesfully loaded path to flowcell inbox from config file. '
+                         'Checking if flowcell is present at {}...'.format(demux_fcid_dir))
+            if not os.path.exists(demux_fcid_dir):
+                LOG.error('Flowcell directory passed as flowcell name (not full '
+                          'path) and does not exist under incoming flowcell dir '
+                          'as specified in configuration file (at {}). Skipping '
+                          'analysis of this flowcell.'.format(demux_fcid_dir))
+                continue
+        else:
+            demux_fcid_dir = os.path.abspath(demux_fcid_dir)
         # These will be a bunch of Project objects each containing Samples, FCIDs, lists of fastq files
         projects_to_analyze = setup_analysis_directory_structure(demux_fcid_dir,
                                                                  projects_to_analyze,
@@ -233,8 +256,8 @@ def setup_analysis_directory_structure(fc_dir, projects_to_analyze,
                                                                            sample_name,
                                                                            lane_num)
                 except (IndexError, ValueError) as e:
-                    LOG.debug('Unable to determine library prep from sample sheet file '
-                              '("{}"); try to determine from Charon'.format(e))
+                    LOG.info('Unable to determine library prep from sample sheet file '
+                             '("{}"); try to determine from Charon'.format(e))
                     try:
                         # Requires Charon access
                         libprep_name = determine_library_prep_from_fcid(project_id, sample_name, fc_full_id)
