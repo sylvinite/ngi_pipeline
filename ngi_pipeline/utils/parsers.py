@@ -163,7 +163,6 @@ def determine_library_prep_from_samplesheet(samplesheet_path, project_id, sample
                else:
                    error_msg = ('Malformed description in "{}"; cannot get '
                                 'libprep information'.format(samplesheet_path))
-                   #LOG.warn(error_msg)
                    raise ValueError(error_msg)
     else:
         error_msg = ('No match found in "{}" for project "{}" / sample "{}" / '
