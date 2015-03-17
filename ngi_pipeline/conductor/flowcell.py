@@ -29,10 +29,12 @@ STHLM_PROJECT_RE = re.compile(r'[A-z][_.][A-z0-9]+_\d{2}_\d{2}')
 STHLM_X_PROJECT_RE = re.compile(r'[A-z]_[A-z0-9]+_\d{2}_\d{2}')
 
 
+## TODO we should just remove this function
 def process_demultiplexed_flowcell(demux_fcid_dir_path, restrict_to_projects=None,
                                    restrict_to_samples=None, restart_failed_jobs=False,
                                    restart_finished_jobs=False, restart_running_jobs=False,
-                                   config_file_path=None, quiet=False, manual=False):
+                                    quiet=False, manual=False,
+                                    config=None, config_file_path=None):
     """Call process_demultiplexed_flowcells, restricting to a single flowcell.
     Essentially a restrictive wrapper.
 
@@ -60,7 +62,8 @@ def process_demultiplexed_flowcell(demux_fcid_dir_path, restrict_to_projects=Non
 def process_demultiplexed_flowcells(demux_fcid_dirs, restrict_to_projects=None,
                                     restrict_to_samples=None, restart_failed_jobs=False,
                                     restart_finished_jobs=False, restart_running_jobs=False,
-                                    config=None, config_file_path=None, quiet=False, manual=False):
+                                    quiet=False, manual=False,
+                                    config=None, config_file_path=None):
     """Sort demultiplexed Illumina flowcells into projects and launch their analysis.
 
     :param list demux_fcid_dirs: The CASAVA-produced demux directory/directories.
