@@ -170,6 +170,9 @@ if __name__ == "__main__":
         if not args.restrict_to_projects: args.restrict_to_projects = []
         if not args.restrict_to_samples: args.restrict_to_samples = []
         organize_fc_dirs_set = set(args.organize_fc_dirs)
+        LOG.info("Organizing flowcell {} {}".format(inflector.plural("directory",
+                                                                     len(organize_fc_dirs_set)),
+                                                    ", ".join(organize_fc_dirs_set)))
         projects_to_analyze = dict()
         ## NOTE this bit of code not currently in use but could use later
         #if args.already_parsed: # Starting from Project/Sample/Libprep/Seqrun tree format
