@@ -169,8 +169,6 @@ if __name__ == "__main__":
                 validate_dangerous_user_thing("delete existing data in Charon")
 
 
-    import ipdb; ipdb.set_trace()
-
     # Finally execute corresponding functions
     if 'analyze_fc_dirs' in args:
         LOG.info('Starting flowcell analysis of flowcell {} '
