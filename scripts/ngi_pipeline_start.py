@@ -72,17 +72,17 @@ if __name__ == "__main__":
     # Add subparser for the server
     parser_server = subparsers.add_parser('server', help="Start ngi_pipeline server")
     parser_server.add_argument('-p', '--port', type=int,
-            help="Port in where to run the application")
+            help="Port on which to listen for incoming connections")
 
 
     # Add subparser for organization
     parser_organize = subparsers.add_parser('organize',
-            help="Organize one or more flowcells into project/sample/libprep/seqrun format.")
+            help="Organize one or more demultiplexed flowcells into project/sample/libprep/seqrun format.")
     subparsers_organize = parser_organize.add_subparsers(help='Choose unit to analyze')
     # Add sub-subparser for flowcell organization
     organize_flowcell = subparsers_organize.add_parser('flowcell',
             formatter_class=argparse.ArgumentDefaultsHelpFormatter,
-            help='Organize one or more raw flowcell, populating Charon with relevant data.')
+            help='Organize one or more demultiplexed flowcells, populating Charon with relevant data.')
     organize_flowcell.add_argument("organize_fc_dirs", nargs="+",
             help=("The paths to the Illumina demultiplexed fc directories to organize"))
     organize_flowcell.add_argument("-l", "--fallback-libprep",
@@ -115,7 +115,7 @@ if __name__ == "__main__":
     analyze_flowcell = subparsers_analyze.add_parser('flowcell',
             help='Start analysis of raw flowcells')
     analyze_flowcell.add_argument("analyze_fc_dirs", nargs="+",
-            help=("The path to the Illumina demultiplexed flowcell directory/"
+            help=("The path to one or more demultiplexed Illumina flowcell "
                   "directories to process and analyze."))
     analyze_flowcell.add_argument("-p", "--project", dest="restrict_to_projects", action="append",
             help=("Restrict analysis to these projects. "
@@ -137,7 +137,6 @@ if __name__ == "__main__":
         args.restart_running_jobs = True
 
     # Finally execute corresponding functions
-    ### TODO change to work with multiple flowcells
     if 'analyze_fc_dirs' in args:
         LOG.info('Starting flowcell analysis of flowcell {} '
                  '{}'.format(inflector.plural("directory", len(args.analyze_fc_dirs)),
