@@ -22,28 +22,37 @@ from ngi_pipeline.utils.filesystem import recreate_project_from_filesystem
 LOG = minimal_logger("ngi_pipeline_start")
 inflector = inflect.engine()
 
-def validate_force_update():
-    return _validate_dangerous_user_thing("OVERWRITE EXISTING DATA in CHARON")
-
-def validate_delete_existing():
-    return _validate_dangerous_user_thing("DELETE EXISTING DATA in CHARON")
-
-def _validate_dangerous_user_thing(action="do SOMETHING that Mario thinks you should BE WARNED about"):
-    print("DANGER WILL ROBINSON you have told this script to {action}!! Do you in fact want do to this?!?".format(action=action), file=sys.stderr)
+def validate_dangerous_user_thing(action="do SOMETHING that Mario thinks you should BE WARNED about",
+                                  setting_name=None,
+                                  warning=None):
+    if warning:
+        print(warning, file=sys.stderr)
+    else:
+        print("WARNING: you have told this script to {action}! Are you sure??".format(action=action), file=sys.stderr)
     attempts = 0
-    while True:
+    return_value = False
+    while not return_value:
         if attempts < 3:
             attempts += 1
-            user_input = raw_input("Confirm overwrite by typing 'yes' or 'no' ({}): ".format(attempts)).lower()
+            user_input = raw_input("Confirm by typing 'yes' or 'no' ({}): ".format(attempts)).lower()
             if user_input not in ('yes', 'no'):
                 continue
             elif user_input == 'yes':
-                return True
+                return_value = True
             elif user_input == 'no':
-                return False
+                break
+    if return_value:
+        print("Confirmed!\n----", file=sys.stderr)
+        return True
+    else:
+        message = "No confirmation received; "
+        if setting_name:
+            message += "setting {} to False.".format(setting_name)
         else:
-            print("No confirmation received; setting force_update to False", file=sys.stderr)
-            return False
+            message += "not proceeding with action."
+        message += "\n----"
+        print(message, file=sys.stderr)
+        return False
 
 
 class ArgumentParserWithTheFlagsThatIWant(argparse.ArgumentParser):
@@ -130,11 +139,35 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
 
-    # The following option will be available only if the script has been called with the 'analyze' option
+    # These options are available only if the script has been called with the 'analyze' option
     if args.__dict__.get('restart_all_jobs'):
-        args.restart_failed_jobs = True
-        args.restart_finished_jobs = True
-        args.restart_running_jobs = True
+        if validate_dangerous_user_thing(action=("restart all FAILED, RUNNING, "
+                                                 "and FINISHED jobs, deleting "
+                                                 "previous analyses")):
+            args.restart_failed_jobs = True
+            args.restart_finished_jobs = True
+            args.restart_running_jobs = True
+    else:
+        if args.__dict__.get("restart_failed_jobs"):
+            args.restart_failed_jobs = \
+                validate_dangerous_user_thing(action=("restart FAILED jobs, deleting "
+                                                      "previous analysies files"))
+        if args.__dict__.get("restart_finished_jobs"):
+            args.restart_finished_jobs = \
+                validate_dangerous_user_thing(action=("restart FINISHED jobs, deleting "
+                                                      "previous analyseis files"))
+        if args.__dict__.get("restart_running_jobs"):
+            args.restart_finished_jobs = \
+                validate_dangerous_user_thing(action=("restart RUNNING jobs, deleting "
+                                                      "previous analysis files"))
+    # Charon-specific arguments ('organize' or 'analyze')
+    if args.__dict__.get("force_update"):
+        args.force_update = \
+                validate_dangerous_user_thing("overwrite existing data in Charon")
+    if args.__dict__.get("delete_existing"):
+        args.delete_existing = \
+                validate_dangerous_user_thing("delete existing data in Charon")
+
 
     # Finally execute corresponding functions
     if 'analyze_fc_dirs' in args:
@@ -164,8 +197,6 @@ if __name__ == "__main__":
                                   manual=True)
 
     elif 'organize_fc_dirs' in args:
-        if args.force_update: args.force_update = validate_force_update()
-        if args.delete_existing: args.delete_existing = validate_delete_existing()
         if not args.restrict_to_projects: args.restrict_to_projects = []
         if not args.restrict_to_samples: args.restrict_to_samples = []
         organize_fc_dirs_set = set(args.organize_fc_dirs)
@@ -202,7 +233,6 @@ if __name__ == "__main__":
                                                        delete_existing=args.delete_existing)
                 except Exception as e:
                     print(e, file=sys.stderr)
-
 
     elif 'port' in args:
         LOG.info('Starting ngi_pipeline server at port {}'.format(args.port))
