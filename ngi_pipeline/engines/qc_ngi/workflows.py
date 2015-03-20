@@ -68,6 +68,12 @@ def workflow_fastqc(input_files, output_dir, config):
     :rtype: list
     :raises ValueError: If the FastQC path is not given or is not on PATH
     """
+    fastq_files = flatten(input_files) # FastQC cares not for your "read pairs"
+    # Verify that we in fact need to run this on these files
+    fastqc_output_template = "{}.somethingorother"
+    for fastq_file in fastq_files:
+
+
     # Get the path to the fastqc command
     fastqc_path = config.get("paths", {}).get("fastqc")
     if not fastqc_path:
@@ -79,7 +85,6 @@ def workflow_fastqc(input_files, output_dir, config):
                              'available on PATH; cannot proceed with FastQC '
                              'workflow.')
     num_threads = config.get("qc", {}).get("fastqc", {}).get("threads") or 1
-    fastq_files = flatten(input_files) # FastQC cares not for your "read pairs"
     # Construct the command lines
     cl_list = []
     # Module loading

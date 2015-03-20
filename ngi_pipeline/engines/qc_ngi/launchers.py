@@ -31,14 +31,14 @@ def analyze(project, sample, config=None, config_file_path=None):
     fastq_files_to_process = []
     src_fastq_base = os.path.join(project.base_path, "DATA",
                                   project.project_id, sample.name)
-    for libprep in sample:
-        for seqrun in libprep:
-            for fastq_file in seqrun:
-                path_to_src_fastq = os.path.join(src_fastq_base,
-                                                 libprep.name,
-                                                 seqrun.name,
-                                                 fastq_file)
-                fastq_files_to_process.append(path_to_src_fastq)
+    #for libprep in sample:
+    #    for seqrun in libprep:
+    #        for fastq_file in seqrun:
+    #            path_to_src_fastq = os.path.join(src_fastq_base,
+    #                                             libprep.name,
+    #                                             seqrun.name,
+    #                                             fastq_file)
+    #            fastq_files_to_process.append(path_to_src_fastq)
     paired_fastq_files = find_fastq_read_pairs(fastq_files_to_process).values()
     qc_cl_list = return_cls_for_workflow("qc", paired_fastq_files, sample_analysis_path)
 
@@ -51,6 +51,35 @@ def analyze(project, sample, config=None, config_file_path=None):
     else:
         LOG.info('Queued qc sbatch file for project/sample '
                  '"{}"/"{}": slurm job id {}'.format(project, sample, slurm_job_id))
+
+
+def files_need_analysis(project, sample):
+    """Given an NGIProject and NGISample object, determine if the qc files
+    need to be generated: check if the modification time of the input files
+    is newer than that of the qc files to be generated (if they exist).
+
+    :param NGIProject project: The project in question
+    :param NGISample sample: The sample " "
+    """
+
+    project_analysis_path = os.path.join(project.base_path,
+                                         "ANALYSIS",
+                                         project.project_id,
+                                         "qc_ngi")
+
+    fastq_files_to_process = []
+    src_fastq_base = os.path.join(project.base_path, "DATA",
+                                  project.project_id, sample.name)
+    for libprep in sample:
+        for seqrun in libprep:
+            for fastq_file in seqrun:
+                path_to_src_fastq = os.path.join(src_fastq_base,
+                                                 libprep.name,
+                                                 seqrun.name,
+                                                 fastq_file)
+                fastq_files_to_process.append(path_to_src_fastq)
+    for fastq_file in fastq_files_to_process:
+        
 
 
 
