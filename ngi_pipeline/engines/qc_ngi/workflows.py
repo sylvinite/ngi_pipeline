@@ -7,7 +7,7 @@ import sys
 
 from ngi_pipeline.log.loggers import minimal_logger
 from ngi_pipeline.utils.classes import with_ngi_config
-from ngi_pipeline.utils.filesystem import load_modules
+from ngi_pipeline.utils.filesystem import load_modules, safe_makedir
 from ngi_pipeline.utils.pyutils import flatten
 
 LOG = minimal_logger(__name__)
@@ -68,12 +68,6 @@ def workflow_fastqc(input_files, output_dir, config):
     :rtype: list
     :raises ValueError: If the FastQC path is not given or is not on PATH
     """
-    fastq_files = flatten(input_files) # FastQC cares not for your "read pairs"
-    # Verify that we in fact need to run this on these files
-    fastqc_output_template = "{}.somethingorother"
-    for fastq_file in fastq_files:
-
-
     # Get the path to the fastqc command
     fastqc_path = config.get("paths", {}).get("fastqc")
     if not fastqc_path:
@@ -84,6 +78,26 @@ def workflow_fastqc(input_files, output_dir, config):
             raise ValueError('Path to FastQC could not be found and it is not '
                              'available on PATH; cannot proceed with FastQC '
                              'workflow.')
+
+    fastq_files = flatten(input_files) # FastQC cares not for your "read pairs"
+    # Verify that we in fact need to run this on these files
+    fastqc_output_file_tmpls = ("{}_fastqc.zip", "{}_fastqc.html")
+    fastq_to_analyze = set()
+    output_base = os.path.join(output_dir, "fastqc")
+    for fastq_file in input_files:
+        path, fastq_file_base = os.path.split(fastq_file)
+        # If the path ends with a '/' we get tuple[1] as ''
+        if not fastq_file_base: path, fastq_file_base = os.path.split(path)
+        for fastqc_output_file_tmpl in fastqc_output_file_tmpls:
+            fastqc_output_file = \
+                    os.path.join(output_base, fastqc_output_file_tmpl.format(fastq_file_base))
+            if not os.path.exists(fastqc_output_file):
+                # Output file doesn't exist
+                fastq_to_analyze.add(fastq_file)
+            elif os.path.getctime(fastq_file) < os.path.getctime(fastqc_output_file):
+                # Input file modified more recently than output file
+                fastq_to_analyze.add(fastq_file)
+
     num_threads = config.get("qc", {}).get("fastqc", {}).get("threads") or 1
     # Construct the command lines
     cl_list = []
@@ -92,7 +106,7 @@ def workflow_fastqc(input_files, output_dir, config):
     for module in modules_to_load:
         cl_list.append("module load {}".format(module))
     # Create the output directory
-    cl_list.append('mkdir -p {output_dir}'.format(output_dir=output_dir))
+    safe_makedir(output_dir)
     # Execute fastqc
     cl_list.append('{fastqc_path} -t {num_threads} -o {output_dir} '
                    '{fastq_files}'.format(output_dir=output_dir,
