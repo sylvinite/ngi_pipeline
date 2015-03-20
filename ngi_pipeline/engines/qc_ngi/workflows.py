@@ -1,6 +1,7 @@
 """QC workflow-specific code."""
 
 import os
+import re
 import shlex
 import subprocess
 import sys
@@ -84,17 +85,22 @@ def workflow_fastqc(input_files, output_dir, config):
     fastqc_output_file_tmpls = ("{}_fastqc.zip", "{}_fastqc.html")
     fastq_to_analyze = set()
     output_base = os.path.join(output_dir, "fastqc")
-    for fastq_file in input_files:
-        path, fastq_file_base = os.path.split(fastq_file)
-        # If the path ends with a '/' we get tuple[1] as ''
-        if not fastq_file_base: path, fastq_file_base = os.path.split(path)
+    for fastq_file in fastq_files:
+        # Get the basename withot extensions (.fastq, .fastq.gz)
+        m = re.match(r'([\w-]+).fastq', os.path.basename(fastq_file))
+        if not m:
+            # fastq file name doesn't match expected pattern -- just process it
+            fastq_to_analyze.add(fastq_file)
+            continue
+        else:
+            fastq_file_base = m.groups()[0]
         for fastqc_output_file_tmpl in fastqc_output_file_tmpls:
             fastqc_output_file = \
                     os.path.join(output_base, fastqc_output_file_tmpl.format(fastq_file_base))
             if not os.path.exists(fastqc_output_file):
                 # Output file doesn't exist
                 fastq_to_analyze.add(fastq_file)
-            elif os.path.getctime(fastq_file) < os.path.getctime(fastqc_output_file):
+            elif os.path.getctime(fastq_file) > os.path.getctime(fastqc_output_file):
                 # Input file modified more recently than output file
                 fastq_to_analyze.add(fastq_file)
 
@@ -112,7 +118,7 @@ def workflow_fastqc(input_files, output_dir, config):
                    '{fastq_files}'.format(output_dir=output_dir,
                                           fastqc_path=fastqc_path,
                                           num_threads=num_threads,
-                                          fastq_files=" ".join(fastq_files)))
+                                          fastq_files=" ".join(fastq_to_analyze)))
     return cl_list
 
 
@@ -209,6 +215,7 @@ def find_on_path(binary_name, config=None):
              'checking if it is on PATH'.format(binary_name))
     modules_to_load = get_all_modules_for_workflow(binary_name, config)
     if modules_to_load:
+        LOG.info("Loading modules {}".format(", ".join(modules_to_load)))
         load_modules(modules_to_load)
     try:
         with open(os.devnull, 'w') as DEVNULL:
