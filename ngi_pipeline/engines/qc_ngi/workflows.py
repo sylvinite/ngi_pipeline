@@ -119,6 +119,8 @@ def workflow_fastqc(input_files, output_dir, config):
                                               fastqc_path=fastqc_path,
                                               num_threads=num_threads,
                                               fastq_files=" ".join(fastq_to_analyze)))
+    if not cl_list:
+        LOG.info("FastQC analysis not needed or input files were invalid.")
     return cl_list
 
 
