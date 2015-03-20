@@ -52,7 +52,7 @@ def get_slurm_job_status(slurm_job_id):
         check_cl = "sacct -n -j {:d} -o STATE".format(slurm_job_id)
         # If the sbatch job has finished, this returns two lines. For example:
         # $ sacct -j 3655032
-        #       JobID    JobName  Partition    Account  AllocCPUS      State ExitCode 
+        #       JobID         JobName    Partition   Account  AllocCPUS    State    ExitCode
         #       ------------ ---------- ---------- ---------- ---------- ---------- -------- 
         #       3655032      test_sbat+       core   a2010002          1  COMPLETED      0:0 
         #       3655032.bat+      batch              a2010002          1  COMPLETED      0:0 
