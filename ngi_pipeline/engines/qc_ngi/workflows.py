@@ -105,20 +105,20 @@ def workflow_fastqc(input_files, output_dir, config):
                 fastq_to_analyze.add(fastq_file)
 
     num_threads = config.get("qc", {}).get("fastqc", {}).get("threads") or 1
+    safe_makedir(output_dir)
     # Construct the command lines
     cl_list = []
-    # Module loading
-    modules_to_load = get_all_modules_for_workflow("fastqc", config)
-    for module in modules_to_load:
-        cl_list.append("module load {}".format(module))
-    # Create the output directory
-    safe_makedir(output_dir)
-    # Execute fastqc
-    cl_list.append('{fastqc_path} -t {num_threads} -o {output_dir} '
-                   '{fastq_files}'.format(output_dir=output_dir,
-                                          fastqc_path=fastqc_path,
-                                          num_threads=num_threads,
-                                          fastq_files=" ".join(fastq_to_analyze)))
+    if fastq_to_analyze:
+        # Module loading
+        modules_to_load = get_all_modules_for_workflow("fastqc", config)
+        for module in modules_to_load:
+            cl_list.append("module load {}".format(module))
+        # Execute fastqc
+        cl_list.append('{fastqc_path} -t {num_threads} -o {output_dir} '
+                       '{fastq_files}'.format(output_dir=output_dir,
+                                              fastqc_path=fastqc_path,
+                                              num_threads=num_threads,
+                                              fastq_files=" ".join(fastq_to_analyze)))
     return cl_list
 
 
@@ -151,23 +151,38 @@ def workflow_fastq_screen(input_files, output_dir, config):
     num_threads = config.get("qc", {}).get("fastq_screen", {}).get("threads") or 1
     subsample_reads = config.get("qc", {}).get("fastq_screen", {}).get("subsample_reads")
 
+    # Determine which files need processing
+    fastq_screen_output_file_tmpls = ("{}_screen.png", "{}_screen.txt")
+    fastq_to_analyze = set()
+    for elt in input_files:
+        # This may be a read pair
+        if type(elt) is list:
+            # fastq_screen uses the name of the first read of the pair for output files
+            elt = tuple(elt)
+            fastq_file = elt[0]
+        else:
+            fastq_file = elt
+        for fastq_screen_output_file_tmpl in fastq_screen_output_file_tmpls:
+            fastq_screen_output_file = \
+                    os.path.join(output_dir, fastq_screen_output_file_tmpl.format(fastq_file))
+            if not os.path.exists(fastq_screen_output_file):
+                # Output file doesn't exist
+                fastq_to_analyze.add(elt)
+            elif os.path.getctime(fastq_file) > os.path.getctime(fastq_screen_output_file):
+                # Input file modified more recently than output file
+                fastq_to_analyze.add(elt)
+
     # Construct the command lines
     cl_list = []
-    # Module loading
-    modules_to_load = get_all_modules_for_workflow("fastq_screen", config)
-    for module in modules_to_load:
-        cl_list.append("module load {}".format(module))
-    # Make output directory
-    cl_list.append('mkdir -p {output_dir}'.format(output_dir=output_dir))
-    # fastq_screen stuff here
-    for elt in input_files:
+    # fastq_screen commands
+    for elt in fastq_to_analyze:
         cl = fastq_screen_path
         cl += " --aligner bowtie2"
         cl += " --outdir {}".format(output_dir)
         if subsample_reads: cl += " --subset {}".format(subsample_reads)
         if num_threads: cl += " --threads {}".format(num_threads)
         if fastq_screen_config_path: cl += " --conf {}".format(fastq_screen_config_path)
-        if type(elt) is list:
+        if type(elt) is list or type(elt) is tuple:
             if len(elt) == 2:
                 # Read pair; run fastq_screen on these together
                 cl += (" --paired {}".format(" ".join(elt)))
@@ -176,17 +191,22 @@ def workflow_fastq_screen(input_files, output_dir, config):
             else:
                 LOG.error('Files passed as list but more than two elements; '
                           'not a read pair? Skipping. ({})'.format(" ".join(elt)))
+                continue
         elif type(elt) is str or type(elt) is unicode:
             cl += " " + elt
         else:
-            LOG.error("Whatchyoo tryin' to get crazy with ese, "
-                      "don'tchyoo know I'm loco? "
-                      "Ignoring your weird input (not a string, not a list).")
+            LOG.error("Ignoring your weird input (not a string, not a list).")
+            continue
         cl_list.append(cl)
-    if not cl_list:
-        raise ValueError("No valid input files passed in; skipping fastq_screen analysis.")
+    if cl_list:
+        # Module loading
+        modules_to_load = get_all_modules_for_workflow("fastq_screen", config)
+        mod_list = [ "module load {}".format(module) for module in modules_to_load ]
+        if mod_list:
+            cl_list = mod_list + cl_list
     else:
-        return cl_list
+        LOG.info("fastq_screen analysis not needed or input files were invalid.")
+    return cl_list
 
 
 def get_all_modules_for_workflow(binary_name, config):
@@ -215,7 +235,7 @@ def find_on_path(binary_name, config=None):
              'checking if it is on PATH'.format(binary_name))
     modules_to_load = get_all_modules_for_workflow(binary_name, config)
     if modules_to_load:
-        LOG.info("Loading modules {}".format(", ".join(modules_to_load)))
+        LOG.debug("Loading modules {}".format(", ".join(modules_to_load)))
         load_modules(modules_to_load)
     try:
         with open(os.devnull, 'w') as DEVNULL:
