@@ -202,6 +202,7 @@ def workflow_fastq_screen(input_files, output_dir, config):
             continue
         cl_list.append(cl)
     if cl_list:
+        safe_makedir(output_dir)
         # Module loading
         modules_to_load = get_all_modules_for_workflow("fastq_screen", config)
         mod_list = [ "module load {}".format(module) for module in modules_to_load ]
