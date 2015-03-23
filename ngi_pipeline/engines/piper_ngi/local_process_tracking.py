@@ -347,7 +347,7 @@ def record_process_sample(project, sample, workflow_subtask, analysis_module_nam
                     time.sleep(15)
             else:
                 raise RuntimeError("Could not write to database after three attempts (locked?)")
-        except (IntegrityError, RuntimeError):
+        except (IntegrityError, RuntimeError) as e:
             raise RuntimeError('Could not record slurm job id "{}" for project "{}", sample "{}", '
                                'workflow "{}": {}'.format(slurm_job_id, project, sample, workflow_subtask, e))
     try:
@@ -369,7 +369,7 @@ def record_process_sample(project, sample, workflow_subtask, analysis_module_nam
 
         LOG.error(error_text)
         if not config.get('quiet'):
-            mail_analysis(project_name=project_id, sample_name=sample_id,
+            mail_analysis(project_name=project.project_id, sample_name=sample.name,
                           engine_name='piper_ngi', level="ERROR", info_text=error_text)
 
 def is_sample_analysis_running_local(workflow_subtask, project_id, sample_id):
