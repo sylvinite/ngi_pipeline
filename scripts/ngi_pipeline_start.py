@@ -257,8 +257,15 @@ if __name__ == "__main__":
         for project in projects_to_analyze:
             for sample in project:
                 qc_ngi.launchers.analyze(project, sample, quiet=args.quiet)
+
     elif 'qc_project_dirs' in args:
-        raise NotImplementedError()
+        project = recreate_project_from_filesystem(project_dir=args.analyze_project_dir,
+                                                   restrict_to_samples=args.restrict_to_samples)
+        if project and os.path.split(project.base_path)[1] == "DATA":
+            project.base_path = os.path.split(project.base_path)[0]
+        for sample in project:
+            qc_ngi.launchers.analyze(project, sample, quiet=args.quiet)
+
     elif 'organize_fc_dirs' in args:
         organize_fc_dirs_list = list(set(args.organize_fc_dirs))
         LOG.info("Organizing flowcell {} {}".format(inflector.plural("directory",
