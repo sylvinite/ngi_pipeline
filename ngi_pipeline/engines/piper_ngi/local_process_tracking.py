@@ -418,6 +418,15 @@ def kill_running_sample_analysis(workflow_subtask, project_id, sample_id):
             except Exception as e:
                 LOG.error('Could not kill sample run "{}": {}'.format(sample_run_name, e))
                 return False
+            try:
+                LOG.info('Removing sample run "{}" from local jobs database...'.format(sample_run_name))
+                # Remove from local jobs database
+                session.delete(sample_run)
+                session.commit()
+                LOG.info("Deleted.")
+            except Exception as e:
+                LOG.error('Failed to remove entry for sample run "{}" from '
+                          'local jobs database: {}'.format(sample_run_name, e))
         else:
             LOG.info('...sample run "{}" is not currently under analysis.'.format(sample_run_name))
     return True
