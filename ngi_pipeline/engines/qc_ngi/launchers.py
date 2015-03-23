@@ -53,6 +53,17 @@ def analyze(project, sample, quiet=False, config=None, config_file_path=None):
     else:
         LOG.info('Queued qc sbatch file for project/sample '
                  '"{}"/"{}": slurm job id {}'.format(project, sample, slurm_job_id))
+        slurm_jobid_file = os.path.join(log_dir_path,
+                                        "{}-{}.slurmjobid".format(project.project_id,
+                                                                  sample))
+        LOG.info('Writing slurm job id "{}" to file "{}"'.format(slurm_job_id,
+                                                                 slurm_jobid_file))
+        try:
+            with open(slurm_jobid_file, 'w') as f:
+                f.write("{}\n".format(slurm_job_id))
+        except IOError as e:
+            LOG.warn('Could not write slurm job id for project/sample '
+                     '{}/{} to file "{}" ({}). So... yup. Good luck bro!'.format(e))
 
 
 def queue_sbatch_file(sbatch_file_path):
