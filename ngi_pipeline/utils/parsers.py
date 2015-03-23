@@ -96,7 +96,6 @@ def determine_library_prep_from_samplesheet(samplesheet_path, project_id, sample
                      'lane number "{}"'.format(samplesheet_path,
                                                project_id, sample_id,
                                                lane_num))
-        LOG.warn(error_msg)
         raise ValueError(error_msg)
 
 
