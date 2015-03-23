@@ -15,8 +15,9 @@ from ngi_pipeline.engines.piper_ngi.utils import create_exit_code_file_path, \
                                                  create_project_obj_from_analysis_log, \
                                                  get_finished_seqruns_for_sample
 from ngi_pipeline.engines.piper_ngi.results_parsers import parse_qualimap_coverage
-from ngi_pipeline.utils.parsers import get_slurm_job_status, \
-                                       STHLM_UUSNP_SEQRUN_RE, \
+from ngi_pipeline.utils.slurm import get_slurm_job_status, \
+                                     kill_slurm_job_by_id
+from ngi_pipeline.utils.parsers import STHLM_UUSNP_SEQRUN_RE, \
                                        STHLM_UUSNP_SAMPLE_RE
 from sqlalchemy.exc import IntegrityError, OperationalError
 from ngi_pipeline.utils.classes import with_ngi_config
@@ -38,7 +39,7 @@ def update_charon_with_local_jobs_status(config=None, config_file_path=None):
             project_id = sample_entry.project_id
             project_base_path = sample_entry.project_base_path
             sample_id = sample_entry.sample_id
-            engine=sample_entry.engine
+            engine = sample_entry.engine
             # Only one of these will have a value
             slurm_job_id = sample_entry.slurm_job_id
             process_id = sample_entry.process_id
@@ -58,8 +59,8 @@ def update_charon_with_local_jobs_status(config=None, config_file_path=None):
             except IOError as e: # analysis log file is missing!
                 error_text = ('Could not find analysis log file! Cannot update '
                               'Charon for sample run {}/{}: {}'.format(project_id,
-                                                                   sample_id,
-                                                                   e))
+                                                                       sample_id,
+                                                                       e))
                 LOG.error(error_text)
                 if not config.get('quiet'):
                     mail_analysis(project_name=project_name, sample_name=sample_id,
@@ -176,38 +177,38 @@ def update_charon_with_local_jobs_status(config=None, config_file_path=None):
 
 @with_ngi_config
 def recurse_status_for_sample(project_obj, set_status, update_done=False,
-                              extra_args=None,config=None, config_file_path=None):
+                              extra_args=None, config=None, config_file_path=None):
     """Set seqruns under sample to have status "set_status"
     """
 
     if not extra_args:
-        extra_args={}
+        extra_args = {}
     charon_session = CharonSession()
     project_id = project_obj.project_id
     for sample_obj in project_obj:
         # There's only one sample but this is an iterator
         sample_id = sample_obj.name
-    for libprep_obj in sample_obj:
-        libprep_id = libprep_obj.name
-        for seqrun_obj in libprep_obj:
-            seqrun_id = seqrun_obj.name
-            label = "{}/{}/{}/{}".format(project_id, sample_id, libprep_id, seqrun_id)
-            LOG.info(('Updating status of project/sample/libprep/seqrun '
-                      '"{}" to "{}" in Charon ').format(label, set_status))
-            try:
-                charon_session.seqrun_update(projectid=project_id,
-                                             sampleid=sample_id,
-                                             libprepid=libprep_id,
-                                             seqrunid=seqrun_id,
-                                             alignment_status=set_status,
-                                             **extra_args)
-            except CharonError as e:
-                error_text =('Could not update status of project/sample/libprep/seqrun '
-                             '"{}" in Charon to "{}": {}'.format(label, set_status, e))
-                LOG.error(error_text)
-                if not config.get('quiet'):
-                    mail_analysis(project_name=project_id, sample_name=sample_obj.name,
-                                  level="ERROR", info_text=error_text)
+        for libprep_obj in sample_obj:
+            libprep_id = libprep_obj.name
+            for seqrun_obj in libprep_obj:
+                seqrun_id = seqrun_obj.name
+                label = "{}/{}/{}/{}".format(project_id, sample_id, libprep_id, seqrun_id)
+                LOG.info(('Updating status of project/sample/libprep/seqrun '
+                          '"{}" to "{}" in Charon ').format(label, set_status))
+                try:
+                    charon_session.seqrun_update(projectid=project_id,
+                                                 sampleid=sample_id,
+                                                 libprepid=libprep_id,
+                                                 seqrunid=seqrun_id,
+                                                 alignment_status=set_status,
+                                                 **extra_args)
+                except CharonError as e:
+                    error_text = ('Could not update status of project/sample/libprep/seqrun '
+                                  '"{}" in Charon to "{}": {}'.format(label, set_status, e))
+                    LOG.error(error_text)
+                    if not config.get('quiet'):
+                        mail_analysis(project_name=project_id, sample_name=sample_obj.name,
+                                      level="ERROR", info_text=error_text)
 
 
 
@@ -233,7 +234,7 @@ def update_coverage_for_sample_seqruns(project_id, sample_id, piper_qc_dir,
             label = "{}/{}/{}/{}".format(project_id, sample_id, libprep_id, seqrun_id)
             ma_coverage = _parse_mean_coverage_from_qualimap(piper_qc_dir, sample_id, seqrun_id)
             LOG.info('Updating project/sample/libprep/seqrun "{}" in '
-                     'Charon with mean autosomal coverage "{}"'.format(label,  ma_coverage))
+                     'Charon with mean autosomal coverage "{}"'.format(label, ma_coverage))
             try:
                 charon_session.seqrun_update(projectid=project_id,
                                              sampleid=sample_id,
@@ -247,7 +248,7 @@ def update_coverage_for_sample_seqruns(project_id, sample_id, piper_qc_dir,
                 LOG.error(error_text)
                 if not config.get('quiet'):
                     mail_analysis(project_name=project_id, sample_name=sample_id,
-                              engine_name="piper_ngi", level="ERROR", info_text=error_text)
+                                  engine_name="piper_ngi", level="ERROR", info_text=error_text)
 
 
 def parse_mean_autosomal_coverage_for_sample(piper_qc_dir, sample_id):
@@ -302,8 +303,8 @@ def _parse_mean_coverage_from_qualimap(piper_qc_dir, sample_id, seqrun_id=None, 
     piper_qc_dir_base = "{}.{}.{}".format(sample_id, (piper_run_id or "*"), sample_id)
     piper_qc_path = "{}*/".format(os.path.join(piper_qc_dir, piper_qc_dir_base))
     piper_qc_dirs = glob.glob(piper_qc_path)
-    if not piper_qc_dirs: # Something went wrong, is the sample name with a hyphen or with an underscore ? 
-        piper_qc_dir_base = "{}.{}.{}".format(sample_id.replace('_','-',1), (piper_run_id or "*"), sample_id.replace('_','-',1))
+    if not piper_qc_dirs: # Something went wrong, is the sample name with a hyphen or with an underscore ?
+        piper_qc_dir_base = "{}.{}.{}".format(sample_id.replace('_', '-', 1), (piper_run_id or "*"), sample_id.replace('_', '-', 1))
         piper_qc_path = "{}*/".format(os.path.join(piper_qc_dir, piper_qc_dir_base))
         piper_qc_dirs = glob.glob(piper_qc_path)
         if not piper_qc_dirs: # Something went wrong in the alignment or we can't parse the file format
@@ -366,7 +367,7 @@ def record_process_sample(project, sample, workflow_subtask, analysis_module_nam
                                                            project.base_path,
                                                            sample.name,
                                                            workflow_subtask)
-        recurse_status_for_sample(project_obj, "RUNNING", extra_args={'mean_autosomal_coverage':0},config=config)
+        recurse_status_for_sample(project_obj, "RUNNING", extra_args={'mean_autosomal_coverage':0}, config=config)
     except CharonError as e:
         error_text = ('Could not update Charon status for project/sample '
                       '{}/{} due to error: {}'.format(project, sample, e))
@@ -375,6 +376,7 @@ def record_process_sample(project, sample, workflow_subtask, analysis_module_nam
         if not config.get('quiet'):
             mail_analysis(project_name=project.project_id, sample_name=sample.name,
                           engine_name='piper_ngi', level="ERROR", info_text=error_text)
+
 
 def is_sample_analysis_running_local(workflow_subtask, project_id, sample_id):
     """Determine if a sample is currently being analyzed by accessing the local
@@ -393,6 +395,41 @@ def is_sample_analysis_running_local(workflow_subtask, project_id, sample_id):
             LOG.info('...sample run "{}" is not currently under analysis.'.format(sample_run_name))
             return False
 
+
+def kill_running_sample_analysis(workflow_subtask, project_id, sample_id):
+    """Determine if a sample is currently being analyzed by accessing the local
+    process tracking database."""
+    sample_run_name = "{}/{}".format(project_id, sample_id)
+    LOG.info('Attempting to kill sample analysis run "{}"'.format(sample_run_name))
+    LOG.info('Checking if sample run "{}" is currently being analyzed '
+             '(workflow "{}")...'.format(sample_run_name, workflow_subtask))
+    with get_db_session() as session:
+        db_q = session.query(SampleAnalysis).filter_by(workflow=workflow_subtask,
+                                                       project_id=project_id,
+                                                       sample_id=sample_id)
+        sample_run = db_q.first()
+        if sample_run:
+            try:
+                slurm_job_id = sample_run.slurm_job_id
+                LOG.info('...sample run "{}" is currently being analyzed and has '
+                         'slurm job id "{}"; trying to kill it...'.format(sample_run_name,
+                                                                          slurm_job_id))
+                kill_slurm_job_by_id(slurm_job_id)
+            except Exception as e:
+                LOG.error('Could not kill sample run "{}": {}'.format(sample_run_name, e))
+                return False
+            try:
+                LOG.info('Removing sample run "{}" from local jobs database...'.format(sample_run_name))
+                # Remove from local jobs database
+                session.delete(sample_run)
+                session.commit()
+                LOG.info("Deleted.")
+            except Exception as e:
+                LOG.error('Failed to remove entry for sample run "{}" from '
+                          'local jobs database: {}'.format(sample_run_name, e))
+        else:
+            LOG.info('...sample run "{}" is not currently under analysis.'.format(sample_run_name))
+    return True
 
 def get_exit_code(workflow_name, project_base_path, project_name, project_id,
                   sample_id, libprep_id=None, seqrun_id=None):

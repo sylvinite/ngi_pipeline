@@ -17,6 +17,7 @@ from ngi_pipeline.engines.piper_ngi import workflows
 from ngi_pipeline.engines.piper_ngi.command_creation import build_piper_cl, \
                                                             build_setup_xml
 from ngi_pipeline.engines.piper_ngi.local_process_tracking import is_sample_analysis_running_local, \
+                                                                  kill_running_sample_analysis, \
                                                                   record_process_sample
 from ngi_pipeline.engines.piper_ngi.utils import check_for_preexisting_sample_runs, \
                                                  create_exit_code_file_path, \
@@ -30,8 +31,10 @@ from ngi_pipeline.utils.filesystem import load_modules, execute_command_line, \
                                           match_files_under_dir
 from ngi_pipeline.utils.classes import with_ngi_config
 from ngi_pipeline.utils.filesystem import fastq_files_under_dir
-from ngi_pipeline.utils.parsers import parse_lane_from_filename, find_fastq_read_pairs_from_dir, \
-                                       get_flowcell_id_from_dirtree, get_slurm_job_status
+from ngi_pipeline.utils.parsers import parse_lane_from_filename, \
+                                       find_fastq_read_pairs_from_dir, \
+                                       get_flowcell_id_from_dirtree
+from ngi_pipeline.utils.slurm import get_slurm_job_status
 
 LOG = minimal_logger(__name__)
 
@@ -61,10 +64,14 @@ def analyze(project, sample, exec_mode="sbatch", restart_finished_jobs=False,
     load_modules(modules_to_load)
     LOG.info('Sample "{}" in project "{}" is ready for processing.'.format(sample, project))
     for workflow_subtask in workflows.get_subtasks_for_level(level="sample"):
-        if (not is_sample_analysis_running_local(workflow_subtask=workflow_subtask,
-                                                 project_id=project.project_id,
-                                                 sample_id=sample.name)) or \
-           restart_running_jobs:
+        if restart_running_jobs:
+            # Kill currently-running jobs if they exist
+            kill_running_sample_analysis(workflow_subtask=workflow_subtask,
+                                         project_id=project.project_id,
+                                         sample_id=sample.name)
+        if not is_sample_analysis_running_local(workflow_subtask=workflow_subtask,
+                                                project_id=project.project_id,
+                                                sample_id=sample.name):
             try:
                 log_file_path = create_log_file_path(workflow_subtask=workflow_subtask,
                                                      project_base_path=project.base_path,

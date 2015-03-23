@@ -291,12 +291,12 @@ def setup_analysis_directory_structure(fc_dir, projects_to_analyze,
                                                                            sample_name,
                                                                            lane_num)
                 except (IndexError, ValueError) as e:
-                    LOG.info('Unable to determine library prep from sample sheet file '
+                    LOG.debug('Unable to determine library prep from sample sheet file '
                              '("{}"); try to determine from Charon'.format(e))
                     try:
                         # Requires Charon access
                         libprep_name = determine_library_prep_from_fcid(project_id, sample_name, fc_full_id)
-                        LOG.info('Found libprep name "{}" in Charon'.format(libprep_name))
+                        LOG.debug('Found libprep name "{}" in Charon'.format(libprep_name))
                     except ValueError:
                         charon_session = CharonSession()
                         libpreps = charon_session.sample_get_libpreps(project_id, sample_name).get('libpreps')
