@@ -176,10 +176,12 @@ def update_charon_with_local_jobs_status(config=None, config_file_path=None):
 
 @with_ngi_config
 def recurse_status_for_sample(project_obj, set_status, update_done=False,
-                              config=None, config_file_path=None):
+                              extra_args=None,config=None, config_file_path=None):
     """Set seqruns under sample to have status "set_status"
     """
 
+    if not extra_args:
+        extra_args={}
     charon_session = CharonSession()
     project_id = project_obj.project_id
     for sample_obj in project_obj:
@@ -197,7 +199,8 @@ def recurse_status_for_sample(project_obj, set_status, update_done=False,
                                              sampleid=sample_id,
                                              libprepid=libprep_id,
                                              seqrunid=seqrun_id,
-                                             alignment_status=set_status)
+                                             alignment_status=set_status,
+                                             **extra_args)
             except CharonError as e:
                 error_text =('Could not update status of project/sample/libprep/seqrun '
                              '"{}" in Charon to "{}": {}'.format(label, set_status, e))
@@ -359,7 +362,7 @@ def record_process_sample(project, sample, workflow_subtask, analysis_module_nam
                                                            project.base_path,
                                                            sample.name,
                                                            workflow_subtask)
-        recurse_status_for_sample(project_obj, "RUNNING", config=config)
+        recurse_status_for_sample(project_obj, "RUNNING", extra_args={'mean_autosomal_coverage':0},config=config)
     except CharonError as e:
         error_text = ('Could not update Charon status for project/sample '
                       '{}/{} due to error: {}'.format(project, sample, e))
