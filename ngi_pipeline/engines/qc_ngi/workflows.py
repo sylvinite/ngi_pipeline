@@ -159,8 +159,9 @@ def workflow_fastq_screen(input_files, output_dir, config):
     for elt in input_files:
         # This may be a read pair
         if type(elt) is list:
-            # fastq_screen uses the name of the first read of the pair for output files
+            # Changing list to tuple so we can use it in the set() (lists aren't hashable)
             elt = tuple(elt)
+            # fastq_screen uses the name of the first read of the pair for output files
             fastq_file = elt[0]
         else:
             fastq_file = elt
