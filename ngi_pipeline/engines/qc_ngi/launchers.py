@@ -6,7 +6,7 @@ import re
 import subprocess
 
 from ngi_pipeline.engines.qc_ngi.workflows import return_cls_for_workflow
-from ngi_pipeline.log.loggers import log_process_non_blocking, minimal_logger
+from ngi_pipeline.log.loggers import minimal_logger
 from ngi_pipeline.utils.classes import with_ngi_config
 from ngi_pipeline.utils.filesystem import execute_command_line, rotate_file, safe_makedir
 from ngi_pipeline.utils.parsers import find_fastq_read_pairs
@@ -15,9 +15,11 @@ LOG = minimal_logger(__name__)
 
 
 @with_ngi_config
-def analyze(project, sample, config=None, config_file_path=None):
+def analyze(project, sample, quiet=False, config=None, config_file_path=None):
     """The main entry point for the qc pipeline."""
-    LOG.info("Processing project/sample {}/{}".format(project, sample))
+    ## TODO implement "quiet" feature
+    ## TODO implement mailing on failure
+    LOG.info("Launching qc analysis for project/sample {}/{}".format(project, sample))
 
     project_analysis_path = os.path.join(project.base_path,
                                          "ANALYSIS",
