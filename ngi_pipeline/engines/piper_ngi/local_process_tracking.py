@@ -63,10 +63,10 @@ def update_charon_with_local_jobs_status(config=None, config_file_path=None):
                 LOG.error(error_text)
                 if not config.get('quiet'):
                     mail_analysis(project_name=project_name, sample_name=sample_id,
-                              engine_name=engine, level="ERROR", info_text=error_text)
+                                  engine_name=engine, level="ERROR", info_text=error_text)
                 continue
             try:
-                if piper_exit_code and piper_exit_code == 0:
+                if piper_exit_code == 0:
                     # 0 -> Job finished successfully
                     set_status = "ANALYZED"
                     info_text = ('Workflow "{}" for {} finished succesfully. '
@@ -75,12 +75,12 @@ def update_charon_with_local_jobs_status(config=None, config_file_path=None):
                     LOG.info(info_text)
                     if not config.get('quiet'):
                         mail_analysis(project_name=project_name, sample_name=sample_id,
-                                  engine_name=engine, level="INFO", info_text=info_text)
+                                      engine_name=engine, level="INFO", info_text=info_text)
                     charon_session.sample_update(projectid=project_id,
                                                  sampleid=sample_id,
                                                  analysis_status=set_status)
                     recurse_status="DONE"
-                    recurse_status_for_sample(project_obj, recurse_status)
+                    recurse_status_for_sample(project_obj, recurse_status, config=config)
                     # Job is only deleted if the Charon status update succeeds
                     session.delete(sample_entry)
                     # Parse seqrun output results / update Charon
@@ -91,7 +91,7 @@ def update_charon_with_local_jobs_status(config=None, config_file_path=None):
                     piper_qc_dir = os.path.join(project_base_path, "ANALYSIS",
                                                 project_id,"piper_ngi",  "02_preliminary_alignment_qc")
                     update_coverage_for_sample_seqruns(project_id, sample_id, piper_qc_dir)
-                elif piper_exit_code and piper_exit_code >0:
+                elif type(piper_exit_code) is int and piper_exit_code > 0:
                     # 1 -> Job failed
                     set_status = "FAILED"
                     error_text = ('Workflow "{}" for {} failed. Recording status '
@@ -99,11 +99,11 @@ def update_charon_with_local_jobs_status(config=None, config_file_path=None):
                     LOG.error(error_text)
                     if not config.get('quiet'):
                         mail_analysis(project_name=project_name, sample_name=sample_id,
-                                  engine_name=engine, level="ERROR", info_text=error_text)
+                                      engine_name=engine, level="ERROR", info_text=error_text)
                     charon_session.sample_update(projectid=project_id,
                                                  sampleid=sample_id,
                                                  analysis_status=set_status)
-                    recurse_status_for_sample(project_obj, set_status)
+                    recurse_status_for_sample(project_obj, set_status, config=config)
                     # Job is only deleted if the Charon update succeeds
                     session.delete(sample_entry)
                 else:
@@ -124,14 +124,23 @@ def update_charon_with_local_jobs_status(config=None, config_file_path=None):
                         set_status = "FAILED"
                         error_text = ('No exit code found but job not running for '
                                       '{}: setting status to {} in Charon'.format(label, set_status))
+                        if slurm_job_id:
+                            exit_code_file_path = \
+                                create_exit_code_file_path(workflow_subtask=workflow,
+                                                           project_base_path=project_base_path,
+                                                           project_name=project_name,
+                                                           project_id=project_id,
+                                                           sample_id=sample_id)
+                            error_text += (' (slurm job id "{}", exit code file path '
+                                           '"{}")'.format(slurm_job_id, exit_code_file_path))
                         LOG.error(error_text)
                         if not config.get('quiet'):
                             mail_analysis(project_name=project_name, sample_name=sample_id,
-                                      engine_name=engine, level="ERROR", info_text=error_text)
+                                          engine_name=engine, level="ERROR", info_text=error_text)
                         charon_session.sample_update(projectid=project_id,
                                                      sampleid=sample_id,
                                                      analysis_status=set_status)
-                        recurse_status_for_sample(project_obj, set_status)
+                        recurse_status_for_sample(project_obj, set_status, config=config)
                         # Job is only deleted if the Charon update succeeds
                         LOG.debug("Deleting local entry {}".format(sample_entry))
                         session.delete(sample_entry)
@@ -147,28 +156,32 @@ def update_charon_with_local_jobs_status(config=None, config_file_path=None):
                             charon_session.sample_update(projectid=project_id,
                                                          sampleid=sample_id,
                                                          analysis_status=set_status)
-                            recurse_status_for_sample(project_obj, "RUNNING")
+                            recurse_status_for_sample(project_obj, "RUNNING", config=config)
             except CharonError as e:
                 error_text = ('Unable to update Charon status for "{}": {}'.format(label, e))
                 LOG.error(error_text)
                 if not config.get('quiet'):
                     mail_analysis(project_name=project_name, sample_name=sample_id,
-                              engine_name=engine, level="ERROR", info_text=error_text)
+                                  engine_name=engine, level="ERROR", info_text=error_text)
             except OSError as e:
                 error_text = ('Permissions error when trying to update Charon '
                               'status for "{}": {}'.format(label, e))
                 LOG.error(error_text)
                 if not config.get('quiet'):
                     mail_analysis(project_name=project_name, sample_name=sample_id,
-                              engine_name=engine, level="ERROR", info_text=error_text)
+                                  engine_name=engine, level="ERROR", info_text=error_text)
         session.commit()
 
 
 
-def recurse_status_for_sample(project_obj, set_status, update_done=False):
+@with_ngi_config
+def recurse_status_for_sample(project_obj, set_status, update_done=False,
+                              extra_args=None,config=None, config_file_path=None):
     """Set seqruns under sample to have status "set_status"
     """
 
+    if not extra_args:
+        extra_args={}
     charon_session = CharonSession()
     project_id = project_obj.project_id
     for sample_obj in project_obj:
@@ -186,18 +199,21 @@ def recurse_status_for_sample(project_obj, set_status, update_done=False):
                                              sampleid=sample_id,
                                              libprepid=libprep_id,
                                              seqrunid=seqrun_id,
-                                             alignment_status=set_status)
+                                             alignment_status=set_status,
+                                             **extra_args)
             except CharonError as e:
                 error_text =('Could not update status of project/sample/libprep/seqrun '
                              '"{}" in Charon to "{}": {}'.format(label, set_status, e))
                 LOG.error(error_text)
                 if not config.get('quiet'):
                     mail_analysis(project_name=project_id, sample_name=sample_obj.name,
-                              level="ERROR", info_text=error_text)
+                                  level="ERROR", info_text=error_text)
 
 
 
-def update_coverage_for_sample_seqruns(project_id, sample_id, piper_qc_dir):
+@with_ngi_config
+def update_coverage_for_sample_seqruns(project_id, sample_id, piper_qc_dir,
+                                       config=None, config_file_path=None):
     """Find all the valid seqruns for a particular sample, parse their
     qualimap output files, and update Charon with the mean autosomal
     coverage for each.
@@ -290,7 +306,6 @@ def _parse_mean_coverage_from_qualimap(piper_qc_dir, sample_id, seqrun_id=None, 
         piper_qc_dir_base = "{}.{}.{}".format(sample_id.replace('_','-',1), (piper_run_id or "*"), sample_id.replace('_','-',1))
         piper_qc_path = "{}*/".format(os.path.join(piper_qc_dir, piper_qc_dir_base))
         piper_qc_dirs = glob.glob(piper_qc_path)
-        
         if not piper_qc_dirs: # Something went wrong in the alignment or we can't parse the file format
             raise OSError('Piper qc directories under "{}" are missing or in an unexpected format when updating stats to Charon.'.format(piper_qc_path))
     mean_autosomal_coverage = 0
@@ -305,8 +320,9 @@ def _parse_mean_coverage_from_qualimap(piper_qc_dir, sample_id, seqrun_id=None, 
     return mean_autosomal_coverage
 
 
+@with_ngi_config
 def record_process_sample(project, sample, workflow_subtask, analysis_module_name,
-                          process_id=None, slurm_job_id=None, config=None):
+                          process_id=None, slurm_job_id=None, config=None, config_file_path=None):
     LOG.info('Recording slurm job id "{}" for project "{}", sample "{}", '
              'workflow "{}"'.format(slurm_job_id, project, sample, workflow_subtask))
     with get_db_session() as session:
@@ -346,7 +362,7 @@ def record_process_sample(project, sample, workflow_subtask, analysis_module_nam
                                                            project.base_path,
                                                            sample.name,
                                                            workflow_subtask)
-        recurse_status_for_sample(project_obj, "RUNNING")
+        recurse_status_for_sample(project_obj, "RUNNING", extra_args={'mean_autosomal_coverage':0},config=config)
     except CharonError as e:
         error_text = ('Could not update Charon status for project/sample '
                       '{}/{} due to error: {}'.format(project, sample, e))
@@ -354,7 +370,7 @@ def record_process_sample(project, sample, workflow_subtask, analysis_module_nam
         LOG.error(error_text)
         if not config.get('quiet'):
             mail_analysis(project_name=project_id, sample_name=sample_id,
-                      engine_name='piper_ngi', level="ERROR", info_text=error_text)
+                          engine_name='piper_ngi', level="ERROR", info_text=error_text)
 
 def is_sample_analysis_running_local(workflow_subtask, project_id, sample_id):
     """Determine if a sample is currently being analyzed by accessing the local
@@ -391,7 +407,8 @@ def get_exit_code(workflow_name, project_base_path, project_name, project_id,
                 exit_code = int(exit_code)
             return exit_code
     except IOError as e:
-        if e.errno == 2:    # No such file or directory
-            return None     # Process is not yet complete
+        return None     # Process is not yet complete
     except ValueError as e:
         raise ValueError('Could not determine job exit status: not an integer ("{}")'.format(e))
+    else:
+        return None

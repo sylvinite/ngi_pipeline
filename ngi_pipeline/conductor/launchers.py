@@ -20,7 +20,15 @@ def get_engine_for_bp(project, config=None, config_file_path=None):
     :param NGIProject project: The project to get the engine from.
     """
     charon_session = CharonSession()
-    best_practice_analysis = charon_session.project_get(project.project_id)["best_practice_analysis"]
+    try:
+        best_practice_analysis = charon_session.project_get(project.project_id)["best_practice_analysis"]
+        if not best_practice_analysis:
+            raise KeyError("For once in my life ever can't you just fill in the forms properly")
+    except KeyError:
+        error_msg = ('No best practice analysis specified in Charon for '
+                     'project "{}". Using "whole_genome_reseq"'.format(project))
+        LOG.error(error_msg)
+        best_practice_analysis = "whole_genome_reseq"
     try:
         analysis_module = load_engine_module(best_practice_analysis, config)
     except RuntimeError as e:
@@ -77,7 +85,7 @@ def launch_analysis(projects_to_analyze, restart_failed_jobs=False,
             LOG.error('Skipping project "{}" because of error: {}'.format(project, e))
             continue
         try:
-            qc_analysis_module = load_engine_module("qc")
+            qc_analysis_module = load_engine_module("qc", config)
         except RuntimeError as e:
             LOG.error("Could not launch qc analysis: {}".format(e))
         for sample in project:

@@ -7,6 +7,7 @@ cluster (UPPMAX for NGI), or trigger analysis itself.
 from __future__ import print_function
 
 import argparse
+import inflect
 import os
 import sys
 
@@ -19,30 +20,39 @@ from ngi_pipeline.server import main as server_main
 from ngi_pipeline.utils.filesystem import recreate_project_from_filesystem
 
 LOG = minimal_logger("ngi_pipeline_start")
+inflector = inflect.engine()
 
-
-def validate_force_update():
-    return _validate_dangerous_user_thing("OVERWRITE EXISTING DATA in CHARON")
-
-def validate_delete_existing():
-    return _validate_dangerous_user_thing("DELETE EXISTING DATA in CHARON")
-
-def _validate_dangerous_user_thing(action="do SOMETHING that Mario thinks you should BE WARNED about"):
-    print("DANGER WILL ROBINSON you have told this script to {action}!! Do you in fact want do to this?!?".format(action=action), file=sys.stderr)
+def validate_dangerous_user_thing(action="do SOMETHING that Mario thinks you should BE WARNED about",
+                                  setting_name=None,
+                                  warning=None):
+    if warning:
+        print(warning, file=sys.stderr)
+    else:
+        print("WARNING: you have told this script to {action}! Are you sure??".format(action=action), file=sys.stderr)
     attempts = 0
-    while True:
+    return_value = False
+    while not return_value:
         if attempts < 3:
             attempts += 1
-            user_input = raw_input("Confirm overwrite by typing 'yes' or 'no' ({}): ".format(attempts)).lower()
+            user_input = raw_input("Confirm by typing 'yes' or 'no' ({}): ".format(attempts)).lower()
             if user_input not in ('yes', 'no'):
                 continue
             elif user_input == 'yes':
-                return True
+                return_value = True
             elif user_input == 'no':
-                return False
+                break
+    if return_value:
+        print("Confirmed!\n----", file=sys.stderr)
+        return True
+    else:
+        message = "No confirmation received; "
+        if setting_name:
+            message += "setting {} to False.".format(setting_name)
         else:
-            print("No confirmation received; setting force_update to False", file=sys.stderr)
-            return False
+            message += "not proceeding with action."
+        message += "\n----"
+        print(message, file=sys.stderr)
+        return False
 
 
 class ArgumentParserWithTheFlagsThatIWant(argparse.ArgumentParser):
@@ -70,19 +80,20 @@ if __name__ == "__main__":
 
     # Add subparser for the server
     parser_server = subparsers.add_parser('server', help="Start ngi_pipeline server")
-    parser_server.add_argument('-p', '--port', type=int, help="Port in where to run the application")
+    parser_server.add_argument('-p', '--port', type=int,
+            help="Port on which to listen for incoming connections")
 
 
     # Add subparser for organization
     parser_organize = subparsers.add_parser('organize',
-            help="Organize a flowcell into project/sample/libprep/seqrun format.")
+            help="Organize one or more demultiplexed flowcells into project/sample/libprep/seqrun format.")
     subparsers_organize = parser_organize.add_subparsers(help='Choose unit to analyze')
     # Add sub-subparser for flowcell organization
     organize_flowcell = subparsers_organize.add_parser('flowcell',
             formatter_class=argparse.ArgumentDefaultsHelpFormatter,
-            help='Organize a raw flowcell, populating Charon with relevant data.')
-    organize_flowcell.add_argument("organize_fc_dirs", nargs="*",
-            help=("The path to the Illumina demultiplexed fc directories to organize"))
+            help='Organize one or more demultiplexed flowcells, populating Charon with relevant data.')
+    organize_flowcell.add_argument("organize_fc_dirs", nargs="+",
+            help=("The paths to the Illumina demultiplexed fc directories to organize"))
     organize_flowcell.add_argument("-l", "--fallback-libprep",
             help=("If no libprep is supplied in the SampleSheet.csv or in Charon, "
                   "use this value when creating records in Charon. (Optional)"))
@@ -92,17 +103,17 @@ if __name__ == "__main__":
     organize_flowcell.add_argument("-w", "--sequencing-facility", default="NGI-S", choices=('NGI-S', 'NGI-U'),
             help="The facility where sequencing was performed.")
     organize_flowcell.add_argument("-b", "--best_practice_analysis", default="whole_genome_reseq",
-			help="The best practice analysis to run for this project.")
+            help="The best practice analysis to run for this project or projects.")
     organize_flowcell.add_argument("-f", "--force", dest="force_update", action="store_true",
-			help="Force updating Charon projects. Danger danger danger. This will overwrite things.")
+            help="Force updating Charon projects. Danger danger danger. This will overwrite things.")
     organize_flowcell.add_argument("-d", "--delete", dest="delete_existing", action="store_true",
-			help="Delete existing projects in Charon. Similarly dangerous.")
+            help="Delete existing projects in Charon. Similarly dangerous.")
     organize_flowcell.add_argument("--force-create-project", action="store_true",
-            help="TESTING ONLY: Create the project if it does not exist in Charon using the project name as the project id.")
+            help="TESTING ONLY: Create a project if it does not exist in Charon using the project name as the project id.")
     organize_flowcell.add_argument("-s", "--sample", dest="restrict_to_samples", action="append",
-			help="Restrict processing to these samples. Use flag multiple times for multiple samples.")
+            help="Restrict processing to these samples. Use flag multiple times for multiple samples.")
     organize_flowcell.add_argument("-p", "--project", dest="restrict_to_projects", action="append",
-			help="Restrict processing to these projects. Use flag multiple times for multiple projects.")
+            help="Restrict processing to these projects. Use flag multiple times for multiple projects.")
 
 
     # Add subparser for analysis
@@ -110,40 +121,67 @@ if __name__ == "__main__":
     subparsers_analyze = parser_analyze.add_subparsers(parser_class=ArgumentParserWithTheFlagsThatIWant,
             help='Choose unit to analyze')
     # Add sub-subparser for flowcell analysis
-    ### TODO change to work with multiple flowcells
-    analyze_flowcell = subparsers_analyze.add_parser('flowcell', help='Start analysis of raw flowcells')
-    analyze_flowcell.add_argument("analyze_fc_dir", action="store",
-            help=("The path to the Illumina demultiplexed fc directory "
-                  "to process and analyze."))
+    analyze_flowcell = subparsers_analyze.add_parser('flowcell',
+            help='Start analysis of raw flowcells')
+    analyze_flowcell.add_argument("analyze_fc_dirs", nargs="+",
+            help=("The path to one or more demultiplexed Illumina flowcell "
+                  "directories to process and analyze."))
     analyze_flowcell.add_argument("-p", "--project", dest="restrict_to_projects", action="append",
             help=("Restrict analysis to these projects. "
                   "Use flag multiple times for multiple projects."))
     # Add sub-subparser for project analysis
     ### TODO change to work with multiple projects
-    project_group = subparsers_analyze.add_parser('project', help='Start the analysis of a pre-parsed project.')
-    project_group.add_argument('analyze_project_dir', action='store', help='The path to the project folder to be analyzed.')
+    project_group = subparsers_analyze.add_parser('project',
+            help='Start the analysis of a pre-parsed project.')
+    project_group.add_argument('analyze_project_dir', action='store',
+            help='The path to the project folder to be analyzed.')
 
 
     args = parser.parse_args()
 
-    # The following option will be available only if the script has been called with the 'analyze' option
+    # These options are available only if the script has been called with the 'analyze' option
     if args.__dict__.get('restart_all_jobs'):
-        args.restart_failed_jobs = True
-        args.restart_finished_jobs = True
-        args.restart_running_jobs = True
+        if validate_dangerous_user_thing(action=("restart all FAILED, RUNNING, "
+                                                 "and FINISHED jobs, deleting "
+                                                 "previous analyses")):
+            args.restart_failed_jobs = True
+            args.restart_finished_jobs = True
+            args.restart_running_jobs = True
+    else:
+        if args.__dict__.get("restart_failed_jobs"):
+            args.restart_failed_jobs = \
+                validate_dangerous_user_thing(action=("restart FAILED jobs, deleting "
+                                                      "previous analysies files"))
+        if args.__dict__.get("restart_finished_jobs"):
+            args.restart_finished_jobs = \
+                validate_dangerous_user_thing(action=("restart FINISHED jobs, deleting "
+                                                      "previous analyseis files"))
+        if args.__dict__.get("restart_running_jobs"):
+            args.restart_finished_jobs = \
+                validate_dangerous_user_thing(action=("restart RUNNING jobs, deleting "
+                                                      "previous analysis files"))
+    # Charon-specific arguments ('organize' or 'analyze')
+    if args.__dict__.get("force_update"):
+        args.force_update = \
+                validate_dangerous_user_thing("overwrite existing data in Charon")
+    if args.__dict__.get("delete_existing"):
+        args.delete_existing = \
+                validate_dangerous_user_thing("delete existing data in Charon")
+
 
     # Finally execute corresponding functions
-    ### TODO change to work with multiple flowcells
-    if 'analyze_fc_dir' in args:
-        LOG.info("Starting flowcell analysis in directory {}".format(args.analyze_fc_dir))
-        flowcell.process_demultiplexed_flowcell(args.analyze_fc_dir,
-                                                args.restrict_to_projects,
-                                                args.restrict_to_samples,
-                                                args.restart_failed_jobs,
-                                                args.restart_finished_jobs,
-                                                args.restart_running_jobs,
-                                                quiet=args.quiet,
-                                                manual=True)
+    if 'analyze_fc_dirs' in args:
+        LOG.info('Starting flowcell analysis of flowcell {} '
+                 '{}'.format(inflector.plural("directory", len(args.analyze_fc_dirs)),
+                                            ", ".join(args.analyze_fc_dirs)))
+        flowcell.process_demultiplexed_flowcells(args.analyze_fc_dirs,
+                                                 args.restrict_to_projects,
+                                                 args.restrict_to_samples,
+                                                 args.restart_failed_jobs,
+                                                 args.restart_finished_jobs,
+                                                 args.restart_running_jobs,
+                                                 quiet=args.quiet,
+                                                 manual=True)
 
     ### TODO change to work with multiple projects
     elif 'analyze_project_dir' in args:
@@ -159,11 +197,12 @@ if __name__ == "__main__":
                                   manual=True)
 
     elif 'organize_fc_dirs' in args:
-        if args.force_update: args.force_update = validate_force_update()
-        if args.delete_existing: args.delete_existing = validate_delete_existing()
         if not args.restrict_to_projects: args.restrict_to_projects = []
         if not args.restrict_to_samples: args.restrict_to_samples = []
         organize_fc_dirs_set = set(args.organize_fc_dirs)
+        LOG.info("Organizing flowcell {} {}".format(inflector.plural("directory",
+                                                                     len(organize_fc_dirs_set)),
+                                                    ", ".join(organize_fc_dirs_set)))
         projects_to_analyze = dict()
         ## NOTE this bit of code not currently in use but could use later
         #if args.already_parsed: # Starting from Project/Sample/Libprep/Seqrun tree format
@@ -194,7 +233,6 @@ if __name__ == "__main__":
                                                        delete_existing=args.delete_existing)
                 except Exception as e:
                     print(e, file=sys.stderr)
-
 
     elif 'port' in args:
         LOG.info('Starting ngi_pipeline server at port {}'.format(args.port))

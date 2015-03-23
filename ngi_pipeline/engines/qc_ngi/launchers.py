@@ -19,53 +19,38 @@ def analyze(project, sample, config=None, config_file_path=None):
     """The main entry point for the qc pipeline."""
     LOG.info("Processing project/sample {}/{}".format(project, sample))
 
-    # Two paths diverged in a yellow wood
     project_analysis_path = os.path.join(project.base_path,
                                          "ANALYSIS",
                                          project.project_id,
                                          "qc_ngi")
-    # and sorry I could not travel both
     sample_analysis_path = os.path.join(project_analysis_path, sample.name)
-    # and be one traveler, long I stood
     log_dir_path = os.path.join(project_analysis_path, "logs")
-    # and looked down one as far as I could
     safe_makedir(sample_analysis_path)
-    # To where it bent in the undergrowth
     safe_makedir(log_dir_path)
-    # I need to go to sleep
 
     fastq_files_to_process = []
-    # I suppose I -should- have quoted the other one
     src_fastq_base = os.path.join(project.base_path, "DATA",
                                   project.project_id, sample.name)
-    # Whose woods these are I think I know
     for libprep in sample:
-        # His house is in the village though
         for seqrun in libprep:
-            # He will not see mt stopping here
             for fastq_file in seqrun:
-                # To watch
                 path_to_src_fastq = os.path.join(src_fastq_base,
                                                  libprep.name,
                                                  seqrun.name,
                                                  fastq_file)
-                # his woods
                 fastq_files_to_process.append(path_to_src_fastq)
-    # fill up
     paired_fastq_files = find_fastq_read_pairs(fastq_files_to_process).values()
-    # with snow
     qc_cl_list = return_cls_for_workflow("qc", paired_fastq_files, sample_analysis_path)
 
     sbatch_file_path = create_sbatch_file(qc_cl_list, project, sample, config)
     try:
-        slurm_job_id = queue_sbatch_file(sbatch_file_path) 
+        slurm_job_id = queue_sbatch_file(sbatch_file_path)
     except RuntimeError as e:
         LOG.error('Failed to queue qc sbatch file for project/sample '
                   '"{}"/"{}"!'.format(project, sample))
     else:
         LOG.info('Queued qc sbatch file for project/sample '
                  '"{}"/"{}": slurm job id {}'.format(project, sample, slurm_job_id))
-
 
 
 def queue_sbatch_file(sbatch_file_path):
@@ -101,7 +86,7 @@ def create_sbatch_file(cl_list, project, sample, config):
     log_dir_path = os.path.join(project_analysis_path, "logs")
     sbatch_dir_path = os.path.join(project_analysis_path, "sbatch")
     job_label = "{}-{}".format(project.project_id, sample)
-    sbatch_file_path = os.path.join(sbatch_dir_path, job_label)
+    sbatch_file_path = os.path.join(sbatch_dir_path, "{}.sbatch".format(job_label))
     safe_makedir(log_dir_path)
     safe_makedir(sbatch_dir_path)
     # sbatch parameters
@@ -113,7 +98,7 @@ def create_sbatch_file(cl_list, project, sample, config):
     slurm_queue = config.get("slurm", {}).get("queue") or "core"
     num_cores = config.get("slurm", {}).get("cores") or 16
     slurm_time = config.get("qc", {}).get("job_walltime", {}) or "1-00:00:00"
-    slurm_out_log = os.path.join(sbatch_dir_path, "{}_sbatch.out".format(job_label))
+    slurm_out_log = os.path.join(log_dir_path, "{}_sbatch.out".format(job_label))
     slurm_err_log = os.path.join(log_dir_path, "{}_sbatch.err".format(job_label))
     for log_file in slurm_out_log, slurm_err_log:
         rotate_file(log_file)
@@ -137,6 +122,8 @@ def create_sbatch_file(cl_list, project, sample, config):
     for command_line_sublist in cl_list:
         for command_line in command_line_sublist:
             sbatch_text_list.append(command_line)
+    sbatch_text_list.append("echo -ne '\\n\\nFinished execution at '")
+    sbatch_text_list.append("date")
     rotate_file(sbatch_file_path)
     LOG.info("Writing sbatch file to {}".format(sbatch_file_path))
     with open(sbatch_file_path, 'w') as f:

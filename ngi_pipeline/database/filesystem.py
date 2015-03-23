@@ -11,8 +11,9 @@ LOG = minimal_logger(__name__)
 def create_charon_entries_from_project(project, best_practice_analysis="whole_genome_reseq",
                                        sequencing_facility="NGI-S",
                                        force_overwrite=False, delete_existing=False):
-    """Given a project object, creates the relevant entries
-    in Charon.
+    """Given a project object, creates the relevant entries in Charon.
+    This code is remarkably shoddy as I created it in a hurry and then later
+    it became a part of the pipeline. Use at your own risk! Ha ha.
 
     :param NGIProject project: The NGIProject object
     :param str best_practice_analysis: The workflow to assign for this project (default "variant_calling")
