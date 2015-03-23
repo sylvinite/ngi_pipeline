@@ -133,9 +133,9 @@ if __name__ == "__main__":
                   "Use flag multiple times for multiple projects."))
     # Add sub-subparser for project analysis
     ### TODO change to work with multiple projects
-    project_group = subparsers_analyze.add_parser('project',
+    analyze_project = subparsers_analyze.add_parser('project',
             help='Start the analysis of a pre-parsed project.')
-    project_group.add_argument('analyze_project_dir', action='store',
+    analyze_project.add_argument('analyze_project_dir', action='store',
             help='The path to the project folder to be analyzed.')
 
     # Add subparser for qc
@@ -164,13 +164,15 @@ if __name__ == "__main__":
     qc_flowcell.add_argument("qc_flowcell_dirs", nargs="+",
             help=("The path to one or more demultiplexed Illumina flowcell "
                   "directories to process and run through QC analysis."))
+    # Add sub-subparser for project qc
+    ### TODO change to work with multiple projects
     qc_project = subparsers_qc.add_parser('project',
             help='Start QC analysis of a pre-parsed project directory.')
     qc_project.add_argument("-f", "--force-rerun", action="store_true",
             help='Force the rerun of the qc analysis if output files already exist.')
     qc_project.add_argument("-s", "--sample", dest="restrict_to_samples", action="append",
             help=("Restrict analysis to these samples. Use flag multiple times for multiple samples."))
-    qc_project.add_argument("qc_project_dirs", nargs="+",
+    qc_project.add_argument("qc_project_dir", action="store",
             help=("The path to one or more pre-parsed project directories to "
                   "run through QC analysis."))
 
@@ -258,8 +260,9 @@ if __name__ == "__main__":
             for sample in project:
                 qc_ngi.launchers.analyze(project, sample, quiet=args.quiet)
 
-    elif 'qc_project_dirs' in args:
-        project = recreate_project_from_filesystem(project_dir=args.analyze_project_dir,
+    ### TODO change to work with multiple projects
+    elif 'qc_project_dir' in args:
+        project = recreate_project_from_filesystem(project_dir=args.qc_project_dir,
                                                    restrict_to_samples=args.restrict_to_samples)
         if project and os.path.split(project.base_path)[1] == "DATA":
             project.base_path = os.path.split(project.base_path)[0]
