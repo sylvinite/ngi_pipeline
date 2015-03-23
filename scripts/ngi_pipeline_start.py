@@ -99,12 +99,9 @@ if __name__ == "__main__":
             help='Organize one or more demultiplexed flowcells, populating Charon with relevant data.')
     organize_flowcell.add_argument("organize_fc_dirs", nargs="+",
             help=("The paths to the Illumina demultiplexed fc directories to organize"))
-    organize_flowcell.add_argument("-l", "--fallback-libprep",
+    organize_flowcell.add_argument("-l", "--fallback-libprep", default=None,
             help=("If no libprep is supplied in the SampleSheet.csv or in Charon, "
                   "use this value when creating records in Charon. (Optional)"))
-    ## NOTE this bit of code not currently in use but could use later
-    #parser.add_argument("-a", "--already-parsed", action="store_true",
-	#		help="Set this flag if the input path is an already-parsed Project/Sample/Libprep/Seqrun tree, as opposed to a raw flowcell.")
     organize_flowcell.add_argument("-w", "--sequencing-facility", default="NGI-S", choices=('NGI-S', 'NGI-U'),
             help="The facility where sequencing was performed.")
     organize_flowcell.add_argument("-b", "--best_practice_analysis", default="whole_genome_reseq",
@@ -144,26 +141,27 @@ if __name__ == "__main__":
     # Add subparser for qc
     parser_qc = subparsers.add_parser('qc', help='Launch QC analysis.')
     subparsers_qc = parser_qc.add_subparsers(help='Choose unit to analyze')
+    # Add sub-subparser for flowcell qc
     qc_flowcell = subparsers_qc.add_parser('flowcell',
             help='Start QC analysis of raw flowcells.')
-    qc_flowcell.add_argument("-f", "--force-rerun", action="store_true",
+    qc_flowcell.add_argument("-r", "--rerun", action="store_true",
             help='Force the rerun of the qc analysis if output files already exist.')
-    organize_flowcell.add_argument("-l", "--fallback-libprep",
+    qc_flowcell.add_argument("-l", "--fallback-libprep", default=None,
             help=("If no libprep is supplied in the SampleSheet.csv or in Charon, "
                   "use this value when creating records in Charon. (Optional)"))
-    organize_flowcell.add_argument("-w", "--sequencing-facility", default="NGI-S", choices=('NGI-S', 'NGI-U'),
+    qc_flowcell.add_argument("-w", "--sequencing-facility", default="NGI-S", choices=('NGI-S', 'NGI-U'),
             help="The facility where sequencing was performed.")
-    organize_flowcell.add_argument("-b", "--best_practice_analysis", default="whole_genome_reseq",
+    qc_flowcell.add_argument("-b", "--best_practice_analysis", default="whole_genome_reseq",
             help="The best practice analysis to run for this project or projects.")
-    organize_flowcell.add_argument("-f", "--force", dest="force_update", action="store_true",
+    qc_flowcell.add_argument("-f", "--force", dest="force_update", action="store_true",
             help="Force updating Charon projects. Danger danger danger. This will overwrite things.")
-    organize_flowcell.add_argument("-d", "--delete", dest="delete_existing", action="store_true",
+    qc_flowcell.add_argument("-d", "--delete", dest="delete_existing", action="store_true",
             help="Delete existing projects in Charon. Similarly dangerous.")
     qc_flowcell.add_argument("-s", "--sample", dest="restrict_to_samples", action="append",
             help=("Restrict analysis to these samples. Use flag multiple times for multiple samples."))
     qc_flowcell.add_argument("-p", "--project", dest="restrict_to_projects", action="append",
             help="Restrict processing to these projects. Use flag multiple times for multiple projects.")
-    qc_flowcell.add_argument("qc_fc_dirs", nargs="+",
+    qc_flowcell.add_argument("qc_flowcell_dirs", nargs="+",
             help=("The path to one or more demultiplexed Illumina flowcell "
                   "directories to process and run through QC analysis."))
     qc_project = subparsers_qc.add_parser('project',
@@ -178,6 +176,7 @@ if __name__ == "__main__":
 
 
     args = parser.parse_args()
+
 
     # These options are available only if the script has been called with the 'analyze' option
     if args.__dict__.get('restart_all_jobs'):
@@ -200,7 +199,7 @@ if __name__ == "__main__":
             args.restart_finished_jobs = \
                 validate_dangerous_user_thing(action=("restart RUNNING jobs, deleting "
                                                       "previous analysis files"))
-    # Charon-specific arguments ('organize' or 'analyze')
+    # Charon-specific arguments ('organize', 'analyze', 'qc')
     if args.__dict__.get("force_update"):
         args.force_update = \
                 validate_dangerous_user_thing("overwrite existing data in Charon")
@@ -213,7 +212,7 @@ if __name__ == "__main__":
     if 'analyze_fc_dirs' in args:
         LOG.info('Starting flowcell analysis of flowcell {} '
                  '{}'.format(inflector.plural("directory", len(args.analyze_fc_dirs)),
-                                            ", ".join(args.analyze_fc_dirs)))
+                             ", ".join(args.analyze_fc_dirs)))
         flowcell.process_demultiplexed_flowcells(args.analyze_fc_dirs,
                                                  args.restrict_to_projects,
                                                  args.restrict_to_samples,
@@ -237,15 +236,16 @@ if __name__ == "__main__":
                                   manual=True)
 
     elif 'qc_flowcell_dirs' in args:
-        organize_fc_dirs_list = list(set(args.organize_fc_dirs))
+        qc_flowcell_dirs_list = list(set(args.qc_flowcell_dirs))
         LOG.info("Organizing flowcell {} {}".format(inflector.plural("directory",
-                                                                     len(organize_fc_dirs_list)),
-                                                    ", ".join(organize_fc_dirs_list)))
+                                                                     len(qc_flowcell_dirs_list)),
+                                                    ", ".join(qc_flowcell_dirs_list)))
         projects_to_analyze = \
-                organize_projects_from_flowcell(demux_fcid_dirs=organize_fc_dirs_list,
+                organize_projects_from_flowcell(demux_fcid_dirs=qc_flowcell_dirs_list,
                                                 restrict_to_projects=args.restrict_to_projects,
                                                 restrict_to_samples=args.restrict_to_samples,
-                                                quiet=args.quiet, manual=True)
+                                                fallback_libprep=args.fallback_libprep,
+                                                quiet=args.quiet)
         for project in projects_to_analyze:
             try:
                 create_charon_entries_from_project(project=project,
@@ -266,12 +266,12 @@ if __name__ == "__main__":
         LOG.info("Organizing flowcell {} {}".format(inflector.plural("directory",
                                                                      len(organize_fc_dirs_list)),
                                                     ", ".join(organize_fc_dirs_list)))
-        ## TODO fallback_libprep
         projects_to_analyze = \
                 organize_projects_from_flowcell(demux_fcid_dirs=organize_fc_dirs_list,
                                                 restrict_to_projects=args.restrict_to_projects,
                                                 restrict_to_samples=args.restrict_to_samples,
-                                                quiet=args.quiet, manual=True)
+                                                fallback_libprep=args.fallback_libprep,
+                                                quiet=args.quiet)
         for project in projects_to_analyze:
             try:
                 create_charon_entries_from_project(project=project,
