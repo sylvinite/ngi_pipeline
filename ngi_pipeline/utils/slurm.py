@@ -18,7 +18,8 @@ def kill_slurm_job_by_id(slurm_job_id):
     """
     LOG.info("Attempting to kill slurm job id {}".format(slurm_job_id))
     try:
-        subprocess.check_call('scancel {}'.format(slurm_job_id))
+        subprocess.check_call(shlex.split('scancel {}'.format(slurm_job_id)))
+        LOG.info('slurm job id "{}" killed.'.format(slurm_job_id))
         return True
     except (OSError, subprocess.CalledProcessError) as e:
         raise RuntimeError('Could not kill job "{}": {}"'.format(slurm_job_id, e))
