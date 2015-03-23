@@ -84,7 +84,6 @@ def workflow_fastqc(input_files, output_dir, config):
     # Verify that we in fact need to run this on these files
     fastqc_output_file_tmpls = ("{}_fastqc.zip", "{}_fastqc.html")
     fastq_to_analyze = set()
-    output_base = os.path.join(output_dir, "fastqc")
     for fastq_file in fastq_files:
         # Get the basename withot extensions (.fastq, .fastq.gz)
         m = re.match(r'([\w-]+).fastq', os.path.basename(fastq_file))
@@ -96,7 +95,7 @@ def workflow_fastqc(input_files, output_dir, config):
             fastq_file_base = m.groups()[0]
         for fastqc_output_file_tmpl in fastqc_output_file_tmpls:
             fastqc_output_file = \
-                    os.path.join(output_base, fastqc_output_file_tmpl.format(fastq_file_base))
+                    os.path.join(output_dir, fastqc_output_file_tmpl.format(fastq_file_base))
             if not os.path.exists(fastqc_output_file):
                 # Output file doesn't exist
                 fastq_to_analyze.add(fastq_file)
@@ -105,10 +104,10 @@ def workflow_fastqc(input_files, output_dir, config):
                 fastq_to_analyze.add(fastq_file)
 
     num_threads = config.get("qc", {}).get("fastqc", {}).get("threads") or 1
-    safe_makedir(output_dir)
     # Construct the command lines
     cl_list = []
     if fastq_to_analyze:
+        safe_makedir(output_dir)
         # Module loading
         modules_to_load = get_all_modules_for_workflow("fastqc", config)
         for module in modules_to_load:
@@ -202,6 +201,7 @@ def workflow_fastq_screen(input_files, output_dir, config):
             continue
         cl_list.append(cl)
     if cl_list:
+        safe_makedir(output_dir)
         # Module loading
         modules_to_load = get_all_modules_for_workflow("fastq_screen", config)
         mod_list = [ "module load {}".format(module) for module in modules_to_load ]

@@ -82,12 +82,12 @@ def create_charon_entries_from_project(project, best_practice_analysis="whole_ge
                 LOG.warn('Deleting existing libprep "{}"'.format(libprep))
                 try:
                     charon_session.libprep_delete(projectid=project.project_id,
-                                                 sampleid=sample.name,
-                                                 libprepid=libprep.name)
+                                                  sampleid=sample.name,
+                                                  libprepid=libprep.name)
                 except CharonError as e:
                     LOG.warn('Could not delete libprep "{}": {}'.format(libprep, e))
             try:
-                qc= "PASSED"
+                qc = "PASSED"
                 LOG.info('Creating libprep "{}" with qc status "{}"'.format(libprep, qc))
                 charon_session.libprep_create(projectid=project.project_id,
                                               sampleid=sample.name,
@@ -108,7 +108,7 @@ def create_charon_entries_from_project(project, best_practice_analysis="whole_ge
                         LOG.info(('Project/sample/libprep "{}/{}/{}" updated in '
                                   'Charon').format(project, sample, libprep))
                     else:
-                        LOG.info(e)
+                        LOG.debug(e)
                         LOG.info('Project "{}" / sample "{}" / libprep "{}" already '
                                  'exists; moving to libpreps'.format(project, sample, libprep))
                 else:

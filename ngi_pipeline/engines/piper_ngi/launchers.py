@@ -55,15 +55,16 @@ def analyze(project, sample, exec_mode="sbatch", restart_finished_jobs=False,
         raise RuntimeError('Aborting processing of project/sample "{}/{}": '
                                '{}'.format(project, sample, e))
     if exec_mode.lower() not in ("sbatch", "local"):
-        raise ValueError(('"exec_mode" param must be one of "sbatch" or "local" ')
-                         ('value was "{}"'.format(exec_mode)))
+        raise ValueError('"exec_mode" param must be one of "sbatch" or "local" '
+                         'value was "{}"'.format(exec_mode))
     modules_to_load = ["java/sun_jdk1.7.0_25", "R/2.15.0"]
     load_modules(modules_to_load)
     LOG.info('Sample "{}" in project "{}" is ready for processing.'.format(sample, project))
     for workflow_subtask in workflows.get_subtasks_for_level(level="sample"):
-        if not is_sample_analysis_running_local(workflow_subtask=workflow_subtask,
-                                                project_id=project.project_id,
-                                                sample_id=sample.name):
+        if (not is_sample_analysis_running_local(workflow_subtask=workflow_subtask,
+                                                 project_id=project.project_id,
+                                                 sample_id=sample.name)) or \
+           restart_running_jobs:
             try:
                 log_file_path = create_log_file_path(workflow_subtask=workflow_subtask,
                                                      project_base_path=project.base_path,
@@ -119,9 +120,7 @@ def analyze(project, sample, exec_mode="sbatch", restart_finished_jobs=False,
                                           process_id=process_id,
                                           workflow_subtask=workflow_subtask)
                 except RuntimeError as e:
-                    LOG.error('Could not record process for project/sample '
-                              '{}/{}, workflow {}'.format(project, sample,
-                                                          workflow_subtask))
+                    LOG.error(e)
                     ## Question: should we just kill the run in this case or let it go?
                     continue
             except (NotImplementedError, RuntimeError, ValueError) as e:

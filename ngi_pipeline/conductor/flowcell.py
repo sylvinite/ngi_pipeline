@@ -73,8 +73,47 @@ def process_demultiplexed_flowcells(demux_fcid_dirs, restrict_to_projects=None,
                                      restricted to these. Optional.
     :param bool restart_failed_jobs: Restart jobs marked as "FAILED" in Charon.
     :param bool restart_finished_jobs: Restart jobs marked as "DONE" in Charon.
+    :param bool quiet: Don't send notification emails; added to config
+    :param bool manual: This is being run from a user script; added to config
     :param dict config: The parsed NGI configuration file; optional.
     :param str config_file_path: The path to the NGI configuration file; optional.
+    """
+    if not restrict_to_projects: restrict_to_projects = []
+    if not restrict_to_samples: restrict_to_samples = []
+    projects_to_analyze = organize_projects_from_flowcell(demux_fcid_dirs=demux_fcid_dirs,
+                                                          restrict_to_projects=restrict_to_projects,
+                                                          restrict_to_samples=restrict_to_samples,
+                                                          quiet=quiet, config=config)
+    for project in projects_to_analyze:
+        if UPPSALA_PROJECT_RE.match(project.project_id):
+            LOG.info('Creating Charon records for Uppsala project "{}" if they '
+                     'are missing'.format(project))
+            create_charon_entries_from_project(project, sequencing_facility="NGI-U")
+    launch_analysis(projects_to_analyze, restart_failed_jobs, restart_finished_jobs,
+                    restart_running_jobs, config=config)
+
+
+@with_ngi_config
+def organize_projects_from_flowcell(demux_fcid_dirs, restrict_to_projects=None,
+                                    restrict_to_samples=None,
+                                    fallback_libprep=None, quiet=False,
+                                    config=None, config_file_path=None):
+    """Sort demultiplexed Illumina flowcells into projects and return a list of them,
+    creating the project/sample/libprep/seqrun dir tree on disk via symlinks.
+
+    :param list demux_fcid_dirs: The CASAVA-produced demux directory/directories.
+    :param list restrict_to_projects: A list of projects; analysis will be
+                                      restricted to these. Optional.
+    :param list restrict_to_samples: A list of samples; analysis will be
+                                     restricted to these. Optional.
+    :param str fallback_libprep: If libprep cannot be determined, use this value if supplied (default None)
+    :param bool quiet: Don't send notification emails
+    :param dict config: The parsed NGI configuration file; optional.
+    :param str config_file_path: The path to the NGI configuration file; optional.
+
+    :returns: A list of NGIProject objects.
+    :rtype: list
+    :raises RuntimeError: If no (valid) projects are found in the flowcell dirs
     """
     if not restrict_to_projects: restrict_to_projects = []
     if not restrict_to_samples: restrict_to_samples = []
@@ -107,13 +146,15 @@ def process_demultiplexed_flowcells(demux_fcid_dirs, restrict_to_projects=None,
         else:
             demux_fcid_dir = os.path.abspath(demux_fcid_dir)
         # These will be a bunch of Project objects each containing Samples, FCIDs, lists of fastq files
-        projects_to_analyze = setup_analysis_directory_structure(demux_fcid_dir,
-                                                                 projects_to_analyze,
-                                                                 restrict_to_projects,
-                                                                 restrict_to_samples,
-                                                                 create_files=True,
-                                                                 config=config,
-                                                                 quiet=quiet)
+        projects_to_analyze = \
+                setup_analysis_directory_structure(fc_dir=demux_fcid_dir,
+                                                   projects_to_analyze=projects_to_analyze,
+                                                   restrict_to_projects=restrict_to_projects,
+                                                   restrict_to_samples=restrict_to_samples,
+                                                   create_files=True,
+                                                   fallback_libprep=fallback_libprep,
+                                                   config=config,
+                                                   quiet=quiet)
     if not projects_to_analyze:
         if restrict_to_projects:
             error_message = ("No projects found to process: the specified flowcells "
@@ -129,13 +170,7 @@ def process_demultiplexed_flowcells(demux_fcid_dirs, restrict_to_projects=None,
         raise RuntimeError(error_message)
     else:
         projects_to_analyze = projects_to_analyze.values()
-    for project in projects_to_analyze:
-        if UPPSALA_PROJECT_RE.match(project.project_id):
-            LOG.info('Creating Charon records for Uppsala project "{}" if they '
-                     'are missing'.format(project))
-            create_charon_entries_from_project(project, sequencing_facility="NGI-U")
-    launch_analysis(projects_to_analyze, restart_failed_jobs, restart_finished_jobs,
-                    restart_running_jobs, config=config)
+    return projects_to_analyze
 
 
 @with_ngi_config
@@ -261,6 +296,7 @@ def setup_analysis_directory_structure(fc_dir, projects_to_analyze,
                     try:
                         # Requires Charon access
                         libprep_name = determine_library_prep_from_fcid(project_id, sample_name, fc_full_id)
+                        LOG.info('Found libprep name "{}" in Charon'.format(libprep_name))
                     except ValueError:
                         charon_session = CharonSession()
                         libpreps = charon_session.sample_get_libpreps(project_id, sample_name).get('libpreps')

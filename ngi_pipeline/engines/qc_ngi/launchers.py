@@ -6,7 +6,7 @@ import re
 import subprocess
 
 from ngi_pipeline.engines.qc_ngi.workflows import return_cls_for_workflow
-from ngi_pipeline.log.loggers import log_process_non_blocking, minimal_logger
+from ngi_pipeline.log.loggers import minimal_logger
 from ngi_pipeline.utils.classes import with_ngi_config
 from ngi_pipeline.utils.filesystem import execute_command_line, rotate_file, safe_makedir
 from ngi_pipeline.utils.parsers import find_fastq_read_pairs
@@ -15,9 +15,11 @@ LOG = minimal_logger(__name__)
 
 
 @with_ngi_config
-def analyze(project, sample, config=None, config_file_path=None):
+def analyze(project, sample, quiet=False, config=None, config_file_path=None):
     """The main entry point for the qc pipeline."""
-    LOG.info("Processing project/sample {}/{}".format(project, sample))
+    ## TODO implement "quiet" feature
+    ## TODO implement mailing on failure
+    LOG.info("Launching qc analysis for project/sample {}/{}".format(project, sample))
 
     project_analysis_path = os.path.join(project.base_path,
                                          "ANALYSIS",
@@ -51,6 +53,17 @@ def analyze(project, sample, config=None, config_file_path=None):
     else:
         LOG.info('Queued qc sbatch file for project/sample '
                  '"{}"/"{}": slurm job id {}'.format(project, sample, slurm_job_id))
+        slurm_jobid_file = os.path.join(log_dir_path,
+                                        "{}-{}.slurmjobid".format(project.project_id,
+                                                                  sample))
+        LOG.info('Writing slurm job id "{}" to file "{}"'.format(slurm_job_id,
+                                                                 slurm_jobid_file))
+        try:
+            with open(slurm_jobid_file, 'w') as f:
+                f.write("{}\n".format(slurm_job_id))
+        except IOError as e:
+            LOG.warn('Could not write slurm job id for project/sample '
+                     '{}/{} to file "{}" ({}). So... yup. Good luck bro!'.format(e))
 
 
 def queue_sbatch_file(sbatch_file_path):
