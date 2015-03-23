@@ -348,8 +348,12 @@ def record_process_sample(project, sample, workflow_subtask, analysis_module_nam
             else:
                 raise RuntimeError("Could not write to database after three attempts (locked?)")
         except (IntegrityError, RuntimeError) as e:
-            raise RuntimeError('Could not record slurm job id "{}" for project "{}", sample "{}", '
-                               'workflow "{}": {}'.format(slurm_job_id, project, sample, workflow_subtask, e))
+            raise RuntimeError('Could not record slurm job id "{}" for project "{}", '
+                               'sample "{}", workflow "{}": {}'.format(slurm_job_id,
+                                                                       project,
+                                                                       sample,
+                                                                       workflow_subtask,
+                                                                       e.message))
     try:
         set_status = "UNDER_ANALYSIS"
         LOG.info(('Updating Charon status for project/sample '

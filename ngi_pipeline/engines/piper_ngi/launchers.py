@@ -120,9 +120,7 @@ def analyze(project, sample, exec_mode="sbatch", restart_finished_jobs=False,
                                           process_id=process_id,
                                           workflow_subtask=workflow_subtask)
                 except RuntimeError as e:
-                    LOG.error('Could not record process for project/sample '
-                              '{}/{}, workflow {}'.format(project, sample,
-                                                          workflow_subtask))
+                    LOG.error(e)
                     ## Question: should we just kill the run in this case or let it go?
                     continue
             except (NotImplementedError, RuntimeError, ValueError) as e:
