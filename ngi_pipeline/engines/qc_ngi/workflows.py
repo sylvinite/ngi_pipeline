@@ -84,7 +84,6 @@ def workflow_fastqc(input_files, output_dir, config):
     # Verify that we in fact need to run this on these files
     fastqc_output_file_tmpls = ("{}_fastqc.zip", "{}_fastqc.html")
     fastq_to_analyze = set()
-    output_base = os.path.join(output_dir, "fastqc")
     for fastq_file in fastq_files:
         # Get the basename withot extensions (.fastq, .fastq.gz)
         m = re.match(r'([\w-]+).fastq', os.path.basename(fastq_file))
@@ -96,7 +95,7 @@ def workflow_fastqc(input_files, output_dir, config):
             fastq_file_base = m.groups()[0]
         for fastqc_output_file_tmpl in fastqc_output_file_tmpls:
             fastqc_output_file = \
-                    os.path.join(output_base, fastqc_output_file_tmpl.format(fastq_file_base))
+                    os.path.join(output_dir, fastqc_output_file_tmpl.format(fastq_file_base))
             if not os.path.exists(fastqc_output_file):
                 # Output file doesn't exist
                 fastq_to_analyze.add(fastq_file)
