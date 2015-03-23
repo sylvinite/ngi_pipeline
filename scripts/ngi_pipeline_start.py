@@ -266,6 +266,9 @@ if __name__ == "__main__":
                                                    restrict_to_samples=args.restrict_to_samples)
         if project and os.path.split(project.base_path)[1] == "DATA":
             project.base_path = os.path.split(project.base_path)[0]
+        if not project.samples:
+            LOG.info('No samples found for project {} (path {})'.format(project.project_id,
+                                                                        args.qc_project_dir))
         for sample in project:
             qc_ngi.launchers.analyze(project, sample, quiet=args.quiet)
 
