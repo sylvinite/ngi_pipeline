@@ -53,9 +53,9 @@ def launch_analysis(projects_to_analyze, restart_failed_jobs=False,
                 LOG.info('Attempting to launch sample QC analysis '
                          'for project "{}" / sample "{}" / engine '
                          '"{}"'.format(project, sample, qc_analysis_module.__name__))
-                qc_analysis_module .analyze(project=project,
-                                            sample=sample,
-                                            config=config)
+                qc_analysis_module.analyze(project=project,
+                                           sample=sample,
+                                           config=config)
             except Exception as e:
                 error_text = ('Cannot process project "{}" / sample "{}" / '
                               'engine "{}" : {}'.format(project, sample,
