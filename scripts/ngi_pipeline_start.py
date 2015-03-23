@@ -80,8 +80,8 @@ if __name__ == "__main__":
 
     parser = argparse.ArgumentParser(description="Launch NGI pipeline")
     subparsers = parser.add_subparsers(help="Choose the mode to run")
-    parser.add_argument("-q", "--quiet", dest="quiet", action="store_true",
-            help=("No mail will be sent (INFO/WARN/ERROR)."))
+    parser.add_argument("-v", "--verbose", dest="quiet", action="store_false",
+            help=("Send mails (INFO/WARN/ERROR); default False."))
 
     # Add subparser for the server
     parser_server = subparsers.add_parser('server', help="Start ngi_pipeline server")
@@ -174,9 +174,7 @@ if __name__ == "__main__":
             help=("The path to one or more pre-parsed project directories to "
                   "run through QC analysis."))
 
-
     args = parser.parse_args()
-
 
     # These options are available only if the script has been called with the 'analyze' option
     if args.__dict__.get('restart_all_jobs'):
