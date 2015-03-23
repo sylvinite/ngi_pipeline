@@ -105,10 +105,10 @@ def workflow_fastqc(input_files, output_dir, config):
                 fastq_to_analyze.add(fastq_file)
 
     num_threads = config.get("qc", {}).get("fastqc", {}).get("threads") or 1
-    safe_makedir(output_dir)
     # Construct the command lines
     cl_list = []
     if fastq_to_analyze:
+        safe_makedir(output_dir)
         # Module loading
         modules_to_load = get_all_modules_for_workflow("fastqc", config)
         for module in modules_to_load:
