@@ -13,8 +13,10 @@ import sys
 
 from ngi_pipeline.conductor import flowcell
 from ngi_pipeline.conductor import launchers
-from ngi_pipeline.conductor.flowcell import setup_analysis_directory_structure
+from ngi_pipeline.conductor.flowcell import organize_projects_from_flowcell, \
+                                            setup_analysis_directory_structure
 from ngi_pipeline.database.filesystem import create_charon_entries_from_project
+from ngi_pipeline.engines import qc_ngi
 from ngi_pipeline.log.loggers import minimal_logger
 from ngi_pipeline.server import main as server_main
 from ngi_pipeline.utils.filesystem import recreate_project_from_filesystem
@@ -22,19 +24,22 @@ from ngi_pipeline.utils.filesystem import recreate_project_from_filesystem
 LOG = minimal_logger("ngi_pipeline_start")
 inflector = inflect.engine()
 
-def validate_dangerous_user_thing(action="do SOMETHING that Mario thinks you should BE WARNED about",
+def validate_dangerous_user_thing(action=("do SOMETHING that Mario thinks you "
+                                          "should BE WARNED about"),
                                   setting_name=None,
                                   warning=None):
     if warning:
         print(warning, file=sys.stderr)
     else:
-        print("WARNING: you have told this script to {action}! Are you sure??".format(action=action), file=sys.stderr)
+        print("WARNING: you have told this script to {action}! "
+              "Are you sure??".format(action=action), file=sys.stderr)
     attempts = 0
     return_value = False
     while not return_value:
         if attempts < 3:
             attempts += 1
-            user_input = raw_input("Confirm by typing 'yes' or 'no' ({}): ".format(attempts)).lower()
+            user_input = raw_input("Confirm by typing 'yes' or 'no' "
+                                   "({}): ".format(attempts)).lower()
             if user_input not in ('yes', 'no'):
                 continue
             elif user_input == 'yes':
@@ -67,7 +72,7 @@ class ArgumentParserWithTheFlagsThatIWant(argparse.ArgumentParser):
                 help=("Restart jobs marked as UNDER_ANALYSIS in Charon. Use with care."))
         self.add_argument("-a", "--restart-all", dest="restart_all_jobs", action="store_true",
                 help=("Just start any kind of job you can get your hands on regardless of status."))
-        self.add_argument("-s", "--sample", dest= "restrict_to_samples", action="append",
+        self.add_argument("-s", "--sample", dest="restrict_to_samples", action="append",
                 help=("Restrict analysis to these samples. "
                       "Use flag multiple times for multiple samples."))
 
@@ -76,7 +81,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Launch NGI pipeline")
     subparsers = parser.add_subparsers(help="Choose the mode to run")
     parser.add_argument("-q", "--quiet", dest="quiet", action="store_true",
-            help=("No mails will be sent. "))
+            help=("No mail will be sent (INFO/WARN/ERROR)."))
 
     # Add subparser for the server
     parser_server = subparsers.add_parser('server', help="Start ngi_pipeline server")
@@ -135,6 +140,41 @@ if __name__ == "__main__":
             help='Start the analysis of a pre-parsed project.')
     project_group.add_argument('analyze_project_dir', action='store',
             help='The path to the project folder to be analyzed.')
+
+    # Add subparser for qc
+    parser_qc = subparsers.add_parser('qc', help='Launch QC analysis.')
+    subparsers_qc = parser_qc.add_subparsers(help='Choose unit to analyze')
+    qc_flowcell = subparsers_qc.add_parser('flowcell',
+            help='Start QC analysis of raw flowcells.')
+    qc_flowcell.add_argument("-f", "--force-rerun", action="store_true",
+            help='Force the rerun of the qc analysis if output files already exist.')
+    organize_flowcell.add_argument("-l", "--fallback-libprep",
+            help=("If no libprep is supplied in the SampleSheet.csv or in Charon, "
+                  "use this value when creating records in Charon. (Optional)"))
+    organize_flowcell.add_argument("-w", "--sequencing-facility", default="NGI-S", choices=('NGI-S', 'NGI-U'),
+            help="The facility where sequencing was performed.")
+    organize_flowcell.add_argument("-b", "--best_practice_analysis", default="whole_genome_reseq",
+            help="The best practice analysis to run for this project or projects.")
+    organize_flowcell.add_argument("-f", "--force", dest="force_update", action="store_true",
+            help="Force updating Charon projects. Danger danger danger. This will overwrite things.")
+    organize_flowcell.add_argument("-d", "--delete", dest="delete_existing", action="store_true",
+            help="Delete existing projects in Charon. Similarly dangerous.")
+    qc_flowcell.add_argument("-s", "--sample", dest="restrict_to_samples", action="append",
+            help=("Restrict analysis to these samples. Use flag multiple times for multiple samples."))
+    qc_flowcell.add_argument("-p", "--project", dest="restrict_to_projects", action="append",
+            help="Restrict processing to these projects. Use flag multiple times for multiple projects.")
+    qc_flowcell.add_argument("qc_fc_dirs", nargs="+",
+            help=("The path to one or more demultiplexed Illumina flowcell "
+                  "directories to process and run through QC analysis."))
+    qc_project = subparsers_qc.add_parser('project',
+            help='Start QC analysis of a pre-parsed project directory.')
+    qc_project.add_argument("-f", "--force-rerun", action="store_true",
+            help='Force the rerun of the qc analysis if output files already exist.')
+    qc_project.add_argument("-s", "--sample", dest="restrict_to_samples", action="append",
+            help=("Restrict analysis to these samples. Use flag multiple times for multiple samples."))
+    qc_project.add_argument("qc_project_dirs", nargs="+",
+            help=("The path to one or more pre-parsed project directories to "
+                  "run through QC analysis."))
 
 
     args = parser.parse_args()
@@ -196,43 +236,52 @@ if __name__ == "__main__":
                                   quiet=args.quiet,
                                   manual=True)
 
-    elif 'organize_fc_dirs' in args:
-        if not args.restrict_to_projects: args.restrict_to_projects = []
-        if not args.restrict_to_samples: args.restrict_to_samples = []
-        organize_fc_dirs_set = set(args.organize_fc_dirs)
+    elif 'qc_flowcell_dirs' in args:
+        organize_fc_dirs_list = list(set(args.organize_fc_dirs))
         LOG.info("Organizing flowcell {} {}".format(inflector.plural("directory",
-                                                                     len(organize_fc_dirs_set)),
-                                                    ", ".join(organize_fc_dirs_set)))
-        projects_to_analyze = dict()
-        ## NOTE this bit of code not currently in use but could use later
-        #if args.already_parsed: # Starting from Project/Sample/Libprep/Seqrun tree format
-        #    for organize_fc_dir in organize_fc_dirs_set:
-        #        p = recreate_project_from_filesystem(organize_fc_dir,
-        #                                             force_create_project=args.force_create_project)
-        #        projects_to_analyze[p.name] = p
-        #else: # Raw illumina flowcell
-        for organize_fc_dir in organize_fc_dirs_set:
-            projects_to_analyze = setup_analysis_directory_structure(fc_dir=organize_fc_dir,
-                                                                     projects_to_analyze=projects_to_analyze,
-                                                                     restrict_to_projects=args.restrict_to_projects,
-                                                                     restrict_to_samples=args.restrict_to_samples,
-                                                                     fallback_libprep=args.fallback_libprep,
-                                                                     quiet=args.quiet)
-        if not projects_to_analyze:
-            raise ValueError('No projects found to process in flowcells '
-                             '"{}" or there was an error gathering required '
-                             'information.'.format(",".join(organize_fc_dirs_set)))
-        else:
-            projects_to_analyze = projects_to_analyze.values()
-            for project in projects_to_analyze:
-                try:
-                    create_charon_entries_from_project(project,
-                                                       best_practice_analysis=args.best_practice_analysis,
-                                                       sequencing_facility=args.sequencing_facility,
-                                                       force_overwrite=args.force_update,
-                                                       delete_existing=args.delete_existing)
-                except Exception as e:
-                    print(e, file=sys.stderr)
+                                                                     len(organize_fc_dirs_list)),
+                                                    ", ".join(organize_fc_dirs_list)))
+        projects_to_analyze = \
+                organize_projects_from_flowcell(demux_fcid_dirs=organize_fc_dirs_list,
+                                                restrict_to_projects=args.restrict_to_projects,
+                                                restrict_to_samples=args.restrict_to_samples,
+                                                quiet=args.quiet, manual=True)
+        for project in projects_to_analyze:
+            try:
+                create_charon_entries_from_project(project=project,
+                                                   best_practice_analysis=args.best_practice_analysis,
+                                                   sequencing_facility=args.sequencing_facility,
+                                                   force_overwrite=args.force_update,
+                                                   delete_existing=args.delete_existing)
+            except Exception as e:
+                print(e, file=sys.stderr)
+        LOG.info("Done with organization.")
+        for project in projects_to_analyze:
+            for sample in project:
+                qc_ngi.launchers.analyze(project, sample, quiet=args.quiet)
+    elif 'qc_project_dirs' in args:
+        raise NotImplementedError()
+    elif 'organize_fc_dirs' in args:
+        organize_fc_dirs_list = list(set(args.organize_fc_dirs))
+        LOG.info("Organizing flowcell {} {}".format(inflector.plural("directory",
+                                                                     len(organize_fc_dirs_list)),
+                                                    ", ".join(organize_fc_dirs_list)))
+        ## TODO fallback_libprep
+        projects_to_analyze = \
+                organize_projects_from_flowcell(demux_fcid_dirs=organize_fc_dirs_list,
+                                                restrict_to_projects=args.restrict_to_projects,
+                                                restrict_to_samples=args.restrict_to_samples,
+                                                quiet=args.quiet, manual=True)
+        for project in projects_to_analyze:
+            try:
+                create_charon_entries_from_project(project=project,
+                                                   best_practice_analysis=args.best_practice_analysis,
+                                                   sequencing_facility=args.sequencing_facility,
+                                                   force_overwrite=args.force_update,
+                                                   delete_existing=args.delete_existing)
+            except Exception as e:
+                print(e, file=sys.stderr)
+        LOG.info("Done with organization.")
 
     elif 'port' in args:
         LOG.info('Starting ngi_pipeline server at port {}'.format(args.port))
