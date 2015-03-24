@@ -26,9 +26,11 @@ from ngi_pipeline.utils.classes import with_ngi_config
 LOG = minimal_logger(__name__)
 
 @with_ngi_config
-def update_charon_with_local_jobs_status(config=None, config_file_path=None):
+def update_charon_with_local_jobs_status(quiet=False, config=None, config_file_path=None):
     """Check the status of all locally-tracked jobs and update Charon accordingly.
     """
+    if quiet and not config.get("quiet"):
+        config['quiet'] = True
     LOG.info("Updating Charon with the status of all locally-tracked jobs...")
     with get_db_session() as session:
         charon_session = CharonSession()
