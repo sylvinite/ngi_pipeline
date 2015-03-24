@@ -11,6 +11,7 @@ import sys
 import tempfile
 import time
 
+from ngi_pipeline.conductor.flowcell import organize_projects_from_flowcell
 from ngi_pipeline.database.classes import CharonSession, CharonError
 from ngi_pipeline.engines.piper_ngi.local_process_tracking import update_charon_with_local_jobs_status
 from ngi_pipeline.utils.classes import with_ngi_config
@@ -67,6 +68,7 @@ def project_summarize(projects, brief=False, verbose=False):
         samples_by_status = collections.defaultdict(set)
         libpreps_by_status = collections.defaultdict(set)
         seqruns_by_status = collections.defaultdict(set)
+        ## TODO redo this so it separate by project
         for project_dict in projects_list:
             projects_by_status[project_dict['status']].add("{} / {}".format(project_dict['name'], project_dict['id']))
             for sample_dict in project_dict.get('samples', []):
@@ -132,12 +134,10 @@ def project_summarize(projects, brief=False, verbose=False):
 
 
 def flowcell_summarize(flowcells, brief=False, verbose=False):
-    for flowcell in flowcells:
-        try:
-            flowcell_dir = locate_flowcell(flowcell)
-        except ValueError as e:
-            print_stderr('Could not locate flowcell "{}"; skipping ({})'.format(flowcell, e), file=sys.stderr)
-        # Get the projects from the flowcell dir and pass them to project_summarize
+    projects_to_analyze = \
+            organize_projects_from_flowcell(demux_fcid_dirs=flowcells,
+                                            quiet=True, create_files=False)
+    project_summarize(projects_to_analyze, brief=brief, verbose=verbose)
 
 
 if __name__=="__main__":
