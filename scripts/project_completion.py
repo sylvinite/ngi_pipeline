@@ -4,10 +4,9 @@
 from __future__ import print_function
 
 import argparse
+import collections
 import functools
 import os
-import pprint
-import subprocess
 import sys
 import tempfile
 import time
@@ -19,7 +18,7 @@ from ngi_pipeline.utils.filesystem import locate_flowcell, locate_project
 
 print_stderr = functools.partial(print, file=sys.stderr)
 
-def project_summarize(projects, verbose=False):
+def project_summarize(projects, brief=False, verbose=False):
     update_charon_with_local_jobs_status(quiet=True) # Don't send mails
     charon_session = CharonSession()
     projects_list = []
@@ -62,15 +61,48 @@ def project_summarize(projects, verbose=False):
                     seqruns_list.append(seqrun_dict)
         projects_list.append(project_dict)
 
-    if verbose:
+
+    if not verbose:
+        projects_by_status = collections.defaultdict(set)
+        samples_by_status = collections.defaultdict(set)
+        libpreps_by_status = collections.defaultdict(set)
+        seqruns_by_status = collections.defaultdict(set)
+        for project_dict in projects_list:
+            projects_by_status[project_dict['status']].add("{} / {}".format(project_dict['name'], project_dict['id']))
+            for sample_dict in project_dict.get('samples', []):
+                samples_by_status[sample_dict['analysis_status']].add(sample_dict['id'])
+                for libprep_dict in sample_dict.get('libpreps', []):
+                    libpreps_by_status[libprep_dict['qc']].add(libprep_dict['id'])
+                    for seqrun_dict in libprep_dict.get('seqruns', []):
+                        seqruns_by_status[seqrun_dict['alignment_status']].add(seqrun_dict['id'])
+
+        print_items = (("Projects", projects_by_status),
+                       ("Samples", samples_by_status),
+                       #("Libpreps", libpreps_by_status),
+                       ("Seqruns", seqruns_by_status),)
+        for name, status_dict in print_items:
+            print_stderr("{}\n{}".format(name, "-"*len(name)))
+            total_items = sum(map(len, status_dict.values()))
+            for status, item_set in status_dict.iteritems():
+                num_items = len(item_set)
+                percent = (100.00 * num_items) / total_items
+                print_stderr("    Status: {:<20} ({:>3}/{:<3}) ({:>6.2f}%)".format(status,
+                                                                                   num_items,
+                                                                                   total_items,
+                                                                                   percent))
+                if not brief:
+                    for item in sorted(item_set):
+                        print_stderr("        {}".format(item))
+
+    else:
         output_template = "{}{:<30}{:>{rspace}}"
         for project_dict in projects_list:
             offset = 0
             indent = " " * offset
             rspace = 80 - offset
-            print_stderr(output_template.format(indent, "Project name:", project['name'], rspace=rspace))
-            print_stderr(output_template.format(indent, "Project ID:", project['id'], rspace=rspace))
-            print_stderr(output_template.format(indent, "Project status:", project['status'], rspace=rspace))
+            print_stderr(output_template.format(indent, "Project name:", project_dict['name'], rspace=rspace))
+            print_stderr(output_template.format(indent, "Project ID:", project_dict['id'], rspace=rspace))
+            print_stderr(output_template.format(indent, "Project status:", project_dict['status'], rspace=rspace))
             for sample_dict in project_dict['samples']:
                 print_stderr("")
                 offset = 4
@@ -99,7 +131,7 @@ def project_summarize(projects, verbose=False):
             print_stderr("\n")
 
 
-def flowcell_summarize(flowcells):
+def flowcell_summarize(flowcells, brief=False, verbose=False):
     for flowcell in flowcells:
         try:
             flowcell_dir = locate_flowcell(flowcell)
@@ -110,8 +142,11 @@ def flowcell_summarize(flowcells):
 
 if __name__=="__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("-v", "--verbose", action="store_true",
+    verbosity = parser.add_mutually_exclusive_group()
+    verbosity.add_argument("-v", "--verbose", action="store_true",
             help="Print extended info format")
+    verbosity.add_argument("-b", "--brief", action="store_true",
+            help="Print more succint output")
     subparsers = parser.add_subparsers(help="Summarize project or flowcell.")
     project_parser = subparsers.add_parser('project')
     project_parser.add_argument('project_dirs', nargs='+',
@@ -125,8 +160,8 @@ if __name__=="__main__":
     args = parser.parse_args()
 
     if "project_dirs" in args:
-        project_summarize(args.project_dirs, args.verbose)
+        project_summarize(args.project_dirs, args.brief, args.verbose)
     elif "flowcell_dirs" in args:
-        flowcell_summarize(args.flowcell_dirs, args.verbose)
+        flowcell_summarize(args.flowcell_dirs, args.brief, args.verbose)
     else:
         parser.print_usage()
