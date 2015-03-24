@@ -27,7 +27,6 @@ def project_summarize(projects, brief=False, verbose=False):
         print_stderr('Gathering information for project "{}"...'.format(project))
         project_dict = {}
         try:
-            # Locate project in Charon and print the value of all its various members.
             project = charon_session.project_get(project)
         except CharonError as e:
             print_stderr('Project "{}" not found in Charon; skipping ({})'.format(project, e), file=sys.stderr)
@@ -68,7 +67,7 @@ def project_summarize(projects, brief=False, verbose=False):
         samples_by_status = collections.defaultdict(set)
         libpreps_by_status = collections.defaultdict(set)
         seqruns_by_status = collections.defaultdict(set)
-        ## TODO redo this so it separate by project
+        ## TODO redo this so it separates by project
         for project_dict in projects_list:
             projects_by_status[project_dict['status']].add("{} / {}".format(project_dict['name'], project_dict['id']))
             for sample_dict in project_dict.get('samples', []):
