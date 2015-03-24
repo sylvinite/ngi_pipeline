@@ -55,6 +55,67 @@ def load_modules(modules_list):
         raise RuntimeError("".join(error_msgs))
 
 
+@with_ngi_config
+def locate_flowcell(flowcell, config=None, config_file_path=None):
+    """Given a flowcell, returns the full path to the flowcell if possible,
+    searching the config file's specified environment.flowcell_inbox
+    if needed. If the flowcell passed in is already a valid path, returns that.
+
+    :param str flowcell: The name of (or path to) the flowcell
+    :returns: The path to the flowcell
+    :rtype: str
+    :raises ValueError: If a valid path cannot be found
+    """
+    if os.path.exists(flowcell):
+        return os.path.abspath(flowcell)
+    else:
+        try:
+            flowcell_inbox_dir = config["environment"]["flowcell_inbox"]
+        except (KeyError, TypeError) as e:
+            raise ValueError('Path to incoming flowcell directory not available in '
+                             'config file (environment.flowcell_inbox) and flowcell '
+                             'is not an absolute path ({}).'.format(flowcell))
+        else:
+            flowcell_dir = os.path.join(flowcell_inbox_dir, flowcell)
+        if not os.path.exists(flowcell_dir):
+            raise ValueError('Flowcell directory passed as flowcell name (not full '
+                             'path) and does not exist under incoming flowcell dir '
+                             'as specified in configuration file (at {}).'.format(flowcell_dir))
+        else:
+            return flowcell_dir
+
+
+@with_ngi_config
+def locate_project(project, config=None, config_file_path=None):
+    """Given a project, returns the full path to the project if possible,
+    searching the config file's specified analysis.top_dir if needed.
+    If the project passed in is already a valid path, returns that.
+
+    :param str project: The name of (or path to) the project
+    :returns: The path to the project
+    :rtype: str
+    :raises ValueError: If a valid path cannot be found
+    """
+    if os.path.exists(project):
+        return os.path.abspath(project)
+    else:
+        try:
+            project_data_dir = os.path.join(config["analysis"]["top_dir"], "DATA")
+        except (KeyError, TypeError) as e:
+            raise ValueError('Path to project data directory not available in '
+                             'config file (analysis.top_dir) and project '
+                             'is not an absolute path ({}).'.format(project))
+        else:
+            project_dir = os.path.join(project_data_dir, project)
+        if not os.path.exists(project_dir):
+            raise ValueError('project directory passed as project name (not '
+                             'full path) and does not exist under project '
+                             'data directory as specified in configuration '
+                             'file (at {}).'.format(project_dir))
+        else:
+            return project_dir
+
+
 def execute_command_line(cl, shell=False, stdout=None, stderr=None, cwd=None):
     """Execute a command line and return the subprocess.Popen object.
 

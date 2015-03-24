@@ -17,7 +17,8 @@ from ngi_pipeline.database.filesystem import create_charon_entries_from_project
 from ngi_pipeline.log.loggers import minimal_logger
 from ngi_pipeline.utils.classes import with_ngi_config
 from ngi_pipeline.utils.communication import mail_analysis
-from ngi_pipeline.utils.filesystem import do_rsync, do_symlink, safe_makedir
+from ngi_pipeline.utils.filesystem import do_rsync, do_symlink, \
+                                          locate_flowcell, safe_makedir
 from ngi_pipeline.utils.parsers import determine_library_prep_from_fcid, \
                                        determine_library_prep_from_samplesheet, \
                                        parse_lane_from_filename
@@ -121,30 +122,13 @@ def organize_projects_from_flowcell(demux_fcid_dirs, restrict_to_projects=None,
     # Sort/copy each raw demux FC into project/sample/fcid format -- "analysis-ready"
     projects_to_analyze = dict()
     for demux_fcid_dir in demux_fcid_dirs_set:
-        # Check if this is just a flowcell name or a full path
-        if not os.path.exists(demux_fcid_dir):
-            LOG.info('Flowcell directory ("{}") does not appear to be an absolute '
-                     'path; try to load flowcell_inbox directory from config '
-                     'file...'.format(demux_fcid_dir))
-            try:
-                flowcell_inbox_dir = config["environment"]["flowcell_inbox"]
-            except (KeyError, TypeError) as e:
-                LOG.error('Path to incoming flowcell directory not available in '
-                          'config file (environment.flowcell_inbox) and flowcell '
-                          'is not an absolute path ({}); skipping.'.format(demux_fcid_dir))
-                continue
-            else:
-                demux_fcid_dir = os.path.join(flowcell_inbox_dir, demux_fcid_dir)
-                LOG.info('Succesfully loaded path to flowcell inbox from config file. '
-                         'Checking if flowcell is present at {}...'.format(demux_fcid_dir))
-            if not os.path.exists(demux_fcid_dir):
-                LOG.error('Flowcell directory passed as flowcell name (not full '
-                          'path) and does not exist under incoming flowcell dir '
-                          'as specified in configuration file (at {}). Skipping '
-                          'analysis of this flowcell.'.format(demux_fcid_dir))
-                continue
-        else:
-            demux_fcid_dir = os.path.abspath(demux_fcid_dir)
+        try:
+            # Get the full path to the flowcell if it was passed in as just a name
+            demux_fcid_dir = locate_flowcell(demux_fcid_dir)
+        except ValueError as e:
+            # Flowcell path couldn't be found/doesn't exist; skip it
+            LOG.error('Skipping flowcell "{}": {}'.format(demux_fcid_dir, e))
+            continue
         # These will be a bunch of Project objects each containing Samples, FCIDs, lists of fastq files
         projects_to_analyze = \
                 setup_analysis_directory_structure(fc_dir=demux_fcid_dir,
