@@ -8,12 +8,59 @@ import unittest
 import filecmp
 
 from .filesystem import chdir, curdir_tmpdir, do_rsync, execute_command_line, \
-                        load_modules, safe_makedir, do_hardlink, do_symlink
-
+                        load_modules, safe_makedir, do_hardlink, do_symlink, \
+                        locate_flowcell, locate_project
 
 class TestFilesystemUtils(unittest.TestCase):
     def setUp(self):
         self.tmp_dir = tempfile.mkdtemp()
+
+
+    def test_locate_flowcell(self):
+        flowcell_name = "temp_flowcell"
+        tmp_dir = tempfile.mkdtemp()
+        config = {'environment': {'flowcell_inbox': tmp_dir}}
+        with self.assertRaises(ValueError):
+            # Should raise ValueError if flowcell can't be found
+            locate_flowcell(flowcell=flowcell_name, config=config)
+
+        tmp_flowcell_path = os.path.join(tmp_dir, flowcell_name)
+        with self.assertRaises(ValueError):
+            # Should raise ValueError as path given doesn't exist
+            locate_flowcell(flowcell=tmp_flowcell_path, config=config)
+
+        os.makedirs(tmp_flowcell_path)
+        # Should return the path passed in
+        self.assertEqual(locate_flowcell(flowcell=tmp_flowcell_path, config=config),
+                         tmp_flowcell_path)
+
+        # Should return the full path after searching flowcell_inbox
+        self.assertEqual(locate_flowcell(flowcell=flowcell_name, config=config),
+                         tmp_flowcell_path)
+
+
+    def test_locate_project(self):
+        project_name = "temp_project"
+        tmp_dir = tempfile.mkdtemp()
+        config = {'analysis': {'top_dir': tmp_dir}}
+        with self.assertRaises(ValueError):
+            # Should raise ValueError if project can't be found
+            locate_project(project=project_name, config=config)
+
+        tmp_project_path = os.path.join(tmp_dir, "DATA", project_name)
+        with self.assertRaises(ValueError):
+            # Should raise ValueError as path given doesn't exist
+            locate_project(project=tmp_project_path, config=config)
+
+        os.makedirs(tmp_project_path)
+        # Should return the path passed in
+        self.assertEqual(locate_project(project=tmp_project_path, config=config),
+                         tmp_project_path)
+
+        # Should return the full path after searching project data dir
+        self.assertEqual(locate_project(project=project_name, config=config),
+                         tmp_project_path)
+
 
     def test_load_modules(self):
         modules_to_load = ['R/3.1.0', 'java/sun_jdk1.7.0_25']
