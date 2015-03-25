@@ -19,7 +19,11 @@ from ngi_pipeline.utils.filesystem import locate_project
 
 print_stderr = functools.partial(print, file=sys.stderr)
 
-def project_summarize(projects, brief=False, verbose=False):
+def project_summarize(projects, verbosity=0):
+    if type(verbosity) is not int or verbosity < 0:
+        print_stderr('Invalid verbosity level ("{}"); must be a positive '
+                     'integer; falling back to 0')
+        verbosity = 0
     update_charon_with_local_jobs_status(quiet=True) # Don't send mails
     charon_session = CharonSession()
     projects_list = []
@@ -67,7 +71,7 @@ def project_summarize(projects, brief=False, verbose=False):
         projects_list.append(project_dict)
 
 
-    if not verbose:
+    if verbosity in (0, 1):
         projects_status_list = []
         #projects_by_status = collections.defaultdict(dict)
         #samples_by_status = collections.defaultdict(set)
@@ -103,9 +107,9 @@ def project_summarize(projects, brief=False, verbose=False):
                        ("Seqruns", "seqruns_by_status"),)
 
         for project_dict in projects_status_list:
-            print_stderr("Project\n-------")
-            print_stderr("    Name:   {:>30}".format(project_dict['name']))
-            print_stderr("    Status: {:>30}".format(project_dict['status']))
+            print_stderr("\nProject\n-------")
+            print_stderr("    Name:   {:>40}".format(project_dict['name']))
+            print_stderr("    Status: {:>40}".format(project_dict['status']))
             for name, dict_key in print_items:
                 status_dict = project_dict[dict_key]
                 print_stderr("{}\n{}".format(name, "-"*len(name)))
@@ -118,11 +122,12 @@ def project_summarize(projects, brief=False, verbose=False):
                                                                                        num_items,
                                                                                        total_items,
                                                                                        percent))
-                    if not brief:
+                    if verbosity == 1:
                         for item in sorted(item_set):
                             print_stderr("        {}".format(item))
+            print_stderr("")
 
-    else:
+    else: # Verbosity is 2+, maximum verbosity
         output_template = "{}{:<30}{:>{rspace}}"
         for project_dict in projects_list:
             offset = 0
@@ -169,10 +174,8 @@ def flowcell_summarize(flowcells, brief=False, verbose=False):
 if __name__=="__main__":
     parser = argparse.ArgumentParser()
     verbosity = parser.add_mutually_exclusive_group()
-    verbosity.add_argument("-v", "--verbose", action="store_true",
-            help="Print extended info format")
-    verbosity.add_argument("-b", "--brief", action="store_true",
-            help="Print more succint output")
+    verbosity.add_argument("-v", "--verbosity", action="count", default=0,
+            help="Increase output verbosity (try -v, -vv)")
     subparsers = parser.add_subparsers(help="Summarize project or flowcell.")
     project_parser = subparsers.add_parser('project')
     project_parser.add_argument('project_dirs', nargs='+',
@@ -185,10 +188,9 @@ if __name__=="__main__":
 
     args = parser.parse_args()
 
-
     if "project_dirs" in args:
-        project_summarize(args.project_dirs, args.brief, args.verbose)
+        project_summarize(args.project_dirs, args.verbosity)
     elif "flowcell_dirs" in args:
-        flowcell_summarize(args.flowcell_dirs, args.brief, args.verbose)
+        flowcell_summarize(args.flowcell_dirs, args.verbosity)
     else:
         parser.print_usage()
