@@ -15,7 +15,7 @@ from ngi_pipeline.conductor.flowcell import organize_projects_from_flowcell
 from ngi_pipeline.database.classes import CharonSession, CharonError
 from ngi_pipeline.engines.piper_ngi.local_process_tracking import update_charon_with_local_jobs_status
 from ngi_pipeline.utils.classes import with_ngi_config
-from ngi_pipeline.utils.filesystem import locate_flowcell, locate_project
+from ngi_pipeline.utils.filesystem import locate_project
 
 print_stderr = functools.partial(print, file=sys.stderr)
 
@@ -24,6 +24,11 @@ def project_summarize(projects, brief=False, verbose=False):
     charon_session = CharonSession()
     projects_list = []
     for project in projects:
+        try:
+            project = os.path.basename(locate_project(project))
+        except ValueError as e:
+            print_stderr("Skipping project: {}".format(e))
+            continue
         print_stderr('Gathering information for project "{}"...'.format(project))
         project_dict = {}
         try:
@@ -63,37 +68,59 @@ def project_summarize(projects, brief=False, verbose=False):
 
 
     if not verbose:
-        projects_by_status = collections.defaultdict(set)
-        samples_by_status = collections.defaultdict(set)
-        libpreps_by_status = collections.defaultdict(set)
-        seqruns_by_status = collections.defaultdict(set)
-        ## TODO redo this so it separates by project
+        projects_status_list = []
+        #projects_by_status = collections.defaultdict(dict)
+        #samples_by_status = collections.defaultdict(set)
+        #libpreps_by_status = collections.defaultdict(set)
+        #seqruns_by_status = collections.defaultdict(set)
         for project_dict in projects_list:
-            projects_by_status[project_dict['status']].add("{} / {}".format(project_dict['name'], project_dict['id']))
+            project_status_dict = {}
+            project_status_dict['name'] = "{} ({})".format(project_dict['name'], project_dict['id'])
+            project_status_dict['status'] = project_dict['status']
+            samples_by_status = project_status_dict['samples_by_status'] = collections.defaultdict(set)
+            libpreps_by_status = project_status_dict['libpreps_by_status'] = collections.defaultdict(set)
+            seqruns_by_status = project_status_dict['seqruns_by_status'] = collections.defaultdict(set)
             for sample_dict in project_dict.get('samples', []):
-                samples_by_status[sample_dict['analysis_status']].add(sample_dict['id'])
-                for libprep_dict in sample_dict.get('libpreps', []):
-                    libpreps_by_status[libprep_dict['qc']].add(libprep_dict['id'])
-                    for seqrun_dict in libprep_dict.get('seqruns', []):
-                        seqruns_by_status[seqrun_dict['alignment_status']].add(seqrun_dict['id'])
+                #samples_by_status[sample_dict['analysis_status']].add(sample_dict['id'])
+                sample_status = sample_dict['analysis_status']
+                libpreps = sample_dict.get('libpreps')
+                if libpreps:
+                    for libprep_dict in libpreps:
+                        libpreps_by_status[libprep_dict['qc']].add(libprep_dict['id'])
+                        seqruns = libprep_dict.get('seqruns')
+                        if seqruns:
+                            for seqrun_dict in seqruns:
+                                seqruns_by_status[seqrun_dict['alignment_status']].add(seqrun_dict['id'])
+                        else:
+                            sample_status = "NO SEQRUNS"
+                else:
+                    sample_status = "NO LIBPREPS"
+                samples_by_status[sample_status].add(sample_dict['id'])
+            projects_status_list.append(project_status_dict)
 
-        print_items = (("Projects", projects_by_status),
-                       ("Samples", samples_by_status),
-                       #("Libpreps", libpreps_by_status),
-                       ("Seqruns", seqruns_by_status),)
-        for name, status_dict in print_items:
-            print_stderr("{}\n{}".format(name, "-"*len(name)))
-            total_items = sum(map(len, status_dict.values()))
-            for status, item_set in status_dict.iteritems():
-                num_items = len(item_set)
-                percent = (100.00 * num_items) / total_items
-                print_stderr("    Status: {:<20} ({:>3}/{:<3}) ({:>6.2f}%)".format(status,
-                                                                                   num_items,
-                                                                                   total_items,
-                                                                                   percent))
-                if not brief:
-                    for item in sorted(item_set):
-                        print_stderr("        {}".format(item))
+        print_items = (("Samples", "samples_by_status"),
+                       ("Libpreps", "libpreps_by_status"),
+                       ("Seqruns", "seqruns_by_status"),)
+
+        for project_dict in projects_status_list:
+            print_stderr("Project\n-------")
+            print_stderr("    Name:   {:>30}".format(project_dict['name']))
+            print_stderr("    Status: {:>30}".format(project_dict['status']))
+            for name, dict_key in print_items:
+                status_dict = project_dict[dict_key]
+                print_stderr("{}\n{}".format(name, "-"*len(name)))
+                total_items = sum(map(len, status_dict.values()))
+                # Sort by analysis value
+                for status, item_set in sorted(status_dict.iteritems(), key=lambda key_value: key_value[0]):
+                    num_items = len(item_set)
+                    percent = (100.00 * num_items) / total_items
+                    print_stderr("    Status: {:<20} ({:>3}/{:<3}) ({:>6.2f}%)".format(status,
+                                                                                       num_items,
+                                                                                       total_items,
+                                                                                       percent))
+                    if not brief:
+                        for item in sorted(item_set):
+                            print_stderr("        {}".format(item))
 
     else:
         output_template = "{}{:<30}{:>{rspace}}"
@@ -149,14 +176,15 @@ if __name__=="__main__":
     subparsers = parser.add_subparsers(help="Summarize project or flowcell.")
     project_parser = subparsers.add_parser('project')
     project_parser.add_argument('project_dirs', nargs='+',
-            help=('The name or ID (in Charon) of one or more projects to be summarized.'))
+            help=('The name or ID (in Charon) of or path to one or more projects to be summarized.'))
 
     flowcell_parser = subparsers.add_parser('flowcell')
     flowcell_parser.add_argument('flowcell_dirs', nargs='+',
-            help=('The path to or name of one or more flowcell directories to be summarized.'))
+            help=('The name of or path to one or more flowcell directories to be summarized.'))
 
 
     args = parser.parse_args()
+
 
     if "project_dirs" in args:
         project_summarize(args.project_dirs, args.brief, args.verbose)
