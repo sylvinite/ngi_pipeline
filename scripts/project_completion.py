@@ -89,16 +89,15 @@ def project_summarize(projects, verbosity=0):
                 sample_status = sample_dict['analysis_status']
                 libpreps = sample_dict.get('libpreps')
                 if libpreps:
-                    for libprep_dict in libpreps:
-                        libpreps_by_status[libprep_dict['qc']].add(libprep_dict['id'])
-                        seqruns = libprep_dict.get('seqruns')
-                        if seqruns:
-                            for seqrun_dict in seqruns:
+                    if not any([libprep["seqruns"] for libprep in libpreps]):
+                        sample_status = "NO_SEQRUNS"
+                    else:
+                        for libprep_dict in libpreps:
+                            libpreps_by_status[libprep_dict['qc']].add(libprep_dict['id'])
+                            for seqrun_dict in libprep_dict.get('seqruns', []):
                                 seqruns_by_status[seqrun_dict['alignment_status']].add(seqrun_dict['id'])
-                        else:
-                            sample_status = "NO SEQRUNS"
                 else:
-                    sample_status = "NO LIBPREPS"
+                    sample_status = "NO_LIBPREPS"
                 samples_by_status[sample_status].add(sample_dict['id'])
             projects_status_list.append(project_status_dict)
 
