@@ -98,6 +98,7 @@ def process_demultiplexed_flowcells(demux_fcid_dirs, restrict_to_projects=None,
 def organize_projects_from_flowcell(demux_fcid_dirs, restrict_to_projects=None,
                                     restrict_to_samples=None,
                                     fallback_libprep=None, quiet=False,
+                                    create_files=True,
                                     config=None, config_file_path=None):
     """Sort demultiplexed Illumina flowcells into projects and return a list of them,
     creating the project/sample/libprep/seqrun dir tree on disk via symlinks.
@@ -109,6 +110,7 @@ def organize_projects_from_flowcell(demux_fcid_dirs, restrict_to_projects=None,
                                      restricted to these. Optional.
     :param str fallback_libprep: If libprep cannot be determined, use this value if supplied (default None)
     :param bool quiet: Don't send notification emails
+    :param bool create_files: Alter the filesystem (as opposed to just parsing flowcells) (default True)
     :param dict config: The parsed NGI configuration file; optional.
     :param str config_file_path: The path to the NGI configuration file; optional.
 
@@ -135,7 +137,7 @@ def organize_projects_from_flowcell(demux_fcid_dirs, restrict_to_projects=None,
                                                    projects_to_analyze=projects_to_analyze,
                                                    restrict_to_projects=restrict_to_projects,
                                                    restrict_to_samples=restrict_to_samples,
-                                                   create_files=True,
+                                                   create_files=create_files,
                                                    fallback_libprep=fallback_libprep,
                                                    config=config,
                                                    quiet=quiet)
