@@ -80,7 +80,7 @@ def workflow_merge_process_variantcall(*args, **kwargs):
     :rtype: str
     """
     # Same command line but with one additional option
-    return workflow_dna_variantcalling(*args, **kwargs) +  " --merge_alignments --data_processing --variant_calling --analyze_separately --retry_failed 1"
+    return workflow_dna_variantcalling(*args, **kwargs) +  " --variant_calling --analyze_separately --retry_failed 1"
 
 
 def workflow_dna_variantcalling(qscripts_dir_path, setup_xml_path, global_config_path,
@@ -108,10 +108,18 @@ def workflow_dna_variantcalling(qscripts_dir_path, setup_xml_path, global_config
                  " -run")
     if output_dir:
         cl_string += " --output_directory {output_dir}"
+    job_native_args = config.get("piper", {}).get("jobNative")
+    if job_native_args:
+        # This should be a list
+        if type(job_native_args) is not list:
+            LOG.warn('jobNative arguments in config file specified in invalid '
+                     'format; should be list. Ignoring these parameters.')
+        cl_string += " -jobNative {}".format(" ".join(job_native_args))
     if exec_mode == "sbatch":
         # Execute from within an sbatch file (run jobs on the local node)
-        num_threads = int(config.get("piper", {}).get("threads") or 8)
-        job_runner = "Shell"
+        num_threads = int(config.get("piper", {}).get("threads") or 16)
+        job_runner = config.get("piper", {}).get("shell_jobrunner") or \
+                     "ParallelShell --super_charge --ways_to_split 4"
         scatter_gather = 1
     else: # exec_mode == "local"
         # Start a local process that sbatches jobs
