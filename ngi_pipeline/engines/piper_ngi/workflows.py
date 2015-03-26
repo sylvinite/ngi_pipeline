@@ -114,7 +114,8 @@ def workflow_dna_variantcalling(qscripts_dir_path, setup_xml_path, global_config
         if type(job_native_args) is not list:
             LOG.warn('jobNative arguments in config file specified in invalid '
                      'format; should be list. Ignoring these parameters.')
-        cl_string += " -jobNative {}".format(" ".join(job_native_args))
+        else:
+            cl_string += " -jobNative {}".format(" ".join(job_native_args))
     if exec_mode == "sbatch":
         # Execute from within an sbatch file (run jobs on the local node)
         num_threads = int(config.get("piper", {}).get("threads") or 16)
