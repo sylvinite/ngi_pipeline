@@ -174,6 +174,24 @@ if __name__ == "__main__":
             help=("The path to one or more pre-parsed project directories to "
                   "run through QC analysis."))
 
+
+    # Add subparser for genotyping
+    parser_genotype = subparsers.add_parser('genotype', help="Launch genotype concordance analysis.")
+    parser_genotype.add_argument("-g", "--genotype-file", action="store",
+            help="The path to the genotype VCF file.")
+    subparsers_genotype = parser_genotype.add_subparsers(parser_class=ArgumentParserWithTheFlagsThatIWant,
+            help="Choose unit to analyze.")
+    # Add sub-subparser for project genotyping
+    genotype_project = subparsers_genotype.add_parser('project',
+            help="Start genotype analysis for all samples in a project")
+    genotype_project.add_argument("genotype_project_dirs", nargs="+",
+            help=("The path to one or more pre-parsed project directories to "
+                  "run through genotype concordance analysis."))
+    # Add sub-subparser for sample genotyping
+    #genotype_sample = subparsers_genotype.add_parser('sample',
+    #        help="Start genotype analysis for one specific sample in a project.")
+
+
     args = parser.parse_args()
 
     # These options are available only if the script has been called with the 'analyze' option
@@ -291,6 +309,13 @@ if __name__ == "__main__":
             except Exception as e:
                 print(e, file=sys.stderr)
         LOG.info("Done with organization.")
+
+    elif 'genotype_project_dirs' in args:
+        genotype_project_dir = args.genotype_project_dirs[0]
+        genotype_file_path = args.genotype_file
+        LOG.info("Starting genotype analysis of project {} with genotype "
+                 "file {}".format(genotype_project_dir, genotype_file_path))
+        raise NotImplementedError
 
     elif 'port' in args:
         LOG.info('Starting ngi_pipeline server at port {}'.format(args.port))
