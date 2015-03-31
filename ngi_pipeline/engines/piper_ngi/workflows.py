@@ -22,6 +22,8 @@ def get_subtasks_for_level(level):
     """
     if level == "sample":
         return ("merge_process_variantcall",)
+    elif level == "genotype":
+        return ("genotype_concordance",)
     else:
         raise NotImplementedError('The level "{}" has no associated subtasks.')
 
