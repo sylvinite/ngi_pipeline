@@ -44,7 +44,7 @@ from ngi_pipeline.utils.slurm import get_slurm_job_status
 LOG = minimal_logger(__name__)
 
 @with_ngi_config
-def analyze(project, sample, exec_mode="sbatch", restart_finished_jobs=False, 
+def analyze(project, sample, exec_mode="sbatch", restart_finished_jobs=False,
             restart_running_jobs=False, level="sample", genotype_file=None,
             config=None, config_file_path=None):
     """Analyze data at the sample level.
@@ -152,7 +152,7 @@ def analyze(project, sample, exec_mode="sbatch", restart_finished_jobs=False,
 @with_ngi_config
 def genotype(project, sample, exec_mode="sbatch",
              genotype_file=None,
-             restart_finished_jobs=False,
+             restart_finished_jobs=True,
              restart_running_jobs=False,
              level="genotype",
              config=None, config_file_path=None):
