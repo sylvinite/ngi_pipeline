@@ -1,6 +1,8 @@
 import collections
+import fnmatch
 import glob
 import os
+import shutil
 import subprocess
 import yaml
 
@@ -54,9 +56,10 @@ def remove_previous_genotype_analyses(project_obj):
     project_dir_pattern = os.path.join(project_dir_path, "??_genotype_concordance")
     LOG.info('deleting previous analysis in {}'.format(project_dir_path))
     for sample in project_obj:
-        # P123_456 is renamed by Piper to P123-456
         piper_sample_name = sample.name.replace("_", "-", 1)
-        sample_files = glob.glob(os.path.join(project_dir_pattern, "{}.*".format(piper_sample_name)))
+        sample_files = glob.glob(os.path.join(project_dir_pattern, "{}*".format(sample.name)))
+        # P123_456 is renamed by Piper to P123-456? Sometimes? Always?
+        sample_files.extend(glob.glob(os.path.join(project_dir_pattern, "{}*".format(piper_sample_name))))
         sample_files.extend(glob.glob(os.path.join(project_dir_pattern, ".{}*.done".format(piper_sample_name))))
         sample_files.extend(glob.glob(os.path.join(project_dir_pattern, ".{}*.failed".format(piper_sample_name))))
     if sample_files:
@@ -65,7 +68,10 @@ def remove_previous_genotype_analyses(project_obj):
         for sample_file in sample_files:
             LOG.debug("Deleting file {}".format(sample_file))
             try:
-                os.remove(sample_file)
+                if os.path.isdir(sample_file):
+                    shutil.rmtree(sample_file)
+                else:
+                    os.remove(sample_file)
             except OSError as e:
                 errors.append(e.message)
         if errors:
@@ -88,24 +94,30 @@ def remove_previous_sample_analyses(project_obj):
     project_dir_pattern = os.path.join(project_dir_path, "??_*")
     LOG.info('deleting previous analysis in {}'.format(project_dir_path))
     for sample in project_obj:
-        # P123_456 is renamed by Piper to P123-456
+        sample_files = glob.glob(os.path.join(project_dir_pattern, "{}*".format(sample.name)))
+        # P123_456 is renamed by Piper to P123-456? Sometimes? Always?
         piper_sample_name = sample.name.replace("_", "-", 1)
-        sample_files = glob.glob(os.path.join(project_dir_pattern, "{}.*".format(piper_sample_name)))
+        sample_files.extend(glob.glob(os.path.join(project_dir_pattern, "{}*".format(piper_sample_name))))
         sample_files.extend(glob.glob(os.path.join(project_dir_pattern, ".{}*.done".format(piper_sample_name))))
         sample_files.extend(glob.glob(os.path.join(project_dir_pattern, ".{}*.failed".format(piper_sample_name))))
+    # Don't delete genotype files!
+    sample_files = filter(lambda x: not fnmatch.fnmatch(x, "*genotype_concordance*"), sample_files)
     if sample_files:
         LOG.info('Deleting files for samples {} under {}'.format(", ".join(project_obj.samples), project_dir_path))
         errors = []
         for sample_file in sample_files:
             LOG.debug("Deleting file {}".format(sample_file))
             try:
-                os.remove(sample_file)
+                if os.path.isdir(sample_file):
+                    shutil.rmtree(sample_file)
+                else:
+                    os.remove(sample_file)
             except OSError as e:
-                errors.append(e.message)
+                errors.append("{}: {}".format(sample_file, e))
         if errors:
             LOG.warn("Error when removing one or more files: {}".format(", ".join(errors)))
     else:
-        LOG.debug("No sample analysis files found to delete for project {} / samples {}".format(project_obj, ", ".join(project_obj.samples)))
+        LOG.debug("No sample analysis files found to delete for project {} / samples {}".format(project_obj, "\n".join(project_obj.samples)))
 
 
 def rotate_previous_analysis(project_obj):
