@@ -45,13 +45,15 @@ LOG = minimal_logger(__name__)
 
 @with_ngi_config
 def analyze(project, sample, exec_mode="sbatch", restart_finished_jobs=False, 
-            restart_running_jobs=False, level="sample", config=None, config_file_path=None):
+            restart_running_jobs=False, level="sample", genotype_file=None,
+            config=None, config_file_path=None):
     """Analyze data at the sample level.
 
     :param NGIProject project: the project to analyze
     :param NGISample sample: the sample to analyzed
     :param str exec_mode: "sbatch" or "local"
     :param str level: The level on which to perform the analysis ("sample" or "genotype")
+    :param str genotype_file: The path to the genotype file (only relevant for genotype analysis)
     :param dict config: The parsed configuration file (optional)
     :param str config_file_path: The path to the configuration file (optional)
 
@@ -92,6 +94,7 @@ def analyze(project, sample, exec_mode="sbatch", restart_finished_jobs=False,
                                                             sample_id=sample.name)
                 setup_xml_cl, setup_xml_path = build_setup_xml(project=project,
                                                                sample=sample,
+                                                               workflow=workflow_subtask,
                                                                local_scratch_mode=(exec_mode == "sbatch"),
                                                                config=config)
                 piper_cl = build_piper_cl(project=project,
@@ -123,6 +126,109 @@ def analyze(project, sample, exec_mode="sbatch", restart_finished_jobs=False,
                                   'found.'.format(project, sample, slurm_job_id))
                 else:
                     ## FIXME Now this is broken again
+                    raise NotImplementedError("Sorry dude it's a no-go")
+                    slurm_job_id = None
+                    launch_piper_job(setup_xml_cl, project)
+                    process_handle = launch_piper_job(piper_cl, project)
+                    process_id = process_handle.pid
+                try:
+                    record_process_sample(project=project,
+                                          sample=sample,
+                                          analysis_module_name="piper_ngi",
+                                          slurm_job_id=slurm_job_id,
+                                          process_id=process_id,
+                                          workflow_subtask=workflow_subtask)
+                except RuntimeError as e:
+                    LOG.error(e)
+                    ## Question: should we just kill the run in this case or let it go?
+                    continue
+            except (NotImplementedError, RuntimeError, ValueError) as e:
+                error_msg = ('Processing project "{}" / sample "{}" failed: '
+                             '{}'.format(project, sample, e.__repr__()))
+                LOG.error(error_msg)
+
+
+# Temporary separate function for genotyping until we decide how to deal with
+# tracking these analyses in Charon
+@with_ngi_config
+def genotype(project, sample, exec_mode="sbatch",
+             genotype_file=None,
+             restart_finished_jobs=False,
+             restart_running_jobs=False,
+             level="genotype",
+             config=None, config_file_path=None):
+    """Perform genotype concordance analysis.
+
+    :param NGIProject project: the project to analyze
+    :param NGISample sample: the sample to analyzed
+    :param str exec_mode: "sbatch" or "local"
+    :param str genotype_file: The path to the genotype file (only relevant for genotype analysis)
+    :param dict config: The parsed configuration file (optional)
+    :param str config_file_path: The path to the configuration file (optional)
+
+    :raises ValueError: If exec_mode is an unsupported value
+    """
+    LOG.info('Launching genotype analysis for Sample "{}" in project "{}" '
+             'with genotype file "{}"'.format(sample, project, genotype_file))
+    if exec_mode.lower() not in ("sbatch", "local"):
+        raise ValueError('"exec_mode" param must be one of "sbatch" or "local" '
+                         'value was "{}"'.format(exec_mode))
+    modules_to_load = ["java/sun_jdk1.7.0_25", "R/2.15.0"]
+    load_modules(modules_to_load)
+    # I know this looks ridiculous but I'm trying not to diverge too far from
+    # the 'analyze' function above so you can easily move this functionality
+    # back into it once we decide how to track these jobs in Charon
+    for workflow_subtask in workflows.get_subtasks_for_level(level=level):
+        if restart_running_jobs:
+            # Kill currently-running jobs if they exist
+            kill_running_sample_analysis(workflow_subtask=workflow_subtask,
+                                         project_id=project.project_id,
+                                         sample_id=sample.name)
+        if not is_sample_analysis_running_local(workflow_subtask=workflow_subtask,
+                                                project_id=project.project_id,
+                                                sample_id=sample.name):
+            try:
+                log_file_path = create_log_file_path(workflow_subtask=workflow_subtask,
+                                                     project_base_path=project.base_path,
+                                                     project_name=project.dirname,
+                                                     project_id=project.project_id,
+                                                     sample_id=sample.name)
+                rotate_file(log_file_path)
+                exit_code_path = create_exit_code_file_path(workflow_subtask=workflow_subtask,
+                                                            project_base_path=project.base_path,
+                                                            project_name=project.dirname,
+                                                            project_id=project.project_id,
+                                                            sample_id=sample.name)
+                setup_xml_cl, setup_xml_path = build_setup_xml(project=project,
+                                                               sample=sample,
+                                                               workflow=workflow_subtask,
+                                                               local_scratch_mode=(exec_mode == "sbatch"),
+                                                               config=config)
+                piper_cl = build_piper_cl(project=project,
+                                          workflow_name=workflow_subtask,
+                                          setup_xml_path=setup_xml_path,
+                                          exit_code_path=exit_code_path,
+                                          genotype_file=genotype_file,
+                                          config=config,
+                                          exec_mode=exec_mode)
+                remove_previous_genotype_analyses(project)
+                if exec_mode == "sbatch":
+                    process_id = None
+                    slurm_job_id = sbatch_piper_sample([setup_xml_cl, piper_cl],
+                                                       workflow_subtask,
+                                                       project, sample,
+                                                       restart_finished_jobs=restart_finished_jobs)
+                    for x in xrange(10): # Time delay to let sbatch get its act together (takes a few seconds to be visible with sacct)
+                        try:
+                            get_slurm_job_status(slurm_job_id)
+                            break
+                        except ValueError:
+                            time.sleep(2)
+                    else:
+                        LOG.error('sbatch file for sample {}/{} did not '
+                                  'queue properly! Job ID {} cannot be '
+                                  'found.'.format(project, sample, slurm_job_id))
+                else:
                     raise NotImplementedError("Sorry dude it's a no-go")
                     slurm_job_id = None
                     launch_piper_job(setup_xml_cl, project)
