@@ -23,6 +23,7 @@ from ngi_pipeline.engines.piper_ngi.utils import check_for_preexisting_sample_ru
                                                  create_exit_code_file_path, \
                                                  create_log_file_path, \
                                                  create_sbatch_header, \
+                                                 find_previous_genotype_analyses, \
                                                  get_valid_seqruns_for_sample, \
                                                  launch_piper_job, \
                                                  record_analysis_details, \
@@ -152,7 +153,7 @@ def analyze(project, sample, exec_mode="sbatch", restart_finished_jobs=False,
 @with_ngi_config
 def genotype(project, sample, exec_mode="sbatch",
              genotype_file=None,
-             restart_finished_jobs=True,
+             restart_finished_jobs=False,
              restart_running_jobs=False,
              level="genotype",
              config=None, config_file_path=None):
@@ -162,6 +163,9 @@ def genotype(project, sample, exec_mode="sbatch",
     :param NGISample sample: the sample to analyzed
     :param str exec_mode: "sbatch" or "local"
     :param str genotype_file: The path to the genotype file (only relevant for genotype analysis)
+    :param bool restart_finished_jobs: Restart jobs that are already done (have a .done file)
+    :param bool restart_running_jobs: Kill and restart currently-running jobs
+    :param str level: (For compatibility with analyze() function)
     :param dict config: The parsed configuration file (optional)
     :param str config_file_path: The path to the configuration file (optional)
 
@@ -178,6 +182,11 @@ def genotype(project, sample, exec_mode="sbatch",
     # so it's not too tricky to combine this functionality into that once we
     # decide how to deal with Charon
     for workflow_subtask in workflows.get_subtasks_for_level(level=level):
+        if find_previous_genotype_analyses(project, sample):
+            if not restart_finished_jobs:
+                LOG.info('Project/sample "{}/{}" has completed genotype analysis '
+                         'previously; skipping (use flag to force analysis)'.format(project, sample))
+                continue
         if restart_running_jobs:
             # Kill currently-running jobs if they exist
             kill_running_sample_analysis(workflow_subtask=workflow_subtask,
