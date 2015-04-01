@@ -104,7 +104,6 @@ def analyze(project, sample, exec_mode="sbatch", restart_finished_jobs=False,
                                           config=config,
                                           exec_mode=exec_mode)
                 if level in ("sample",):
-                    # For genotyping we of course don't want to remove any data
                     remove_previous_sample_analyses(project)
                 elif level in ("genotype",):
                     remove_previous_genotype_analyses(project)
@@ -175,9 +174,9 @@ def genotype(project, sample, exec_mode="sbatch",
                          'value was "{}"'.format(exec_mode))
     modules_to_load = ["java/sun_jdk1.7.0_25", "R/2.15.0"]
     load_modules(modules_to_load)
-    # I know this looks ridiculous but I'm trying not to diverge too far from
-    # the 'analyze' function above so you can easily move this functionality
-    # back into it once we decide how to track these jobs in Charon
+    # This is unnecessary but I'm trying to mirror the analyze() function above
+    # so it's not too tricky to combine this functionality into that once we
+    # decide how to deal with Charon
     for workflow_subtask in workflows.get_subtasks_for_level(level=level):
         if restart_running_jobs:
             # Kill currently-running jobs if they exist
