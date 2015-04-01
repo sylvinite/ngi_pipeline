@@ -98,9 +98,9 @@ def build_setup_xml(project, sample, workflow, local_scratch_mode, config):
     cl_args = {'project': project.dirname}
     try:
         cl_args["sequencing_center"] = CharonSession().project_get(project.project_id)["sequencing_facility"]
-    except (IndexError, CharonError) as e:
-        LOG.warn('Could not determine sequencing center from Charon ({}); setting to blank ("").'.format(e))
-        cl_args["sequencing_center"] == ""
+    except (KeyError, CharonError) as e:
+        LOG.warn('Could not determine sequencing center from Charon ({}); setting to "Unknown".'.format(e))
+        cl_args["sequencing_center"] = "Unknown"
     cl_args["sequencing_tech"] = "Illumina"
     slurm_qos = config.get("slurm", {}).get("extra_params", {}).get("--qos")
     if slurm_qos:
