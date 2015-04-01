@@ -40,7 +40,7 @@ def build_piper_cl(project, workflow_name, setup_xml_path, exit_code_path,
                     (os.environ.get("PIPER_GLOB_CONF_XML") or
                      config.get("piper", {}).get("path_to_piper_globalconfig") or
                      (os.path.join(piper_rootdir, "globalConfig.xml") if
-                      piper_rootdir else None))
+                     piper_rootdir else None))
     if not piper_global_config_path:
         raise ValueError('Could not find Piper global configuration file in config '
                          'file, as environmental variable ("PIPER_GLOB_CONF_XML"), '
