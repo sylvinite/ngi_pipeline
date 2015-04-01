@@ -14,8 +14,8 @@ import datetime
 from ngi_pipeline.conductor.classes import NGIProject
 from ngi_pipeline.database.classes import CharonSession, CharonError
 from ngi_pipeline.engines.piper_ngi import workflows
-from ngi_pipeline.engines.piper_ngi.command_creation import build_piper_cl, \
-                                                            build_setup_xml
+from ngi_pipeline.engines.piper_ngi.command_creation_config import build_piper_cl, \
+                                                                   build_setup_xml
 from ngi_pipeline.engines.piper_ngi.local_process_tracking import is_sample_analysis_running_local, \
                                                                   kill_running_sample_analysis, \
                                                                   record_process_sample

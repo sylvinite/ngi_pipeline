@@ -10,6 +10,17 @@ from ngi_pipeline.utils.slurm import slurm_time_to_seconds
 LOG = minimal_logger(__name__)
 
 
+PIPER_CL_TEMPLATE = ("piper -S {workflow_qscript_path}"
+                     " --xml_input {setup_xml_path}"
+                     " --global_config {global_config_path}"
+                     " --number_of_threads {num_threads}"
+                     " --scatter_gather {scatter_gather}"
+                     " -jobRunner {job_runner}"
+                     " --job_walltime {job_walltime}"
+                     " --disableJobReport"
+                     " -run")
+
+
 def get_subtasks_for_level(level):
     """For a given level (e.g. "sample"), get all the associated
     subtasks that should be run (e.g. "qc", "merge_process_variantcall")
@@ -90,17 +101,6 @@ def workflow_merge_process_variantcall(*args, **kwargs):
     return workflow_dna_variantcalling(*args, **kwargs) +  \
             (" --merge_alignments --data_processing --variant_calling "
              "--analyze_separately --retry_failed 1")
-
-
-PIPER_CL_TEMPLATE = ("piper -S {workflow_qscript_path}"
-                     " --xml_input {setup_xml_path}"
-                     " --global_config {global_config_path}"
-                     " --number_of_threads {num_threads}"
-                     " --scatter_gather {scatter_gather}"
-                     " -jobRunner {job_runner}"
-                     " --job_walltime {job_walltime}"
-                     " --disableJobReport"
-                     " -run")
 
 
 def workflow_dna_variantcalling(qscripts_dir_path, setup_xml_path, global_config_path,
