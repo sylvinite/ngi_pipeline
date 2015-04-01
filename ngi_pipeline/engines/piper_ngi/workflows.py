@@ -10,6 +10,17 @@ from ngi_pipeline.utils.slurm import slurm_time_to_seconds
 LOG = minimal_logger(__name__)
 
 
+PIPER_CL_TEMPLATE = ("piper -S {workflow_qscript_path}"
+                     " --xml_input {setup_xml_path}"
+                     " --global_config {global_config_path}"
+                     " --number_of_threads {num_threads}"
+                     " --scatter_gather {scatter_gather}"
+                     " -jobRunner {job_runner}"
+                     " --job_walltime {job_walltime}"
+                     " --disableJobReport"
+                     " -run")
+
+
 def get_subtasks_for_level(level):
     """For a given level (e.g. "sample"), get all the associated
     subtasks that should be run (e.g. "qc", "merge_process_variantcall")
@@ -22,13 +33,16 @@ def get_subtasks_for_level(level):
     """
     if level == "sample":
         return ("merge_process_variantcall",)
+    elif level == "genotype":
+        return ("genotype_concordance",)
     else:
         raise NotImplementedError('The level "{}" has no associated subtasks.')
 
 
 @with_ngi_config
 def return_cl_for_workflow(workflow_name, qscripts_dir_path, setup_xml_path, global_config_path,
-                           output_dir=None, exec_mode="local", config=None, config_file_path=None):
+                           output_dir=None, exec_mode="local", genotype_file=None,
+                           config=None, config_file_path=None):
     """Return an executable-ready Piper command line.
 
     :param str workflow_name: The name of the Piper workflow to be run.
@@ -37,6 +51,7 @@ def return_cl_for_workflow(workflow_name, qscripts_dir_path, setup_xml_path, glo
     :param dict global_config_path: The parsed Piper-specific globalConfig file.
     :param str output_dir: The directory to which to write output files
     :param str exec_mode: "local" or "sbatch"
+    :param str genotype_file: The path to the genotype file (only relevant for genotype workflow)
 
     :returns: The Piper command line to be executed.
     :rtype: str
@@ -51,9 +66,12 @@ def return_cl_for_workflow(workflow_name, qscripts_dir_path, setup_xml_path, glo
         LOG.error(error_msg)
         raise NotImplementedError(error_msg)
     LOG.info('Building command line for workflow "{}"'.format(workflow_name))
-    return workflow_function(qscripts_dir_path, setup_xml_path, global_config_path,
-                             config, exec_mode, output_dir) 
-
+    return workflow_function(qscripts_dir_path=qscripts_dir_path,
+                             setup_xml_path=setup_xml_path,
+                             global_config_path=global_config_path,
+                             config=config, exec_mode=exec_mode,
+                             genotype_file=genotype_file,
+                             output_dir=output_dir) 
 
 #def workflow_dna_alignonly(*args, **kwargs):
 #    """Return the command line for basic DNA Alignment.
@@ -72,40 +90,36 @@ def return_cl_for_workflow(workflow_name, qscripts_dir_path, setup_xml_path, glo
 def workflow_merge_process_variantcall(*args, **kwargs):
     """Return the command line for best practice analysis: merging, procesing and variant calling.
 
-    :param strs qscripts_dir_path: The path to the Piper qscripts directory.
+    :param str qscripts_dir_path: The path to the Piper qscripts directory.
     :param str setup_xml_path: The path to the setup.xml file.
-    :param dict global_config_path: The path to the Piper-specific globalConfig file.
+    :param str global_config_path: The path to the Piper-specific globalConfig file.
 
     :returns: The Piper command to be executed.
     :rtype: str
     """
-    # Same command line but with one additional option
-    return workflow_dna_variantcalling(*args, **kwargs) +  " --merge_alignments --data_processing --variant_calling --analyze_separately --retry_failed 1"
+    # Same command line but with some additional options
+    return workflow_dna_variantcalling(*args, **kwargs) +  \
+            (" --merge_alignments --data_processing --variant_calling "
+             "--analyze_separately --retry_failed 1")
 
 
 def workflow_dna_variantcalling(qscripts_dir_path, setup_xml_path, global_config_path,
-                                config, exec_mode, output_dir=None):
+                                config, exec_mode, output_dir=None, *args, **kwargs):
     """Return the command line for DNA Variant Calling.
 
     :param strs qscripts_dir_path: The path to the Piper qscripts directory.
     :param str setup_xml_path: The path to the setup.xml file.
-    :param dict global_config_path: The path to the Piper-specific globalConfig file.
+    :param str global_config_path: The path to the Piper-specific globalConfig file.
+    :param dict config: The parsed ngi_pipeline config file
+    :param str output_dir: The path to the desired output directory
 
     :returns: The Piper command to be executed.
     :rtype: str
     """
     ## TODO need to add -jobNative arguments (--qos=seqver)
+    cl_string = PIPER_CL_TEMPLATE
     workflow_qscript_path = os.path.join(qscripts_dir_path, "DNABestPracticeVariantCalling.scala")
     job_walltime = slurm_time_to_seconds(config.get("slurm", {}).get("time") or "4-00:00:00")
-    cl_string = ("piper -S {workflow_qscript_path}"
-                 " --xml_input {setup_xml_path}"
-                 " --global_config {global_config_path}"
-                 " --number_of_threads {num_threads}"
-                 " --scatter_gather {scatter_gather}"
-                 " -jobRunner {job_runner}"
-                 " --job_walltime {job_walltime}"
-                 " --disableJobReport"
-                 " -run")
     if output_dir:
         cl_string += " --output_directory {output_dir}"
     if exec_mode == "sbatch":
@@ -118,4 +132,30 @@ def workflow_dna_variantcalling(qscripts_dir_path, setup_xml_path, global_config
         job_runner = "Drmaa"
         scatter_gather = 23
         num_threads = 1
+    return cl_string.format(**locals())
+
+
+def workflow_genotype_concordance(qscripts_dir_path, setup_xml_path,
+                                  global_config_path, genotype_file,
+                                  config, output_dir=None, *args, **kwargs):
+    """Return the command line for genotype concordance checking.
+
+    :param str qscripts_dir_path: The path to the Piper qscripts directory.
+    :param str setup_xml_path: The path to the setup.xml file
+    :param str global_config_path: The path to the Piper-specific globalConfig file.
+    :param str genotype_file: The path to the genotype VCF file
+    :param dict config: The parsed ngi_pipeline config file
+    :param str output_dir: The path to the desired output directory
+    """
+    cl_string = PIPER_CL_TEMPLATE
+    workflow_qscript_path = os.path.join(qscripts_dir_path, "DNABestPracticeVariantCalling.scala")
+    job_walltime = slurm_time_to_seconds(config.get("slurm", {}).get("time") or "4-00:00:00")
+    num_threads = int(config.get("piper", {}).get("threads") or 8)
+    job_runner = "Shell"
+    scatter_gather = 1
+    if output_dir:
+        cl_string += " --output_directory {output_dir}"
+    cl_string += " --alignment_and_qc"
+    cl_string += " --retry_failed 1"
+    cl_string += " --genotypes {}".format(genotype_file)
     return cl_string.format(**locals())

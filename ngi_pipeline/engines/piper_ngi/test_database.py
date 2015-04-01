@@ -21,18 +21,20 @@ class TestSqlAlchemyDB(unittest.TestCase):
         cls.libprep_id = "A"
         cls.seqrun_id = gtd.generate_run_id()
         cls.engine = "piper_ngi"
+        cls.workflow = "your_mom_has_a_workflow"
 
     def setUp(self):
-        self.process_id = random.randint(2,65536)
+        self.process_id = random.randint(2, 65536)
 
     def test_add_sample_analysis(self):
         sample_analysis = sql_db.SampleAnalysis(project_id=self.project_id,
                                                 sample_id=self.sample_id,
-                                                process_id=self.process_id,
-                                                engine=self.engine)
-        self.session.add(sample_analysis)
-        self.session.commit()
+                                                workflow=self.workflow,
+                                                process_id=self.process_id)
+        with self.session as session:
+            session.add(sample_analysis)
+            session.commit()
 
-        query = self.session.query(sql_db.SampleAnalysis).filter_by(
-                                        process_id=self.process_id).one()
+            query = session.query(sql_db.SampleAnalysis).filter_by(
+                                            process_id=self.process_id).one()
         self.assertEqual(query, sample_analysis)

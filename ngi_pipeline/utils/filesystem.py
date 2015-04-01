@@ -280,13 +280,15 @@ def recreate_project_from_filesystem(project_dir,
     if not restrict_to_libpreps: restrict_to_libpreps = []
     if not restrict_to_seqruns: restrict_to_seqruns = []
 
+    project_dir = locate_project(project_dir)
+
     if os.path.islink(os.path.abspath(project_dir)):
         real_project_dir = os.path.realpath(project_dir)
         syml_project_dir = os.path.abspath(project_dir)
     else:
         real_project_dir = os.path.abspath(project_dir)
         search_dir = os.path.join(os.path.dirname(project_dir), "*")
-        sym_files =  filter(os.path.islink, glob.glob(search_dir))
+        sym_files = filter(os.path.islink, glob.glob(search_dir))
         for sym_file in sym_files:
             if os.path.realpath(sym_file) == os.path.realpath(real_project_dir):
                 syml_project_dir = os.path.abspath(sym_file)
@@ -382,7 +384,7 @@ def match_files_under_dir(dirname, pattern, pt_style="regex", realpath=True):
                     matches.append(os.path.abspath(file_path))
         else: # regex-style
             file_matches = filter(pt_comp.search, filenames)
-            file_paths = [ os.path.join(root, filename) for filename in file_matches ]
+            file_paths = [os.path.join(root, filename) for filename in file_matches]
             if file_paths:
                 if realpath:
                     matches.extend(map(os.path.realpath, file_paths))

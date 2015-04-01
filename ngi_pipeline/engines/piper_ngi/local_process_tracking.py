@@ -52,6 +52,7 @@ def update_charon_with_local_jobs_status(quiet=False, config=None, config_file_p
                                             sample_id=sample_id)
             label = "project/sample {}/{}".format(project_name, sample_id)
 
+
             try:
                 project_obj = create_project_obj_from_analysis_log(project_name,
                                                                    project_id,
@@ -79,21 +80,24 @@ def update_charon_with_local_jobs_status(quiet=False, config=None, config_file_p
                     if not config.get('quiet'):
                         mail_analysis(project_name=project_name, sample_name=sample_id,
                                       engine_name=engine, level="INFO", info_text=info_text)
-                    charon_session.sample_update(projectid=project_id,
-                                                 sampleid=sample_id,
-                                                 analysis_status=set_status)
-                    recurse_status="DONE"
-                    recurse_status_for_sample(project_obj, recurse_status, config=config)
+                    if workflow in ("merge_process_variantcall",):
+                        charon_session.sample_update(projectid=project_id,
+                                                     sampleid=sample_id,
+                                                     analysis_status=set_status)
+                        recurse_status="DONE"
+                        recurse_status_for_sample(project_obj, recurse_status, config=config)
                     # Job is only deleted if the Charon status update succeeds
+                    # (if Charon is updated for this workflow)
                     session.delete(sample_entry)
-                    # Parse seqrun output results / update Charon
-                    # This is a semi-optional step -- failure here will send an
-                    # email but not more than once. The record is still removed
-                    # from the local jobs database, so this will have to be done
-                    # manually if you want it done at all.
-                    piper_qc_dir = os.path.join(project_base_path, "ANALYSIS",
-                                                project_id,"piper_ngi",  "02_preliminary_alignment_qc")
-                    update_coverage_for_sample_seqruns(project_id, sample_id, piper_qc_dir)
+                    if workflow in ("merge_process_variantcall",):
+                        # Parse seqrun output results / update Charon
+                        # This is a semi-optional step -- failure here will send an
+                        # email but not more than once. The record is still removed
+                        # from the local jobs database, so this will have to be done
+                        # manually if you want it done at all.
+                        piper_qc_dir = os.path.join(project_base_path, "ANALYSIS",
+                                                    project_id,"piper_ngi",  "02_preliminary_alignment_qc")
+                        update_coverage_for_sample_seqruns(project_id, sample_id, piper_qc_dir)
                 elif type(piper_exit_code) is int and piper_exit_code > 0:
                     # 1 -> Job failed
                     set_status = "FAILED"
@@ -103,11 +107,13 @@ def update_charon_with_local_jobs_status(quiet=False, config=None, config_file_p
                     if not config.get('quiet'):
                         mail_analysis(project_name=project_name, sample_name=sample_id,
                                       engine_name=engine, level="ERROR", info_text=error_text)
-                    charon_session.sample_update(projectid=project_id,
-                                                 sampleid=sample_id,
-                                                 analysis_status=set_status)
-                    recurse_status_for_sample(project_obj, set_status, config=config)
+                    if workflow in ("merge_process_variantcall",):
+                        charon_session.sample_update(projectid=project_id,
+                                                     sampleid=sample_id,
+                                                     analysis_status=set_status)
+                        recurse_status_for_sample(project_obj, set_status, config=config)
                     # Job is only deleted if the Charon update succeeds
+                    # (if Charon is updated for this workflow)
                     session.delete(sample_entry)
                 else:
                     # None -> Job still running OR exit code was never written (failure)
@@ -140,26 +146,29 @@ def update_charon_with_local_jobs_status(quiet=False, config=None, config_file_p
                         if not config.get('quiet'):
                             mail_analysis(project_name=project_name, sample_name=sample_id,
                                           engine_name=engine, level="ERROR", info_text=error_text)
-                        charon_session.sample_update(projectid=project_id,
-                                                     sampleid=sample_id,
-                                                     analysis_status=set_status)
-                        recurse_status_for_sample(project_obj, set_status, config=config)
-                        # Job is only deleted if the Charon update succeeds
-                        LOG.debug("Deleting local entry {}".format(sample_entry))
-                        session.delete(sample_entry)
-                    else: # Job still running
-                        charon_status = charon_session.sample_get(projectid=project_id,
-                                                                  sampleid=sample_id)['analysis_status']
-                        if not charon_status == "UNDER_ANALYSIS":
-                            set_status = "UNDER_ANALYSIS"
-                            LOG.warn('Tracking inconsistency for {}: Charon status is "{}" but '
-                                     'local process tracking database indicates it is running. '
-                                     'Setting value in Charon to {}.'.format(label, charon_status,
-                                                                             set_status))
+                        if workflow in ("merge_process_variantcall",):
                             charon_session.sample_update(projectid=project_id,
                                                          sampleid=sample_id,
                                                          analysis_status=set_status)
-                            recurse_status_for_sample(project_obj, "RUNNING", config=config)
+                            recurse_status_for_sample(project_obj, set_status, config=config)
+                        # Job is only deleted if the Charon update succeeds
+                        # (if Charon is updated for this workflow)
+                        LOG.debug("Deleting local entry {}".format(sample_entry))
+                        session.delete(sample_entry)
+                    else: # Job still running
+                        if workflow in ("merge_process_variantcall",):
+                            charon_status = charon_session.sample_get(projectid=project_id,
+                                                                      sampleid=sample_id)['analysis_status']
+                            if not charon_status == "UNDER_ANALYSIS":
+                                set_status = "UNDER_ANALYSIS"
+                                LOG.warn('Tracking inconsistency for {}: Charon status is "{}" but '
+                                         'local process tracking database indicates it is running. '
+                                         'Setting value in Charon to {}.'.format(label, charon_status,
+                                                                                 set_status))
+                                charon_session.sample_update(projectid=project_id,
+                                                             sampleid=sample_id,
+                                                             analysis_status=set_status)
+                                recurse_status_for_sample(project_obj, "RUNNING", config=config)
             except CharonError as e:
                 error_text = ('Unable to update Charon status for "{}": {}'.format(label, e))
                 LOG.error(error_text)
@@ -357,27 +366,29 @@ def record_process_sample(project, sample, workflow_subtask, analysis_module_nam
                                                                        sample,
                                                                        workflow_subtask,
                                                                        e.message))
-    try:
-        set_status = "UNDER_ANALYSIS"
-        LOG.info(('Updating Charon status for project/sample '
-                  '{}/{} to {}').format(project, sample, set_status))
-        CharonSession().sample_update(projectid=project.project_id,
-                                      sampleid=sample.name,
-                                      analysis_status=set_status)
-        project_obj = create_project_obj_from_analysis_log(project.name,
-                                                           project.project_id,
-                                                           project.base_path,
-                                                           sample.name,
-                                                           workflow_subtask)
-        recurse_status_for_sample(project_obj, "RUNNING", extra_args={'mean_autosomal_coverage':0}, config=config)
-    except CharonError as e:
-        error_text = ('Could not update Charon status for project/sample '
-                      '{}/{} due to error: {}'.format(project, sample, e))
+    if workflow_subtask not in ("genotype_concordance",):
+        # We're not currently tracking genotype analyses in Charon
+        try:
+            set_status = "UNDER_ANALYSIS"
+            LOG.info(('Updating Charon status for project/sample '
+                      '{}/{} to {}').format(project, sample, set_status))
+            CharonSession().sample_update(projectid=project.project_id,
+                                          sampleid=sample.name,
+                                          analysis_status=set_status)
+            project_obj = create_project_obj_from_analysis_log(project.name,
+                                                               project.project_id,
+                                                               project.base_path,
+                                                               sample.name,
+                                                               workflow_subtask)
+            recurse_status_for_sample(project_obj, "RUNNING", extra_args={'mean_autosomal_coverage':0}, config=config)
+        except CharonError as e:
+            error_text = ('Could not update Charon status for project/sample '
+                          '{}/{} due to error: {}'.format(project, sample, e))
 
-        LOG.error(error_text)
-        if not config.get('quiet'):
-            mail_analysis(project_name=project.project_id, sample_name=sample.name,
-                          engine_name='piper_ngi', level="ERROR", info_text=error_text)
+            LOG.error(error_text)
+            if not config.get('quiet'):
+                mail_analysis(project_name=project.project_id, sample_name=sample.name,
+                              engine_name='piper_ngi', level="ERROR", info_text=error_text)
 
 
 def is_sample_analysis_running_local(workflow_subtask, project_id, sample_id):

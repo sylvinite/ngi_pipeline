@@ -1,13 +1,155 @@
 import collections
+import fnmatch
+import glob
 import os
+import shutil
+import subprocess
 import yaml
 
 from ngi_pipeline.conductor.classes import NGIProject
 from ngi_pipeline.database.classes import CharonSession
-from ngi_pipeline.log.loggers import minimal_logger
-from ngi_pipeline.utils.filesystem import rotate_file, safe_makedir
+from ngi_pipeline.log.loggers import log_process_non_blocking, minimal_logger
+from ngi_pipeline.utils.filesystem import execute_command_line, rotate_file, safe_makedir
 
 LOG = minimal_logger(__name__)
+
+
+def launch_piper_job(command_line, project, log_file_path=None):
+    """Launch the Piper command line.
+
+    :param str command_line: The command line to execute
+    :param Project project: The Project object (needed to set the CWD)
+
+    :returns: The subprocess.Popen object for the process
+    :rtype: subprocess.Popen
+    """
+    working_dir = os.path.join(project.base_path, "ANALYSIS", project.dirname)
+    file_handle = None
+    if log_file_path:
+        try:
+            file_handle = open(log_file_path, 'w')
+        except Exception as e:
+            LOG.error('Could not open log file "{}"; reverting to standard '
+                      'logger (error: {})'.format(log_file_path, e))
+            log_file_path = None
+    popen_object = execute_command_line(command_line, cwd=working_dir, shell=True,
+                                        stdout=(file_handle or subprocess.PIPE),
+                                        stderr=(file_handle or subprocess.PIPE))
+    if not log_file_path:
+        log_process_non_blocking(popen_object.stdout, LOG.info)
+        log_process_non_blocking(popen_object.stderr, LOG.warn)
+    return popen_object
+
+
+def remove_previous_genotype_analyses(project_obj):
+    """Remove genotype concordance analysis results for a sample, including
+    .failed and .done files.
+    Doesn't throw an error if it can't read a directory, but does if it can't
+    delete a file it knows about.
+
+    :param NGIProject project_obj: The NGIProject object with relevant NGISamples
+
+    :returns: Nothing
+    :rtype: None
+    """
+    project_dir_path = os.path.join(project_obj.base_path, "ANALYSIS", project_obj.project_id, "piper_ngi")
+    project_dir_pattern = os.path.join(project_dir_path, "??_genotype_concordance")
+    LOG.info('deleting previous analysis in {}'.format(project_dir_path))
+    for sample in project_obj:
+        piper_sample_name = sample.name.replace("_", "-", 1)
+        sample_files = glob.glob(os.path.join(project_dir_pattern, "{}*".format(sample.name)))
+        # P123_456 is renamed by Piper to P123-456? Sometimes? Always?
+        sample_files.extend(glob.glob(os.path.join(project_dir_pattern, "{}*".format(piper_sample_name))))
+        sample_files.extend(glob.glob(os.path.join(project_dir_pattern, ".{}*.done".format(piper_sample_name))))
+        sample_files.extend(glob.glob(os.path.join(project_dir_pattern, ".{}*.failed".format(piper_sample_name))))
+    if sample_files:
+        LOG.info('Deleting genotype files for samples {} under {}'.format(", ".join(project_obj.samples), project_dir_path))
+        errors = []
+        for sample_file in sample_files:
+            LOG.debug("Deleting file {}".format(sample_file))
+            try:
+                if os.path.isdir(sample_file):
+                    shutil.rmtree(sample_file)
+                else:
+                    os.remove(sample_file)
+            except OSError as e:
+                errors.append("{}: {}".format(sample_file, e))
+        if errors:
+            LOG.warn("Error when removing one or more files: {}".format("\n".join(errors)))
+    else:
+        LOG.debug("No genotype analysis files found to delete for project {} / samples {}".format(project_obj, ", ".join(project_obj.samples)))
+
+
+def remove_previous_sample_analyses(project_obj):
+    """Remove analysis results for a sample, including .failed and .done files.
+    Doesn't throw an error if it can't read a directory, but does if it can't
+    delete a file it knows about.
+
+    :param NGIProject project_obj: The NGIProject object with relevant NGISamples
+
+    :returns: Nothing
+    :rtype: None
+    """
+    project_dir_path = os.path.join(project_obj.base_path, "ANALYSIS", project_obj.project_id, "piper_ngi")
+    project_dir_pattern = os.path.join(project_dir_path, "??_*")
+    LOG.info('deleting previous analysis in {}'.format(project_dir_path))
+    for sample in project_obj:
+        sample_files = glob.glob(os.path.join(project_dir_pattern, "{}*".format(sample.name)))
+        # P123_456 is renamed by Piper to P123-456? Sometimes? Always?
+        piper_sample_name = sample.name.replace("_", "-", 1)
+        sample_files.extend(glob.glob(os.path.join(project_dir_pattern, "{}*".format(piper_sample_name))))
+        sample_files.extend(glob.glob(os.path.join(project_dir_pattern, ".{}*.done".format(piper_sample_name))))
+        sample_files.extend(glob.glob(os.path.join(project_dir_pattern, ".{}*.failed".format(piper_sample_name))))
+    # Don't delete genotype files!
+    sample_files = filter(lambda x: not fnmatch.fnmatch(x, "*genotype_concordance*"), sample_files)
+    if sample_files:
+        LOG.info('Deleting files for samples {} under {}'.format(", ".join(project_obj.samples), project_dir_path))
+        errors = []
+        for sample_file in sample_files:
+            LOG.debug("Deleting file {}".format(sample_file))
+            try:
+                if os.path.isdir(sample_file):
+                    shutil.rmtree(sample_file)
+                else:
+                    os.remove(sample_file)
+            except OSError as e:
+                errors.append("{}: {}".format(sample_file, e))
+        if errors:
+            LOG.warn("Error when removing one or more files: {}".format("\n".join(errors)))
+    else:
+        LOG.debug("No sample analysis files found to delete for project {} / samples {}".format(project_obj, ", ".join(project_obj.samples)))
+
+
+def rotate_previous_analysis(project_obj):
+    """Rotates the files from the existing analysis starting at 03_merged_aligments"""
+    project_dir_path = os.path.join(project_obj.base_path, "ANALYSIS", project_obj.project_id, "piper_ngi")
+    #analysis_move = glob.glob(os.path.join(project_dir_path, '0[3-9]_*'))
+    for sample in project_obj:
+        # P123_456 is renamed by Piper to P123-456
+        piper_sample_name = sample.name.replace("_", "-", 1)
+        sample_files = glob.glob(os.path.join(project_dir_path, "0[3-9]_*", "{}.*".format(piper_sample_name)))
+    if sample_files:
+        LOG.info('Rotating files for sample {} under {} to '
+                 '"previous_analyses" folder'.format(sample, project_dir_path))
+        current_datetime = datetime.datetime.now().strftime("%Y-%m-%d_%H:%M:%S:%f")
+        for sample_file in sample_files:
+            # This will be the project_dir_path, so I guess I'm just being paranoid
+            common_prefix = os.path.commonprefix([os.path.abspath(project_dir_path),
+                                                  os.path.abspath(sample_file)])
+            # This part of the directory tree we need to recreate under previous_analyses
+            # So e.g. with
+            #       /proj/a2015001/Y.Mom_15_01/01_raw_alignments/P123_456.bam
+            # we'd get
+            #       01_raw_alignments/P123_456.bam
+            # and we'd then create
+            #       /proj/a2015001/Y.Mom_15_01/previous_analyses/2015-02-19_16:24:12:640314/01_raw_alignments/
+            # and move the file to this directory.
+            leaf_path = os.path.relpath(sample_file, common_prefix)
+            leaf_base, filename = os.path.split(leaf_path)
+            previous_analysis_dirpath = os.path.join(common_prefix, "previous_analyses", current_datetime, leaf_base)
+            safe_makedir(previous_analysis_dirpath, mode=0o2770)
+            LOG.debug("Moving file {} to directory {}".format(sample_file, previous_analysis_dirpath))
+            shutil.move(sample_file, previous_analysis_dirpath)
 
 
 def get_finished_seqruns_for_sample(project_id, sample_id,

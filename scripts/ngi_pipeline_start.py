@@ -174,6 +174,24 @@ if __name__ == "__main__":
             help=("The path to one or more pre-parsed project directories to "
                   "run through QC analysis."))
 
+
+    # Add subparser for genotyping
+    parser_genotype = subparsers.add_parser('genotype', help="Launch genotype concordance analysis.")
+    subparsers_genotype = parser_genotype.add_subparsers(parser_class=ArgumentParserWithTheFlagsThatIWant,
+            help="Choose unit to analyze.")
+    # Add sub-subparser for project genotyping
+    genotype_project = subparsers_genotype.add_parser('project',
+            help="Start genotype analysis for all samples in a project")
+    genotype_project.add_argument("genotype_project_dirs", nargs="+",
+            help=("The path to one or more pre-parsed project directories to "
+                  "run through genotype concordance analysis."))
+    genotype_project.add_argument("-g", "--genotype-file", action="store", required=True,
+            help="The path to the genotype VCF file.")
+    # Add sub-subparser for sample genotyping
+    #genotype_sample = subparsers_genotype.add_parser('sample',
+    #        help="Start genotype analysis for one specific sample in a project.")
+
+
     args = parser.parse_args()
 
     # These options are available only if the script has been called with the 'analyze' option
@@ -291,6 +309,23 @@ if __name__ == "__main__":
             except Exception as e:
                 print(e, file=sys.stderr)
         LOG.info("Done with organization.")
+
+    elif 'genotype_project_dirs' in args:
+        from ngi_pipeline.engines import piper_ngi
+        genotype_file_path = args.genotype_file
+        for genotype_project_dir in args.genotype_project_dirs:
+            LOG.info("Starting genotype analysis of project {} with genotype "
+                     "file {}".format(genotype_project_dir, genotype_file_path))
+            project = recreate_project_from_filesystem(project_dir=genotype_project_dir,
+                                                       restrict_to_samples=args.restrict_to_samples)
+            if project and os.path.split(project.base_path)[1] == "DATA":
+                project.base_path = os.path.split(project.base_path)[0]
+            for sample in project:
+                piper_ngi.launchers.genotype(project, sample,
+                                             genotype_file=genotype_file_path,
+                                             restart_finished_jobs=args.restart_finished_jobs,
+                                             restart_running_jobs=args.restart_running_jobs,
+                                             level="genotype")
 
     elif 'port' in args:
         LOG.info('Starting ngi_pipeline server at port {}'.format(args.port))
