@@ -11,12 +11,13 @@ LOG = minimal_logger(__name__)
 
 ## TODO change this to use local_scratch_mode boolean instead of exec_mode
 def build_piper_cl(project, workflow_name, setup_xml_path, exit_code_path,
-                   config, exec_mode="local"):
+                   config, genotype_file=None, exec_mode="local"):
     """Determine which workflow to run for a project and build the appropriate command line.
     :param NGIProject project: The project object to analyze.
     :param str workflow_name: The name of the workflow to execute (e.g. "dna_alignonly")
     :param str exit_code_path: The path to the file to which the exit code for this cl will be written
     :param dict config: The (parsed) configuration file for this machine/environment.
+    :param str genotype_file: The path to the genotype file (only relevant for genotype workflow)
     :param str exec_mode: "local" or "sbatch"
 
     :returns: A list of Project objects with command lines to execute attached.
@@ -28,7 +29,7 @@ def build_piper_cl(project, workflow_name, setup_xml_path, exit_code_path,
         # Can't create these directories ahead of time of course
     elif exec_mode == "local":
         output_dir = os.path.join(project.base_path, "ANALYSIS", project.dirname, 'piper_ngi')
-        safe_makedir(analysis_dir, 0770)
+        safe_makedir(output_dir)
     else:
         raise ValueError('"exec_mode" must be one of "local", "sbatch" (value '
                          'was "{}"'.format(exec_mode))
@@ -39,7 +40,7 @@ def build_piper_cl(project, workflow_name, setup_xml_path, exit_code_path,
                     (os.environ.get("PIPER_GLOB_CONF_XML") or
                      config.get("piper", {}).get("path_to_piper_globalconfig") or
                      (os.path.join(piper_rootdir, "globalConfig.xml") if
-                     piper_rootdir else None))
+                      piper_rootdir else None))
     if not piper_global_config_path:
         raise ValueError('Could not find Piper global configuration file in config '
                          'file, as environmental variable ("PIPER_GLOB_CONF_XML"), '
@@ -50,7 +51,7 @@ def build_piper_cl(project, workflow_name, setup_xml_path, exit_code_path,
         piper_qscripts_dir = (os.environ.get("PIPER_QSCRIPTS_DIR") or
                               config['piper']['path_to_piper_qscripts'])
     except KeyError:
-        raise Valueerror('Could not find Piper QScripts directory in config file or '
+        raise ValueError('Could not find Piper QScripts directory in config file or '
                          'as environmental variable ("PIPER_QSCRIPTS_DIR").')
 
     # Build Piper cl
@@ -59,6 +60,7 @@ def build_piper_cl(project, workflow_name, setup_xml_path, exit_code_path,
     cl = workflows.return_cl_for_workflow(workflow_name=workflow_name,
                                           qscripts_dir_path=piper_qscripts_dir,
                                           setup_xml_path=setup_xml_path,
+                                          genotype_file=genotype_file,
                                           global_config_path=piper_global_config_path,
                                           output_dir=output_dir,
                                           exec_mode=exec_mode)
@@ -68,12 +70,13 @@ def build_piper_cl(project, workflow_name, setup_xml_path, exit_code_path,
     return cl 
 
 
-def build_setup_xml(project, sample, local_scratch_mode, config):
+def build_setup_xml(project, sample, workflow, local_scratch_mode, config):
     """Build the setup.xml file for each project using the CLI-interface of
     Piper's SetupFileCreator.
 
     :param NGIProject project: The project to be converted.
     :param NGISample sample: the sample object
+    :param str workflow: The name of the workflow to be executed
     :param bool local_scratch_mode: Whether the job will be run in scratch or permanent storage
     :param dict config: The (parsed) configuration file for this machine/environment.
 
@@ -90,7 +93,7 @@ def build_setup_xml(project, sample, local_scratch_mode, config):
     else:
         project_top_level_dir = os.path.join(project.base_path, "DATA", project.dirname)
         analysis_dir = os.path.join(project.base_path, "ANALYSIS", project.dirname, "piper_ngi")
-        safe_makedir(analysis_dir, 0770)
+        safe_makedir(analysis_dir)
 
     cl_args = {'project': project.dirname}
     try:
@@ -99,7 +102,6 @@ def build_setup_xml(project, sample, local_scratch_mode, config):
         LOG.warn('Could not determine sequencing center from Charon ({}); setting to blank ("").'.format(e))
         cl_args["sequencing_center"] == ""
     cl_args["sequencing_tech"] = "Illumina"
-    ## TODO load these from (ngi_pipeline) config file
     slurm_qos = config.get("slurm", {}).get("extra_params", {}).get("--qos")
     if slurm_qos:
         cl_args["qos"] = slurm_qos
@@ -122,8 +124,8 @@ def build_setup_xml(project, sample, local_scratch_mode, config):
 
     # setup XML file is always stored in permanent analysis directory
     output_xml_filepath = os.path.join(project.base_path, "ANALYSIS",
-                                       project.dirname, "piper_ngi","setup_xml_files",
-                                       "{}-{}-setup.xml".format(project, sample))
+                                       project.dirname, "piper_ngi", "setup_xml_files",
+                                       "{}-{}-{}-setup.xml".format(project, sample, workflow))
     safe_makedir(os.path.dirname(output_xml_filepath))
     cl_args["output_xml_filepath"] = output_xml_filepath
     setupfilecreator_cl = ("{sfc_binary} "
