@@ -99,7 +99,7 @@ def workflow_merge_process_variantcall(*args, **kwargs):
     """
     # Same command line but with some additional options
     return workflow_dna_variantcalling(*args, **kwargs) +  \
-            (" --merge_alignments --data_processing --variant_calling "
+            (" --variant_calling "
              "--analyze_separately --retry_failed 1")
 
 
@@ -134,7 +134,7 @@ def workflow_dna_variantcalling(qscripts_dir_path, setup_xml_path, global_config
         # Execute from within an sbatch file (run jobs on the local node)
         num_threads = int(config.get("piper", {}).get("threads") or 16)
         job_runner = config.get("piper", {}).get("shell_jobrunner") or \
-                     "ParallelShell --super_charge --ways_to_split 4"
+                     "ParallelShell --super_charge --ways_to_split 4 --job_scatter_gather_directory $SNIC_TMP/scatter_gather"
         scatter_gather = 1
     else: # exec_mode == "local"
         # Start a local process that sbatches jobs
