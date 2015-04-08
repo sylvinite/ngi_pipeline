@@ -19,7 +19,7 @@ from ngi_pipeline.database.filesystem import create_charon_entries_from_project
 from ngi_pipeline.engines import qc_ngi
 from ngi_pipeline.log.loggers import minimal_logger
 from ngi_pipeline.server import main as server_main
-from ngi_pipeline.utils.filesystem import recreate_project_from_filesystem
+from ngi_pipeline.utils.filesystem import locate_project, recreate_project_from_filesystem
 
 LOG = minimal_logger("ngi_pipeline_start")
 inflector = inflect.engine()
@@ -240,7 +240,12 @@ if __name__ == "__main__":
 
     elif 'analyze_project_dirs' in args:
         for analyze_project_dir in args.analyze_project_dirs:
-            project = recreate_project_from_filesystem(project_dir=analyze_project_dir,
+            try:
+                project_dir = locate_project(analyze_project_dir)
+            except ValueError as e:
+                LOG.error(e)
+                continue
+            project = recreate_project_from_filesystem(project_dir=project_dir,
                                                        restrict_to_samples=args.restrict_to_samples)
             if project and os.path.split(project.base_path)[1] == "DATA":
                 project.base_path = os.path.split(project.base_path)[0]

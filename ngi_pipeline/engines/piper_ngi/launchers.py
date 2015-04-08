@@ -93,7 +93,11 @@ def analyze(project, sample, exec_mode="sbatch", restart_finished_jobs=False,
                                                             project_name=project.dirname,
                                                             project_id=project.project_id,
                                                             sample_id=sample.name)
-                setup_xml_cl, setup_xml_path = build_setup_xml(project=project,
+
+                #let's update the project to keep only the right fastq files
+                updated_project, src_aln_files, src_alnqc_files = \
+                    collect_files_for_sample_analysis(project, sample, restart_finished_jobs)
+                setup_xml_cl, setup_xml_path = build_setup_xml(project=updated_project,
                                                                sample=sample,
                                                                workflow=workflow_subtask,
                                                                local_scratch_mode=(exec_mode == "sbatch"),
@@ -353,7 +357,7 @@ def sbatch_piper_sample(command_line_list, workflow_name, project, sample,
         raise RuntimeError('No SLURM project id specified in configuration file '
                            'for job "{}"'.format(job_identifier))
     slurm_queue = config.get("slurm", {}).get("queue") or "core"
-    num_cores = config.get("slurm", {}).get("cores") or 8
+    num_cores = config.get("slurm", {}).get("cores") or 16
     slurm_time = config.get("piper", {}).get("job_walltime", {}).get("workflow_name") or "4-00:00:00"
     slurm_out_log = os.path.join(perm_analysis_dir, "logs", "{}_sbatch.out".format(job_identifier))
     slurm_err_log = os.path.join(perm_analysis_dir, "logs", "{}_sbatch.err".format(job_identifier))
