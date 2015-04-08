@@ -93,7 +93,11 @@ def analyze(project, sample, exec_mode="sbatch", restart_finished_jobs=False,
                                                             project_name=project.dirname,
                                                             project_id=project.project_id,
                                                             sample_id=sample.name)
-                setup_xml_cl, setup_xml_path = build_setup_xml(project=project,
+
+                #let's update the project to keep only the right fastq files
+                updated_project, src_aln_files, src_alnqc_files = \
+                    collect_files_for_sample_analysis(project, sample, restart_finished_jobs)
+                setup_xml_cl, setup_xml_path = build_setup_xml(project=updated_project,
                                                                sample=sample,
                                                                workflow=workflow_subtask,
                                                                local_scratch_mode=(exec_mode == "sbatch"),

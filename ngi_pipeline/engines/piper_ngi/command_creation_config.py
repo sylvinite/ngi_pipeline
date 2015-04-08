@@ -136,11 +136,12 @@ def build_setup_xml(project, sample, workflow, local_scratch_mode, config):
                            "--uppnex_project_id {uppmax_proj} "
                            "--reference {reference_path} "
                            "--qos {qos}").format(**cl_args)
-    for libprep in sample:
-        for seqrun in libprep:
-            sample_run_directory = os.path.join(project_top_level_dir, sample.dirname,
-                                                libprep.dirname, seqrun.dirname)
-            for fastq_file_name in seqrun.fastq_files:
-                fastq_file = os.path.join(sample_run_directory, fastq_file_name)
-                setupfilecreator_cl += " --input_fastq {}".format(fastq_file)
+    for samp in project:
+        for libprep in samp:
+            for seqrun in libprep:
+                sample_run_directory = os.path.join(project_top_level_dir, sample.dirname,
+                                                    libprep.dirname, seqrun.dirname)
+                for fastq_file_name in seqrun.fastq_files:
+                    fastq_file = os.path.join(sample_run_directory, fastq_file_name)
+                    setupfilecreator_cl += " --input_fastq {}".format(fastq_file)
     return (setupfilecreator_cl, output_xml_filepath)
