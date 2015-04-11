@@ -182,7 +182,9 @@ def collect_files_for_sample_analysis(project_obj, sample_obj,
                                                          sample_id=sample_obj.name,
                                                          include_failed_libpreps=False,
                                                          include_done_seqruns=restart_finished_jobs)
-    if not valid_libprep_seqruns: LOG.error("Notify user or whatever. I don't know.")
+    if not valid_libprep_seqruns:
+        LOG.error('No valid libpreps/seqruns found for project/sample '
+                  '"{}/{}"'.format(project_obj, sample_obj))
 
     # Now we find all fastq files that are available and validate them against
     # the group compiled in the previous step (get_valid_seqruns_for_sample)
@@ -190,9 +192,10 @@ def collect_files_for_sample_analysis(project_obj, sample_obj,
     sample_data_directory = os.path.join(project_obj.base_path, "DATA",
                                          project_obj.dirname, sample_obj.dirname)
     fastq_files_on_filesystem = fastq_files_under_dir(sample_data_directory, realpath=False)
-    if not fastq_files_on_filesystem: LOG.error("TODO raise an error or something")
+    if not fastq_files_on_filesystem:
+        LOG.error('No valid fastq files found for project/sample '
+                  '{}/{}'.format(project_obj, sample_obj))
 
-    fastq_files_to_analyze = []
     # Create a new NGIProject object (the old one could still be in use elsewhere)
     # Fix this later I've been coding for too long
     proj_obj = NGIProject(project_obj.name, project_obj.dirname,
