@@ -28,15 +28,14 @@ def get_subtasks_for_level(level):
     :param str level: The level (e.g. "sample")
     :returns: The names (strings) of the workflows that should be run at that level
     :rtype: tuple
-
-    :raises NotImplementedError: If the level has no associated subtasks
     """
     if level == "sample":
         return ("merge_process_variantcall",)
     elif level == "genotype":
         return ("genotype_concordance",)
     else:
-        raise NotImplementedError('The level "{}" has no associated subtasks.')
+        LOG.error('The level "{}" has no associated subtasks.')
+        return []
 
 
 @with_ngi_config
