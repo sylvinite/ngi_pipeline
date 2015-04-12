@@ -189,10 +189,11 @@ def setup_analysis_directory_structure(fc_dir, projects_to_analyze,
     if not restrict_to_samples: restrict_to_samples = []
     config["quiet"] = quiet # Hack because I enter here from a script sometimes
     analysis_top_dir = os.path.abspath(config["analysis"]["top_dir"])
-    if not os.path.exists(analysis_top_dir):
-        error_msg = "Error: Analysis top directory {} does not exist".format(analysis_top_dir)
-        LOG.error(error_msg)
-        raise OSError(error_msg)
+    try:
+        safe_makedir(analysis_top_dir)
+    except OSError as e:
+        LOG.error('Error: Analysis top directory {} does not exist and could not '
+                  'be created.'.format(analysis_top_dir))
     fc_dir = fc_dir if os.path.isabs(fc_dir) else os.path.join(analysis_top_dir, fc_dir)
     if not os.path.exists(fc_dir):
         LOG.error("Error: Flowcell directory {} does not exist".format(fc_dir))
