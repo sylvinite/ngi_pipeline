@@ -282,7 +282,8 @@ def get_valid_seqruns_for_sample(project_id, sample_id,
                 except KeyError:
                     LOG.error('Field "{}" not available for seqrun "{}" in Charon '
                               'for project "{}" / sample "{}". Including as '
-                              'valid.'.format(project_id, sample_id))
+                              'valid.'.format(status_field, seqrun_id,
+                                              project_id, sample_id))
                     aln_status = None
                 if aln_status != "DONE" or include_done_seqruns:
                     libpreps[libprep_id].append(seqrun_id)
