@@ -52,6 +52,10 @@ def update_charon_with_local_jobs_status(quiet=False, config=None, config_file_p
                                             sample_id=sample_id)
             label = "project/sample {}/{}".format(project_name, sample_id)
 
+            if workflow not in ("merge_process_variantcall", "genotype_concordance",):
+                LOG.error('Unknown workflow "{}" for {}; cannot update '
+                          'Charon. Skipping project.'.format(workflow, label))
+                continue
 
             try:
                 project_obj = create_project_obj_from_analysis_log(project_name,
@@ -188,33 +192,44 @@ def update_charon_with_local_jobs_status(quiet=False, config=None, config_file_p
                                                   status_value=set_status,
                                                   config=config)
                         # Job is only deleted if the Charon update succeeds
-                        # (if Charon is updated for this workflow)
                         LOG.debug("Deleting local entry {}".format(sample_entry))
                         session.delete(sample_entry)
                     else: # Job still running
+                        set_status = "UNDER_ANALYSIS"
                         if workflow in ("merge_process_variantcall",):
                             status_field = "alignment_status"
                         elif workflow in ("genotype_concordance",):
                             status_field = "genotype_status"
-                        charon_status = \
-                                charon_session.sample_get(projectid=project_id,
-                                                          sampleid=sample_id).get(status_field)
-                        if charon_status and not charon_status == "UNDER_ANALYSIS":
-                            set_status = "UNDER_ANALYSIS"
-                            LOG.warn('Tracking inconsistency for {}: Charon status '
-                                     'for field "{}" is "{}" but local process tracking '
-                                     'database indicates it is running. Setting value '
-                                     'in Charon to {}.'.format(label, status_field,
-                                                               charon_status, set_status))
-                            charon_session.sample_update(projectid=project_id,
-                                                         sampleid=sample_id,
-                                                         **{status_field: set_status})
-                            recurse_status_for_sample(project_obj,
-                                                      status_field=status_field,
-                                                      status_value="RUNNING",
-                                                      config=config)
+                        try:
+                            charon_status = \
+                                    charon_session.sample_get(projectid=project_id,
+                                                              sampleid=sample_id).get(status_field)
+                            if charon_status and not charon_status == set_status:
+                                LOG.warn('Tracking inconsistency for {}: Charon status '
+                                         'for field "{}" is "{}" but local process tracking '
+                                         'database indicates it is running. Setting value '
+                                         'in Charon to {}.'.format(label, status_field,
+                                                                   charon_status, set_status))
+                                charon_session.sample_update(projectid=project_id,
+                                                             sampleid=sample_id,
+                                                             **{status_field: set_status})
+                                recurse_status_for_sample(project_obj,
+                                                          status_field=status_field,
+                                                          status_value="RUNNING",
+                                                          config=config)
+                        except CharonError as e:
+                            error_text = ('Unable to update/verify Charon field '
+                                          '"{}" for {} as "{}": {}'.format(status_field,
+                                                                           label,
+                                                                           set_status,
+                                                                           e))
+                            LOG.error(error_text)
+                            if not config.get('quiet'):
+                                mail_analysis(project_name=project_name, sample_name=sample_id,
+                                              engine_name=engine, level="ERROR",
+                                              workflow=workflow, info_text=error_text)
             except CharonError as e:
-                error_text = ('Unable to update Charon status "{}" for "{}": '
+                error_text = ('Unable to update Charon field "{}" for {}: '
                               '{}'.format(status_field, label, e))
                 LOG.error(error_text)
                 if not config.get('quiet'):
