@@ -56,7 +56,7 @@ def analyze(project, sample,
 
     :param NGIProject project: the project to analyze
     :param NGISample sample: the sample to analyzed
-    :param str exec_mode: "sbatch" or "local"
+    :param str exec_mode: "sbatch" or "local" (local not implemented)
     :param bool restart_finished_jobs: Restart jobs that are already done (have a .done file)
     :param bool restart_running_jobs: Kill and restart currently-running jobs
     :param str level: The level on which to perform the analysis ("sample" or "genotype")
@@ -75,8 +75,9 @@ def analyze(project, sample,
     if exec_mode.lower() not in ("sbatch", "local"):
         raise ValueError('"exec_mode" param must be one of "sbatch" or "local" '
                          'value was "{}"'.format(exec_mode))
-    modules_to_load = config.get("piper", {}).get("load_modules", [])
-    load_modules(modules_to_load)
+    if exec_mode == "local":
+        modules_to_load = config.get("piper", {}).get("load_modules", [])
+        load_modules(modules_to_load)
     LOG.info('Sample "{}" in project "{}" is ready for processing.'.format(sample, project))
     for workflow_subtask in workflows.get_subtasks_for_level(level=level):
         LOG.info('Launching "{}" analysis for sample "{}" in project '
@@ -156,7 +157,7 @@ def analyze(project, sample,
                         LOG.error('sbatch file for sample {}/{} did not '
                                   'queue properly! Job ID {} cannot be '
                                   'found.'.format(project, sample, slurm_job_id))
-                else:
+                else: # "local"
                     raise NotImplementedError('Local execution not currently implemented. '
                                               'I\'m sure Denis can help you with this.')
                     #slurm_job_id = None
