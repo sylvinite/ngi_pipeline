@@ -480,10 +480,12 @@ def is_sample_analysis_running_local(workflow_subtask, project_id, sample_id):
                                                        project_id=project_id,
                                                        sample_id=sample_id)
         if session.query(db_q.exists()).scalar():
-            LOG.info('...sample run "{}" is currently being analyzed.'.format(sample_run_name))
+            LOG.info('..."{}" for sample "{}" is currently being '
+                     'analyzed.'.format(workflow_subtask, sample_run_name))
             return True
         else:
-            LOG.info('...sample run "{}" is not currently under analysis.'.format(sample_run_name))
+            LOG.info('..."{}" for sample "{}" is not currently under '
+                     'analysis.'.format(workflow_sutask, sample_run_name))
             return False
 
 

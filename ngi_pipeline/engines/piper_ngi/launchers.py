@@ -78,10 +78,7 @@ def analyze(project, sample,
     if exec_mode == "local":
         modules_to_load = config.get("piper", {}).get("load_modules", [])
         load_modules(modules_to_load)
-    LOG.info('Sample "{}" in project "{}" is ready for processing.'.format(sample, project))
     for workflow_subtask in workflows.get_subtasks_for_level(level=level):
-        LOG.info('Launching "{}" analysis for sample "{}" in project '
-                 '"{}"'.format(workflow_subtask, sample, project))
         if level in ("genotype",):
             if find_previous_genotype_analyses(project, sample):
                 if not restart_finished_jobs:
@@ -97,6 +94,8 @@ def analyze(project, sample,
         if not is_sample_analysis_running_local(workflow_subtask=workflow_subtask,
                                                 project_id=project.project_id,
                                                 sample_id=sample.name):
+            LOG.info('Launching "{}" analysis for sample "{}" in project '
+                     '"{}"'.format(workflow_subtask, sample, project))
             try:
                 log_file_path = create_log_file_path(workflow_subtask=workflow_subtask,
                                                      project_base_path=project.base_path,
