@@ -54,7 +54,7 @@ def update_charon_with_local_jobs_status(quiet=False, config=None, config_file_p
 
             if workflow not in ("merge_process_variantcall", "genotype_concordance",):
                 LOG.error('Unknown workflow "{}" for {}; cannot update '
-                          'Charon. Skipping project.'.format(workflow, label))
+                          'Charon. Skipping sample.'.format(workflow, label))
                 continue
 
             try:

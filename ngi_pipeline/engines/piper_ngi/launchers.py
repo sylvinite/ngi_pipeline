@@ -360,7 +360,7 @@ def sbatch_piper_sample(command_line_list, workflow_name, project, sample,
             sbatch_text_list.append("mkdir -p {}".format(output_dir))
             sbatch_text_list.append(("rsync -rptoDLv {input_files}"
                                      "{output_directory}/").format(input_files=" ".join(input_files),
-                                                                    output_directory=output_dir))
+                                                                   output_directory=output_dir))
     sbatch_text_list.append("echo -ne '\\n\\nExecuting command lines at '")
     sbatch_text_list.append("date")
     sbatch_text_list.append("# Run the actual commands")
