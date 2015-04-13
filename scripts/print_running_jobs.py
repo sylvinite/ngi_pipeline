@@ -11,8 +11,11 @@ from ngi_pipeline.engines.piper_ngi.database import SampleAnalysis, get_db_sessi
 
 if __name__=="__main__":
     parser = argparse.ArgumentParser("Show all the jobs currently running (currently just for Piper).")
+    parser.add_argument("-q", "--quiet", action="store_true",
+            help="Don't send notification emails on status changes.")
+    args = parser.parse_args()
 
-    update_charon_with_local_jobs_status()
+    update_charon_with_local_jobs_status(quiet=args.quiet)
 
     with get_db_session() as session:
         sample_jobs = session.query(SampleAnalysis).all()
