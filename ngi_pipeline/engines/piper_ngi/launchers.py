@@ -177,7 +177,9 @@ def analyze(project, sample,
                     continue
             except (NotImplementedError, RuntimeError, ValueError) as e:
                 error_msg = ('Processing project "{}" / sample "{}" / workflow "{}" '
-                             'failed: {}'.format(project, sample, e.__repr__()))
+                             'failed: {}'.format(project, sample,
+                                                 workflow_subtask,
+                                                 e))
                 LOG.error(error_msg)
 
 
