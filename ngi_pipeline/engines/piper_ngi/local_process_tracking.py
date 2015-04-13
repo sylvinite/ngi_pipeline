@@ -95,9 +95,9 @@ def update_charon_with_local_jobs_status(quiet=False, config=None, config_file_p
                                       level="INFO",
                                       info_text=info_text,
                                       workflow=workflow)
-                    if workflow in ("merge_process_variantcall",):
+                    if workflow == "merge_process_variantcall":
                         status_field = "analysis_status"
-                    elif workflow in ("genotype_concordance",):
+                    elif workflow == "genotype_concordance":
                         status_field = "genotype_status"
                     charon_session.sample_update(projectid=project_id,
                                                  sampleid=sample_id,
@@ -109,7 +109,7 @@ def update_charon_with_local_jobs_status(quiet=False, config=None, config_file_p
                     # Job is only deleted if the Charon status update succeeds
                     # (if Charon is updated for this workflow)
                     session.delete(sample_entry)
-                    if workflow in ("merge_process_variantcall",):
+                    if workflow == "merge_process_variantcall":
                         # Parse seqrun output results / update Charon
                         # This is a semi-optional step -- failure here will send an
                         # email but not more than once. The record is still removed
@@ -133,13 +133,13 @@ def update_charon_with_local_jobs_status(quiet=False, config=None, config_file_p
                                       level="ERROR",
                                       info_text=error_text,
                                       workflow=workflow)
-                    if workflow in ("merge_process_variantcall",):
+                    if workflow == "merge_process_variantcall":
                         status_field = "analysis_status"
-                    elif workflow in ("genotype_concordance",):
+                    elif workflow == "genotype_concordance":
                         status_field = "genotype_status"
                     charon_session.sample_update(projectid=project_id,
                                                  sampleid=sample_id,
-                                                 **{status_Field: set_status})
+                                                 **{status_field: set_status})
                     recurse_status_for_sample(project_obj, status_field=status_field,
                                               status_value=set_status, config=config)
                     # Job is only deleted if the Charon update succeeds
@@ -180,9 +180,9 @@ def update_charon_with_local_jobs_status(quiet=False, config=None, config_file_p
                                           engine_name=engine, level="ERROR",
                                           info_text=error_text,
                                           workflow=workflow)
-                        if workflow in ("merge_process_variantcall",):
+                        if workflow == "merge_process_variantcall":
                             status_field = "analysis_status"
-                        elif workflow in ("genotype_concordance",):
+                        elif workflow == "genotype_concordance":
                             status_field = "genotype_status"
                         charon_session.sample_update(projectid=project_id,
                                                      sampleid=sample_id,
@@ -196,9 +196,9 @@ def update_charon_with_local_jobs_status(quiet=False, config=None, config_file_p
                         session.delete(sample_entry)
                     else: # Job still running
                         set_status = "UNDER_ANALYSIS"
-                        if workflow in ("merge_process_variantcall",):
+                        if workflow == "merge_process_variantcall":
                             status_field = "alignment_status"
-                        elif workflow in ("genotype_concordance",):
+                        elif workflow == "genotype_concordance":
                             status_field = "genotype_status"
                         try:
                             charon_status = \
@@ -267,8 +267,8 @@ def recurse_status_for_sample(project_obj, status_field, status_value, update_do
             for seqrun_obj in libprep_obj:
                 seqrun_id = seqrun_obj.name
                 label = "{}/{}/{}/{}".format(project_id, sample_id, libprep_id, seqrun_id)
-                LOG.info(('Updating status for field "{}" of project/sample/libprep/seqrun '
-                          '"{}" to "{}" in Charon ').format(status_field, label, status_value))
+                LOG.info('Updating status for field "{}" of project/sample/libprep/seqrun '
+                         '"{}" to "{}" in Charon '.format(status_field, label, status_value))
                 try:
                     charon_session.seqrun_update(projectid=project_id,
                                                  sampleid=sample_id,

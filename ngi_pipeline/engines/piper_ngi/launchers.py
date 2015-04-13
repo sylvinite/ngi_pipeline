@@ -79,7 +79,7 @@ def analyze(project, sample,
         modules_to_load = config.get("piper", {}).get("load_modules", [])
         load_modules(modules_to_load)
     for workflow_subtask in workflows.get_subtasks_for_level(level=level):
-        if level in ("genotype",):
+        if level == "genotype":
             if find_previous_genotype_analyses(project, sample):
                 if not restart_finished_jobs:
                     LOG.info('Project/sample "{}/{}" has completed genotype '
@@ -109,13 +109,13 @@ def analyze(project, sample,
                                                             project_id=project.project_id,
                                                             sample_id=sample.name)
                 # We're not using any of the previous analysis files at the moment
-                if level in ("sample",):
+                if level == "sample":
                     remove_previous_sample_analyses(project)
-                elif level in ("genotype",):
+                elif level == "genotype":
                     remove_previous_genotype_analyses(project)
 
                 # Update the project to keep only valid fastq files for setup.xml creation
-                if level in ("genotype",):
+                if level == "genotype":
                     updated_project = \
                             collect_files_for_sample_analysis(project,
                                                               sample,
