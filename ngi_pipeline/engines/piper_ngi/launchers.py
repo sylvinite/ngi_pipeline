@@ -189,7 +189,7 @@ def collect_files_for_sample_analysis(project_obj, sample_obj,
     follows a preset decision path to decide which of them to include in
     a sample-level analysis. This can include fastq files, bam files, and
     alignment-qc-level files.
-    Doesn't modify exsting project or sample objects; returns new copies.
+    Doesn't modify existing project or sample objects; returns new copies.
 
     :param NGIProject project_obj: The NGIProject object to process
     :param NGISample sample_obj: The NGISample object to process
