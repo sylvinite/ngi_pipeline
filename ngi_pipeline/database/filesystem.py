@@ -11,8 +11,9 @@ LOG = minimal_logger(__name__)
 def create_charon_entries_from_project(project, best_practice_analysis="whole_genome_reseq",
                                        sequencing_facility="NGI-S",
                                        force_overwrite=False, delete_existing=False):
-    """Given a project object, creates the relevant entries
-    in Charon.
+    """Given a project object, creates the relevant entries in Charon.
+    This code is remarkably shoddy as I created it in a hurry and then later
+    it became a part of the pipeline. Use at your own risk! Ha ha.
 
     :param NGIProject project: The NGIProject object
     :param str best_practice_analysis: The workflow to assign for this project (default "variant_calling")
@@ -81,12 +82,12 @@ def create_charon_entries_from_project(project, best_practice_analysis="whole_ge
                 LOG.warn('Deleting existing libprep "{}"'.format(libprep))
                 try:
                     charon_session.libprep_delete(projectid=project.project_id,
-                                                 sampleid=sample.name,
-                                                 libprepid=libprep.name)
+                                                  sampleid=sample.name,
+                                                  libprepid=libprep.name)
                 except CharonError as e:
                     LOG.warn('Could not delete libprep "{}": {}'.format(libprep, e))
             try:
-                qc= "PASSED"
+                qc = "PASSED"
                 LOG.info('Creating libprep "{}" with qc status "{}"'.format(libprep, qc))
                 charon_session.libprep_create(projectid=project.project_id,
                                               sampleid=sample.name,
@@ -107,7 +108,7 @@ def create_charon_entries_from_project(project, best_practice_analysis="whole_ge
                         LOG.info(('Project/sample/libprep "{}/{}/{}" updated in '
                                   'Charon').format(project, sample, libprep))
                     else:
-                        LOG.info(e)
+                        LOG.debug(e)
                         LOG.info('Project "{}" / sample "{}" / libprep "{}" already '
                                  'exists; moving to libpreps'.format(project, sample, libprep))
                 else:

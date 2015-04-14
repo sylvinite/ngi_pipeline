@@ -19,6 +19,7 @@ environment:
     project_id: a2014205
     conda_env: ngi
     ngi_scripts_dir: /proj/a2014205/software/ngi_pipeline/scripts
+    flowcell_inbox: /proj/a2014205/archive
 
 
 logging:
@@ -40,7 +41,11 @@ piper:
         - java/sun_jdk1.7.0_25
         - R/2.15.0
     threads: 16
-
+    #shell_jobrunner: Shell
+    #jobNative:
+    #    - arg1
+    #    - arg2
+    #    - arg3
 
 qc:
     load_modules:

@@ -14,35 +14,47 @@ import datetime
 from ngi_pipeline.conductor.classes import NGIProject
 from ngi_pipeline.database.classes import CharonSession, CharonError
 from ngi_pipeline.engines.piper_ngi import workflows
-from ngi_pipeline.engines.piper_ngi.command_creation import build_piper_cl, \
-                                                            build_setup_xml
+from ngi_pipeline.engines.piper_ngi.command_creation_config import build_piper_cl, \
+                                                                   build_setup_xml
 from ngi_pipeline.engines.piper_ngi.local_process_tracking import is_sample_analysis_running_local, \
+                                                                  kill_running_sample_analysis, \
                                                                   record_process_sample
 from ngi_pipeline.engines.piper_ngi.utils import check_for_preexisting_sample_runs, \
                                                  create_exit_code_file_path, \
                                                  create_log_file_path, \
                                                  create_sbatch_header, \
+                                                 find_previous_genotype_analyses, \
                                                  get_valid_seqruns_for_sample, \
-                                                 record_analysis_details
+                                                 launch_piper_job, \
+                                                 record_analysis_details, \
+                                                 remove_previous_genotype_analyses, \
+                                                 remove_previous_sample_analyses, \
+                                                 rotate_previous_analysis
+
 from ngi_pipeline.log.loggers import log_process_non_blocking, minimal_logger
 from ngi_pipeline.utils.filesystem import load_modules, execute_command_line, \
                                           rotate_file, safe_makedir, \
                                           match_files_under_dir
 from ngi_pipeline.utils.classes import with_ngi_config
 from ngi_pipeline.utils.filesystem import fastq_files_under_dir
-from ngi_pipeline.utils.parsers import parse_lane_from_filename, find_fastq_read_pairs_from_dir, \
-                                       get_flowcell_id_from_dirtree, get_slurm_job_status
+from ngi_pipeline.utils.parsers import parse_lane_from_filename, \
+                                       find_fastq_read_pairs_from_dir, \
+                                       get_flowcell_id_from_dirtree
+from ngi_pipeline.utils.slurm import get_slurm_job_status
 
 LOG = minimal_logger(__name__)
 
 @with_ngi_config
-def analyze(project, sample, exec_mode="sbatch", restart_finished_jobs=False, 
-            restart_running_jobs=False, config=None, config_file_path=None):
+def analyze(project, sample, exec_mode="sbatch", restart_finished_jobs=False,
+            restart_running_jobs=False, level="sample", genotype_file=None,
+            config=None, config_file_path=None):
     """Analyze data at the sample level.
 
     :param NGIProject project: the project to analyze
     :param NGISample sample: the sample to analyzed
     :param str exec_mode: "sbatch" or "local"
+    :param str level: The level on which to perform the analysis ("sample" or "genotype")
+    :param str genotype_file: The path to the genotype file (only relevant for genotype analysis)
     :param dict config: The parsed configuration file (optional)
     :param str config_file_path: The path to the configuration file (optional)
 
@@ -55,12 +67,17 @@ def analyze(project, sample, exec_mode="sbatch", restart_finished_jobs=False,
         raise RuntimeError('Aborting processing of project/sample "{}/{}": '
                                '{}'.format(project, sample, e))
     if exec_mode.lower() not in ("sbatch", "local"):
-        raise ValueError(('"exec_mode" param must be one of "sbatch" or "local" ')
-                         ('value was "{}"'.format(exec_mode)))
+        raise ValueError('"exec_mode" param must be one of "sbatch" or "local" '
+                         'value was "{}"'.format(exec_mode))
     modules_to_load = ["java/sun_jdk1.7.0_25", "R/2.15.0"]
     load_modules(modules_to_load)
     LOG.info('Sample "{}" in project "{}" is ready for processing.'.format(sample, project))
     for workflow_subtask in workflows.get_subtasks_for_level(level="sample"):
+        if restart_running_jobs:
+            # Kill currently-running jobs if they exist
+            kill_running_sample_analysis(workflow_subtask=workflow_subtask,
+                                         project_id=project.project_id,
+                                         sample_id=sample.name)
         if not is_sample_analysis_running_local(workflow_subtask=workflow_subtask,
                                                 project_id=project.project_id,
                                                 sample_id=sample.name):
@@ -76,8 +93,13 @@ def analyze(project, sample, exec_mode="sbatch", restart_finished_jobs=False,
                                                             project_name=project.dirname,
                                                             project_id=project.project_id,
                                                             sample_id=sample.name)
-                setup_xml_cl, setup_xml_path = build_setup_xml(project=project,
+
+                #let's update the project to keep only the right fastq files
+                updated_project, src_aln_files, src_alnqc_files = \
+                    collect_files_for_sample_analysis(project, sample, restart_finished_jobs)
+                setup_xml_cl, setup_xml_path = build_setup_xml(project=updated_project,
                                                                sample=sample,
+                                                               workflow=workflow_subtask,
                                                                local_scratch_mode=(exec_mode == "sbatch"),
                                                                config=config)
                 piper_cl = build_piper_cl(project=project,
@@ -86,8 +108,10 @@ def analyze(project, sample, exec_mode="sbatch", restart_finished_jobs=False,
                                           exit_code_path=exit_code_path,
                                           config=config,
                                           exec_mode=exec_mode)
-                remove_previous_sample_analyses(project)
-
+                if level in ("sample",):
+                    remove_previous_sample_analyses(project)
+                elif level in ("genotype",):
+                    remove_previous_genotype_analyses(project)
                 if exec_mode == "sbatch":
                     process_id = None
                     slurm_job_id = sbatch_piper_sample([setup_xml_cl, piper_cl],
@@ -119,9 +143,120 @@ def analyze(project, sample, exec_mode="sbatch", restart_finished_jobs=False,
                                           process_id=process_id,
                                           workflow_subtask=workflow_subtask)
                 except RuntimeError as e:
-                    LOG.error('Could not record process for project/sample '
-                              '{}/{}, workflow {}'.format(project, sample,
-                                                          workflow_subtask))
+                    LOG.error(e)
+                    ## Question: should we just kill the run in this case or let it go?
+                    continue
+            except (NotImplementedError, RuntimeError, ValueError) as e:
+                error_msg = ('Processing project "{}" / sample "{}" failed: '
+                             '{}'.format(project, sample, e.__repr__()))
+                LOG.error(error_msg)
+
+
+# Temporary separate function for genotyping until we decide how to deal with
+# tracking these analyses in Charon
+@with_ngi_config
+def genotype(project, sample, exec_mode="sbatch",
+             genotype_file=None,
+             restart_finished_jobs=False,
+             restart_running_jobs=False,
+             level="genotype",
+             config=None, config_file_path=None):
+    """Perform genotype concordance analysis.
+
+    :param NGIProject project: the project to analyze
+    :param NGISample sample: the sample to analyzed
+    :param str exec_mode: "sbatch" or "local"
+    :param str genotype_file: The path to the genotype file (only relevant for genotype analysis)
+    :param bool restart_finished_jobs: Restart jobs that are already done (have a .done file)
+    :param bool restart_running_jobs: Kill and restart currently-running jobs
+    :param str level: (For compatibility with analyze() function)
+    :param dict config: The parsed configuration file (optional)
+    :param str config_file_path: The path to the configuration file (optional)
+
+    :raises ValueError: If exec_mode is an unsupported value
+    """
+    LOG.info('Launching genotype analysis for Sample "{}" in project "{}" '
+             'with genotype file "{}"'.format(sample, project, genotype_file))
+    if exec_mode.lower() not in ("sbatch", "local"):
+        raise ValueError('"exec_mode" param must be one of "sbatch" or "local" '
+                         'value was "{}"'.format(exec_mode))
+    modules_to_load = ["java/sun_jdk1.7.0_25", "R/2.15.0"]
+    load_modules(modules_to_load)
+    # This is unnecessary but I'm trying to mirror the analyze() function above
+    # so it's not too tricky to combine this functionality into that once we
+    # decide how to deal with Charon
+    for workflow_subtask in workflows.get_subtasks_for_level(level=level):
+        if find_previous_genotype_analyses(project, sample):
+            if not restart_finished_jobs:
+                LOG.info('Project/sample "{}/{}" has completed genotype analysis '
+                         'previously; skipping (use flag to force analysis)'.format(project, sample))
+                continue
+        if restart_running_jobs:
+            # Kill currently-running jobs if they exist
+            kill_running_sample_analysis(workflow_subtask=workflow_subtask,
+                                         project_id=project.project_id,
+                                         sample_id=sample.name)
+        if not is_sample_analysis_running_local(workflow_subtask=workflow_subtask,
+                                                project_id=project.project_id,
+                                                sample_id=sample.name):
+            try:
+                log_file_path = create_log_file_path(workflow_subtask=workflow_subtask,
+                                                     project_base_path=project.base_path,
+                                                     project_name=project.dirname,
+                                                     project_id=project.project_id,
+                                                     sample_id=sample.name)
+                rotate_file(log_file_path)
+                exit_code_path = create_exit_code_file_path(workflow_subtask=workflow_subtask,
+                                                            project_base_path=project.base_path,
+                                                            project_name=project.dirname,
+                                                            project_id=project.project_id,
+                                                            sample_id=sample.name)
+                setup_xml_cl, setup_xml_path = build_setup_xml(project=project,
+                                                               sample=sample,
+                                                               workflow=workflow_subtask,
+                                                               local_scratch_mode=(exec_mode == "sbatch"),
+                                                               config=config)
+                piper_cl = build_piper_cl(project=project,
+                                          workflow_name=workflow_subtask,
+                                          setup_xml_path=setup_xml_path,
+                                          exit_code_path=exit_code_path,
+                                          genotype_file=genotype_file,
+                                          config=config,
+                                          exec_mode=exec_mode)
+                remove_previous_genotype_analyses(project)
+                if exec_mode == "sbatch":
+                    process_id = None
+                    # "restart_finished_jobs" in this case checks against Charon,
+                    # and that value refers to normal analysis, not genotyping
+                    slurm_job_id = sbatch_piper_sample([setup_xml_cl, piper_cl],
+                                                       workflow_subtask,
+                                                       project, sample,
+                                                       restart_finished_jobs=True)
+                    for x in xrange(10): # Time delay to let sbatch get its act together (takes a few seconds to be visible with sacct)
+                        try:
+                            get_slurm_job_status(slurm_job_id)
+                            break
+                        except ValueError:
+                            time.sleep(2)
+                    else:
+                        LOG.error('sbatch file for sample {}/{} did not '
+                                  'queue properly! Job ID {} cannot be '
+                                  'found.'.format(project, sample, slurm_job_id))
+                else:
+                    raise NotImplementedError("Sorry dude it's a no-go")
+                    slurm_job_id = None
+                    launch_piper_job(setup_xml_cl, project)
+                    process_handle = launch_piper_job(piper_cl, project)
+                    process_id = process_handle.pid
+                try:
+                    record_process_sample(project=project,
+                                          sample=sample,
+                                          analysis_module_name="piper_ngi",
+                                          slurm_job_id=slurm_job_id,
+                                          process_id=process_id,
+                                          workflow_subtask=workflow_subtask)
+                except RuntimeError as e:
+                    LOG.error(e)
                     ## Question: should we just kill the run in this case or let it go?
                     continue
             except (NotImplementedError, RuntimeError, ValueError) as e:
@@ -222,7 +357,7 @@ def sbatch_piper_sample(command_line_list, workflow_name, project, sample,
         raise RuntimeError('No SLURM project id specified in configuration file '
                            'for job "{}"'.format(job_identifier))
     slurm_queue = config.get("slurm", {}).get("queue") or "core"
-    num_cores = config.get("slurm", {}).get("cores") or 8
+    num_cores = config.get("slurm", {}).get("cores") or 16
     slurm_time = config.get("piper", {}).get("job_walltime", {}).get("workflow_name") or "4-00:00:00"
     slurm_out_log = os.path.join(perm_analysis_dir, "logs", "{}_sbatch.out".format(job_identifier))
     slurm_err_log = os.path.join(perm_analysis_dir, "logs", "{}_sbatch.err".format(job_identifier))
@@ -246,8 +381,7 @@ def sbatch_piper_sample(command_line_list, workflow_name, project, sample,
             sbatch_text_list.append("module load {}".format(module_name))
 
     project, src_aln_files, src_alnqc_files = \
-            collect_files_for_sample_analysis(project, sample, 
-                                                restart_finished_jobs)
+            collect_files_for_sample_analysis(project, sample, restart_finished_jobs)
 
     # Fastq files to copy
     fastq_src_dst_list = []
@@ -347,91 +481,3 @@ def sbatch_piper_sample(command_line_list, workflow_name, project, sample,
     # Detail which seqruns we've started analyzing so we can update statuses later
     record_analysis_details(project, job_identifier)
     return int(slurm_job_id)
-
-
-def launch_piper_job(command_line, project, log_file_path=None):
-    """Launch the Piper command line.
-
-    :param str command_line: The command line to execute
-    :param Project project: The Project object (needed to set the CWD)
-
-    :returns: The subprocess.Popen object for the process
-    :rtype: subprocess.Popen
-    """
-    working_dir = os.path.join(project.base_path, "ANALYSIS", project.dirname)
-    file_handle=None
-    if log_file_path:
-        try:
-            file_handle = open(log_file_path, 'w')
-        except Exception as e:
-            LOG.error('Could not open log file "{}"; reverting to standard '
-                      'logger (error: {})'.format(log_file_path, e))
-            log_file_path = None
-    popen_object = execute_command_line(command_line, cwd=working_dir, shell=True,
-                                        stdout=(file_handle or subprocess.PIPE),
-                                        stderr=(file_handle or subprocess.PIPE))
-    if not log_file_path:
-        log_process_non_blocking(popen_object.stdout, LOG.info)
-        log_process_non_blocking(popen_object.stderr, LOG.warn)
-    return popen_object
-
-
-def remove_previous_sample_analyses(project_obj):
-    """Remove analysis results for a sample, including .failed and .done files.
-    Doesn't throw an error if it can't read a directory, but does if it can't
-    delete a file it knows about.
-    """
-    project_dir_path = os.path.join(project_obj.base_path, "ANALYSIS", project_obj.project_id, "piper_ngi")
-    project_dir_pattern = os.path.join(project_dir_path, "??_*")
-    LOG.info('deleting previous analysis in {}'.format(project_dir_path))
-    for sample in project_obj:
-        # P123_456 is renamed by Piper to P123-456
-        piper_sample_name = sample.name.replace("_", "-", 1)
-        sample_files = glob.glob(os.path.join(project_dir_pattern, "{}.*".format(piper_sample_name)))
-        sample_files.extend(glob.glob(os.path.join(project_dir_pattern, ".{}*.done".format(piper_sample_name))))
-        sample_files.extend(glob.glob(os.path.join(project_dir_pattern, ".{}*.failed".format(piper_sample_name))))
-    if sample_files:
-        LOG.info('Deleting files for samples {} under {}'.format(", ".join(project_obj.samples), project_dir_path))
-        errors = []
-        for sample_file in sample_files:
-            LOG.debug("Deleting file {}".format(sample_file))
-            try:
-                os.remove(sample_file)
-            except OSError as e:
-                errors.append(e.message)
-        if errors:
-            LOG.warn("Error when removing one or more files: {}".format(", ".join(errors)))
-    else:
-        LOG.debug("No sample analysis files found to delete for project {} / samples {}".format(project_obj, ", ".join(project_obj.samples)))
-
-
-def rotate_previous_analysis(project_obj):
-    """Rotates the files from the existing analysis starting at 03_merged_aligments"""
-    project_dir_path = os.path.join(project_obj.base_path, "ANALYSIS", project_obj.project_id, "piper_ngi")
-    #analysis_move = glob.glob(os.path.join(project_dir_path, '0[3-9]_*'))
-    for sample in project_obj:
-        # P123_456 is renamed by Piper to P123-456
-        piper_sample_name = sample.name.replace("_", "-", 1)
-        sample_files = glob.glob(os.path.join(project_dir_path, "0[3-9]_*", "{}.*".format(piper_sample_name)))
-    if sample_files:
-        LOG.info('Rotating files for sample {} under {} to '
-                 '"previous_analyses" folder'.format(sample, project_dir_path))
-        current_datetime = datetime.datetime.now().strftime("%Y-%m-%d_%H:%M:%S:%f")
-        for sample_file in sample_files:
-            # This will be the project_dir_path, so I guess I'm just being paranoid
-            common_prefix = os.path.commonprefix([os.path.abspath(project_dir_path),
-                                                  os.path.abspath(sample_file)])
-            # This part of the directory tree we need to recreate under previous_analyses
-            # So e.g. with
-            #       /proj/a2015001/Y.Mom_15_01/01_raw_alignments/P123_456.bam
-            # we'd get
-            #       01_raw_alignments/P123_456.bam
-            # and we'd then create
-            #       /proj/a2015001/Y.Mom_15_01/previous_analyses/2015-02-19_16:24:12:640314/01_raw_alignments/
-            # and move the file to this directory.
-            leaf_path = os.path.relpath(sample_file, common_prefix)
-            leaf_base, filename = os.path.split(leaf_path)
-            previous_analysis_dirpath = os.path.join(common_prefix, "previous_analyses", current_datetime, leaf_base)
-            safe_makedir(previous_analysis_dirpath, mode=0o2770)
-            LOG.debug("Moving file {} to directory {}".format(sample_file, previous_analysis_dirpath))
-            shutil.move(sample_file, previous_analysis_dirpath)

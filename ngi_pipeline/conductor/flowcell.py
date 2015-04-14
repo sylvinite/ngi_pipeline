@@ -17,7 +17,8 @@ from ngi_pipeline.database.filesystem import create_charon_entries_from_project
 from ngi_pipeline.log.loggers import minimal_logger
 from ngi_pipeline.utils.classes import with_ngi_config
 from ngi_pipeline.utils.communication import mail_analysis
-from ngi_pipeline.utils.filesystem import do_rsync, do_symlink, safe_makedir
+from ngi_pipeline.utils.filesystem import do_rsync, do_symlink, \
+                                          locate_flowcell, safe_makedir
 from ngi_pipeline.utils.parsers import determine_library_prep_from_fcid, \
                                        determine_library_prep_from_samplesheet, \
                                        parse_lane_from_filename
@@ -29,10 +30,12 @@ STHLM_PROJECT_RE = re.compile(r'[A-z][_.][A-z0-9]+_\d{2}_\d{2}')
 STHLM_X_PROJECT_RE = re.compile(r'[A-z]_[A-z0-9]+_\d{2}_\d{2}')
 
 
+## TODO we should just remove this function
 def process_demultiplexed_flowcell(demux_fcid_dir_path, restrict_to_projects=None,
                                    restrict_to_samples=None, restart_failed_jobs=False,
                                    restart_finished_jobs=False, restart_running_jobs=False,
-                                   config_file_path=None, quiet=False, manual=False):
+                                    quiet=False, manual=False,
+                                    config=None, config_file_path=None):
     """Call process_demultiplexed_flowcells, restricting to a single flowcell.
     Essentially a restrictive wrapper.
 
@@ -60,7 +63,8 @@ def process_demultiplexed_flowcell(demux_fcid_dir_path, restrict_to_projects=Non
 def process_demultiplexed_flowcells(demux_fcid_dirs, restrict_to_projects=None,
                                     restrict_to_samples=None, restart_failed_jobs=False,
                                     restart_finished_jobs=False, restart_running_jobs=False,
-                                    config=None, config_file_path=None, quiet=False, manual=False):
+                                    quiet=False, manual=False,
+                                    config=None, config_file_path=None):
     """Sort demultiplexed Illumina flowcells into projects and launch their analysis.
 
     :param list demux_fcid_dirs: The CASAVA-produced demux directory/directories.
@@ -70,8 +74,49 @@ def process_demultiplexed_flowcells(demux_fcid_dirs, restrict_to_projects=None,
                                      restricted to these. Optional.
     :param bool restart_failed_jobs: Restart jobs marked as "FAILED" in Charon.
     :param bool restart_finished_jobs: Restart jobs marked as "DONE" in Charon.
+    :param bool quiet: Don't send notification emails; added to config
+    :param bool manual: This is being run from a user script; added to config
     :param dict config: The parsed NGI configuration file; optional.
     :param str config_file_path: The path to the NGI configuration file; optional.
+    """
+    if not restrict_to_projects: restrict_to_projects = []
+    if not restrict_to_samples: restrict_to_samples = []
+    projects_to_analyze = organize_projects_from_flowcell(demux_fcid_dirs=demux_fcid_dirs,
+                                                          restrict_to_projects=restrict_to_projects,
+                                                          restrict_to_samples=restrict_to_samples,
+                                                          quiet=quiet, config=config)
+    for project in projects_to_analyze:
+        if UPPSALA_PROJECT_RE.match(project.project_id):
+            LOG.info('Creating Charon records for Uppsala project "{}" if they '
+                     'are missing'.format(project))
+            create_charon_entries_from_project(project, sequencing_facility="NGI-U")
+    launch_analysis(projects_to_analyze, restart_failed_jobs, restart_finished_jobs,
+                    restart_running_jobs, config=config)
+
+
+@with_ngi_config
+def organize_projects_from_flowcell(demux_fcid_dirs, restrict_to_projects=None,
+                                    restrict_to_samples=None,
+                                    fallback_libprep=None, quiet=False,
+                                    create_files=True,
+                                    config=None, config_file_path=None):
+    """Sort demultiplexed Illumina flowcells into projects and return a list of them,
+    creating the project/sample/libprep/seqrun dir tree on disk via symlinks.
+
+    :param list demux_fcid_dirs: The CASAVA-produced demux directory/directories.
+    :param list restrict_to_projects: A list of projects; analysis will be
+                                      restricted to these. Optional.
+    :param list restrict_to_samples: A list of samples; analysis will be
+                                     restricted to these. Optional.
+    :param str fallback_libprep: If libprep cannot be determined, use this value if supplied (default None)
+    :param bool quiet: Don't send notification emails
+    :param bool create_files: Alter the filesystem (as opposed to just parsing flowcells) (default True)
+    :param dict config: The parsed NGI configuration file; optional.
+    :param str config_file_path: The path to the NGI configuration file; optional.
+
+    :returns: A list of NGIProject objects.
+    :rtype: list
+    :raises RuntimeError: If no (valid) projects are found in the flowcell dirs
     """
     if not restrict_to_projects: restrict_to_projects = []
     if not restrict_to_samples: restrict_to_samples = []
@@ -79,15 +124,23 @@ def process_demultiplexed_flowcells(demux_fcid_dirs, restrict_to_projects=None,
     # Sort/copy each raw demux FC into project/sample/fcid format -- "analysis-ready"
     projects_to_analyze = dict()
     for demux_fcid_dir in demux_fcid_dirs_set:
-        demux_fcid_dir = os.path.abspath(demux_fcid_dir)
+        try:
+            # Get the full path to the flowcell if it was passed in as just a name
+            demux_fcid_dir = locate_flowcell(demux_fcid_dir)
+        except ValueError as e:
+            # Flowcell path couldn't be found/doesn't exist; skip it
+            LOG.error('Skipping flowcell "{}": {}'.format(demux_fcid_dir, e))
+            continue
         # These will be a bunch of Project objects each containing Samples, FCIDs, lists of fastq files
-        projects_to_analyze = setup_analysis_directory_structure(demux_fcid_dir,
-                                                                 projects_to_analyze,
-                                                                 restrict_to_projects,
-                                                                 restrict_to_samples,
-                                                                 create_files=True,
-                                                                 config=config,
-                                                                 quiet=quiet)
+        projects_to_analyze = \
+                setup_analysis_directory_structure(fc_dir=demux_fcid_dir,
+                                                   projects_to_analyze=projects_to_analyze,
+                                                   restrict_to_projects=restrict_to_projects,
+                                                   restrict_to_samples=restrict_to_samples,
+                                                   create_files=create_files,
+                                                   fallback_libprep=fallback_libprep,
+                                                   config=config,
+                                                   quiet=quiet)
     if not projects_to_analyze:
         if restrict_to_projects:
             error_message = ("No projects found to process: the specified flowcells "
@@ -103,13 +156,7 @@ def process_demultiplexed_flowcells(demux_fcid_dirs, restrict_to_projects=None,
         raise RuntimeError(error_message)
     else:
         projects_to_analyze = projects_to_analyze.values()
-    for project in projects_to_analyze:
-        if UPPSALA_PROJECT_RE.match(project.project_id):
-            LOG.info('Creating Charon records for Uppsala project "{}" if they '
-                     'are missing'.format(project))
-            create_charon_entries_from_project(project, sequencing_facility="NGI-U")
-    launch_analysis(projects_to_analyze, restart_failed_jobs, restart_finished_jobs,
-                    restart_running_jobs, config=config)
+    return projects_to_analyze
 
 
 @with_ngi_config
@@ -231,10 +278,11 @@ def setup_analysis_directory_structure(fc_dir, projects_to_analyze,
                                                                            lane_num)
                 except (IndexError, ValueError) as e:
                     LOG.debug('Unable to determine library prep from sample sheet file '
-                              '("{}"); try to determine from Charon'.format(e))
+                             '("{}"); try to determine from Charon'.format(e))
                     try:
                         # Requires Charon access
                         libprep_name = determine_library_prep_from_fcid(project_id, sample_name, fc_full_id)
+                        LOG.debug('Found libprep name "{}" in Charon'.format(libprep_name))
                     except ValueError:
                         charon_session = CharonSession()
                         libpreps = charon_session.sample_get_libpreps(project_id, sample_name).get('libpreps')
