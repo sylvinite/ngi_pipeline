@@ -54,11 +54,11 @@ class CharonSession(requests.Session):
         self.delete = validate_response(functools.partial(self.delete,
                     headers=self._api_token_dict, timeout=3))
 
-        self._project_params = ('projectid', 'name', 'status',
-                                'best_practice_analysis', 'sequencing_facility')
+        self._project_params = ('projectid', 'name', 'status', 'best_practice_analysis',
+                                'sequencing_facility', 'delivery_status')
         self._sample_params = ('sampleid', 'analysis_status', 'qc_status',
                                'genotype_status', 'total_autosomal_coverage',
-                               'total_sequenced_reads')
+                               'total_sequenced_reads', 'delivery_status')
         self._libprep_params = ('libprepid', 'qc')
         self._seqrun_params = ('seqrunid', 'lane_sequencing_status',
                                'alignment_status', 'genotype_status', 'runid',
@@ -87,7 +87,8 @@ class CharonSession(requests.Session):
     def project_get_samples(self, projectid):
         return self.get(self.construct_charon_url('samples', projectid)).json()
 
-    def project_update(self, projectid, name=None, status=None, best_practice_analysis=None, sequencing_facility=None):
+    def project_update(self, projectid, name=None, status=None, best_practice_analysis=None,
+                       sequencing_facility=None, delivery_status=None):
         l_dict = locals()
         data = { k: l_dict.get(k) for k in self._project_params if l_dict.get(k)}
         return self.put(self.construct_charon_url('project', projectid),
@@ -119,7 +120,7 @@ class CharonSession(requests.Session):
     def sample_update(self, projectid, sampleid, analysis_status=None,
                       qc_status=None, genotype_status=None,
                       total_autosomal_coverage=None,
-                      total_sequenced_reads=None):
+                      total_sequenced_reads=None, delivery_status=None):
         url = self.construct_charon_url("sample", projectid, sampleid)
         l_dict = locals()
         data = { k: l_dict.get(k) for k in self._sample_params if l_dict.get(k)}
