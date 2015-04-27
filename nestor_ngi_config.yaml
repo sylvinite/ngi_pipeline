@@ -71,3 +71,14 @@ slurm:
 
 supported_genomes:
     "GRCh37": /proj/a2014205/piper_references/gatk_bundle/2.8/b37/human_g1k_v37.fasta
+
+test_data:
+    workflows:
+        whole_genome_reseq:
+                    #http://chapmanb.s3.amazonaws.com/100326_FC6107FAAXX.tar.gz
+            remote_url: ftp://ftp-trace.ncbi.nih.gov/giab/ftp/technical/NIST_NA12878_HG001_HiSeq_300x/131219_D00360_005_BH814YADXX/Project_RM8398/Sample_U0a/U0a_CGATGT_L001_R?_001.fastq.gz
+            local_parent_dir: /proj/a2014205/nobackup/NGI/test_data/merge_variant_call/131219_D00360_005_BH814YADXX/Project_RM8398/Sample_U0a/
+            #local_files:
+                #flowcell:
+                #vcf: /proj/a2014205/nobackup/NGI/test_data/whole_genome_reseq/04-vcf/
+            #charon_base_url: http://charon-dev.scilifelab.se
