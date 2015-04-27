@@ -1,5 +1,5 @@
 import unittest
-from communication import mail_analysis
+from ngi_pipeline.utils.communication import mail_analysis
 
 class TestCommunication(unittest.TestCase):
     @classmethod
