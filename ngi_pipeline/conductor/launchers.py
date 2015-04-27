@@ -25,11 +25,19 @@ def launch_analysis(projects_to_analyze, restart_failed_jobs=False,
     :param str config_file_path: The path to the NGI configuration file; optional/has default.
     """
     for project in projects_to_analyze: # Get information from Charon regarding which best practice analyses to run
-        engine = get_engine_for_bp(project, config, config_file_path)
+        try:
+            engine = get_engine_for_bp(project, config, config_file_path)
+        except CharonError as e:
+            LOG.error('Project {} could not be processed: {}'.format(project, e))
+            continue
         engine.local_process_tracking.update_charon_with_local_jobs_status(config=config)
     charon_session = CharonSession()
     for project in projects_to_analyze:
-        project_status = charon_session.project_get(project.project_id)['status']
+        try:
+            project_status = charon_session.project_get(project.project_id)['status']
+        except CharonError as e:
+            LOG.error('Project {} could not be processed: {}'.format(project, e))
+            continue
         if not project_status == "OPEN":
             error_text = ('Data found on filesystem for project "{}" but Charon '
                           'reports its status is not OPEN ("{}"). Not launching '

@@ -326,11 +326,11 @@ if __name__ == "__main__":
             if project and os.path.split(project.base_path)[1] == "DATA":
                 project.base_path = os.path.split(project.base_path)[0]
             for sample in project:
-                piper_ngi.launchers.genotype(project, sample,
-                                             genotype_file=genotype_file_path,
-                                             restart_finished_jobs=args.restart_finished_jobs,
-                                             restart_running_jobs=args.restart_running_jobs,
-                                             level="genotype")
+                piper_ngi.launchers.analyze(project, sample,
+                                            genotype_file=genotype_file_path,
+                                            restart_finished_jobs=args.restart_finished_jobs,
+                                            restart_running_jobs=args.restart_running_jobs,
+                                            level="genotype")
 
     elif 'port' in args:
         LOG.info('Starting ngi_pipeline server at port {}'.format(args.port))
