@@ -80,5 +80,5 @@ test_data:
             local_parent_dir: /proj/a2014205/nobackup/NGI/test_data/merge_variant_call/131219_D00360_005_BH814YADXX/Project_RM8398/Sample_U0a/
             #local_files:
                 #flowcell:
-                #vcf: /proj/a2014205/nobackup/NGI/test_data/whole_genome_reseq/04-vcf/
+                vcf: /proj/a2014205/nobackup/NGI/test_data/whole_genome_reseq/04-vcf/
             #charon_base_url: http://charon-dev.scilifelab.se
