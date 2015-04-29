@@ -504,13 +504,46 @@ def kill_running_sample_analysis(workflow_subtask, project_id, sample_id):
         if sample_run:
             try:
                 slurm_job_id = sample_run.slurm_job_id
-                LOG.info('...sample run "{}" is currently being analyzed and has '
-                         'slurm job id "{}"; trying to kill it...'.format(sample_run_name,
-                                                                          slurm_job_id))
+                LOG.info('...sample run "{}" is currently being analyzed '
+                         '(workflow subtask "{}") and has slurm job id "{}"; '
+                         'trying to kill it...'.format(sample_run_name,
+                                                       workflow_subtask,
+                                                       slurm_job_id))
                 kill_slurm_job_by_id(slurm_job_id)
             except Exception as e:
                 LOG.error('Could not kill sample run "{}": {}'.format(sample_run_name, e))
                 return False
+            try:
+                project_obj = create_project_obj_from_analysis_log(sample_run.project_name,
+                                                                   sample_run.project_id,
+                                                                   sample_run.project_base_path,
+                                                                   sample_run.sample_id,
+                                                                   sample_run.workflow)
+            except IOError as e: # analysis log file is missing!
+                error_text = ('Could not find analysis log file! Cannot update '
+                              'Charon for {} run {}/{}: {}'.format(sample_run.workflow,
+                                                                   sample_run.project_id,
+                                                                   sample_run.sample_id,
+                                                                   e))
+                LOG.error(error_text)
+            else:
+                try:
+                    charon_session = CharonSession()
+                    set_status = "FAILED"
+                    if workflow_subtask == "genotype_concordance":
+                        status_field = "genotype_status"
+                    elif workflow_subtask == "merge_process_variantcall":
+                        status_field = "analysis_status"
+                    charon_session.sample_update(projectid=project_id,
+                                                 sampleid=sample_id,
+                                                 **{status_field: set_status})
+                    recurse_status_for_sample(project_obj,
+                                              status_field=status_field,
+                                              status_value=set_status)
+                except CharonError as e:
+                    LOG.error('Couldn\'t update Charon field "{}" to "{} for '
+                              'project/sample "{}/{}"'.format(status_field, set_status,
+                                                              project_id, sample_id))
             try:
                 LOG.info('Removing sample run "{}" from local jobs database...'.format(sample_run_name))
                 # Remove from local jobs database
