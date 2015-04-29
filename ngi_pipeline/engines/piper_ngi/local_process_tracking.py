@@ -42,7 +42,7 @@ def update_charon_with_local_jobs_status(quiet=False, config=None, config_file_p
             project_base_path = sample_entry.project_base_path
             sample_id = sample_entry.sample_id
             engine = sample_entry.engine
-            # Only one of these will have a value
+            # Only one of these id fields (slurm, pid) will have a value
             slurm_job_id = sample_entry.slurm_job_id
             process_id = sample_entry.process_id
             piper_exit_code = get_exit_code(workflow_name=workflow,
@@ -81,7 +81,12 @@ def update_charon_with_local_jobs_status(quiet=False, config=None, config_file_p
             try:
                 if piper_exit_code == 0:
                     # 0 -> Job finished successfully
-                    set_status = "ANALYZED" # For the sample level
+                    if workflow == "merge_process_variantcall":
+                        status_field = "analysis_status"
+                        set_status = "ANALYZED" # sample level
+                    elif workflow == "genotype_concordance":
+                        status_field = "genotype_status"
+                        set_status = "DONE" # sample level
                     recurse_status = "DONE" # For the seqrun level
                     info_text = ('Workflow "{}" for {} finished succesfully. '
                                  'Recording status {} in Charon'.format(workflow,
@@ -95,10 +100,6 @@ def update_charon_with_local_jobs_status(quiet=False, config=None, config_file_p
                                       level="INFO",
                                       info_text=info_text,
                                       workflow=workflow)
-                    if workflow == "merge_process_variantcall":
-                        status_field = "analysis_status"
-                    elif workflow == "genotype_concordance":
-                        status_field = "genotype_status"
                     charon_session.sample_update(projectid=project_id,
                                                  sampleid=sample_id,
                                                  **{status_field: set_status})
@@ -107,7 +108,6 @@ def update_charon_with_local_jobs_status(quiet=False, config=None, config_file_p
                                               status_value=recurse_status,
                                               config=config)
                     # Job is only deleted if the Charon status update succeeds
-                    # (if Charon is updated for this workflow)
                     session.delete(sample_entry)
                     if workflow == "merge_process_variantcall":
                         # Parse seqrun output results / update Charon
@@ -143,7 +143,6 @@ def update_charon_with_local_jobs_status(quiet=False, config=None, config_file_p
                     recurse_status_for_sample(project_obj, status_field=status_field,
                                               status_value=set_status, config=config)
                     # Job is only deleted if the Charon update succeeds
-                    # (if Charon is updated for this workflow)
                     session.delete(sample_entry)
                 else:
                     # None -> Job still running OR exit code was never written (failure)
