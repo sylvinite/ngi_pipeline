@@ -197,8 +197,10 @@ def update_charon_with_local_jobs_status(quiet=False, config=None, config_file_p
                         set_status = "UNDER_ANALYSIS"
                         if workflow == "merge_process_variantcall":
                             status_field = "alignment_status"
+                            recurse_status = "RUNNING"
                         elif workflow == "genotype_concordance":
                             status_field = "genotype_status"
+                            recurse_status = "UNDER_ANALYSIS"
                         try:
                             charon_status = \
                                     charon_session.sample_get(projectid=project_id,
@@ -214,7 +216,7 @@ def update_charon_with_local_jobs_status(quiet=False, config=None, config_file_p
                                                              **{status_field: set_status})
                                 recurse_status_for_sample(project_obj,
                                                           status_field=status_field,
-                                                          status_value="RUNNING",
+                                                          status_value=recurse_status,
                                                           config=config)
                         except CharonError as e:
                             error_text = ('Unable to update/verify Charon field '
@@ -430,10 +432,14 @@ def record_process_sample(project, sample, workflow_subtask, analysis_module_nam
                                                                        sample,
                                                                        workflow_subtask,
                                                                        e.message))
+        extra_args = None
         if workflow_subtask == "merge_process_variantcall":
             status_field = "analysis_status"
+            recurse_status = "RUNNING"
+            extra_args = {"mean_autosomal_coverage": 0}
         elif workflow_subtask == "genotype_concordance":
             status_field = "genotype_status"
+            recurse_status = "UNDER_ANALYSIS"
         else:
             raise ValueError('Charon field for workflow "{}" unknown; '
                              'cannot update Charon.'.format(workflow_subtask))
@@ -451,8 +457,8 @@ def record_process_sample(project, sample, workflow_subtask, analysis_module_nam
                                                                workflow_subtask)
             recurse_status_for_sample(project_obj,
                                       status_field=status_field,
-                                      status_value="RUNNING",
-                                      extra_args={'mean_autosomal_coverage': 0},
+                                      status_value=recurse_status,
+                                      extra_args=extra_args,
                                       config=config)
         except CharonError as e:
             error_text = ('Could not update Charon status for {} for project/sample '
