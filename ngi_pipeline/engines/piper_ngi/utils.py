@@ -337,7 +337,9 @@ def create_project_obj_from_analysis_log(project_name, project_id,
     return project_obj
 
 
-def check_for_preexisting_sample_runs(project_obj, sample_obj, restart_running_jobs, restart_finished_jobs):
+def check_for_preexisting_sample_runs(project_obj, sample_obj,
+                                      restart_running_jobs, restart_finished_jobs,
+                                      status_field="alignment_status"):
     """If any analysis is undergoing or has completed for this sample's
     seqruns, raise a RuntimeError.
 
@@ -345,6 +347,7 @@ def check_for_preexisting_sample_runs(project_obj, sample_obj, restart_running_j
     :param NGISample sample_obj: The sample object
     :param boolean restart_running_jobs: command line parameter
     :param boolean restart_finished_jobs: command line parameter
+    :param str status_field: The field to check in Charon (seqrun level)
 
     :raise RuntimeError if the status is RUNNING or DONE and the flags do not allow to continue
     """
@@ -362,12 +365,15 @@ def check_for_preexisting_sample_runs(project_obj, sample_obj, restart_running_j
             aln_status = charon_session.seqrun_get(projectid=project_id,
                                                    sampleid=sample_id,
                                                    libprepid=libprep_id,
-                                                   seqrunid=seqrun_id).get('alignment_status')
-            if (aln_status == "RUNNING" and not restart_running_jobs) or \
+                                                   seqrunid=seqrun_id).get(status_field)
+            if (aln_status == "RUNNING" or aln_status == "UNDER_ANALYSIS" and \
+                not restart_running_jobs) or \
                 (aln_status == "DONE" and not restart_finished_jobs):
-                    raise RuntimeError('Project/Sample "{}/{}" has a preexisting '
-                          'seqrun "{}" with status "{}"'.format(project_obj,
-                          sample_obj, seqrun_id, aln_status))
+                raise RuntimeError('Project/Sample "{}/{}" has a preexisting '
+                                   'seqrun "{}" with status "{}"'.format(project_obj,
+                                                                         sample_obj,
+                                                                         seqrun_id,
+                                                                         aln_status))
 
 
 SBATCH_HEADER = """#!/bin/bash -l

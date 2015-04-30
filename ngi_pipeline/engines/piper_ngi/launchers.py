@@ -66,9 +66,16 @@ def analyze(project, sample,
 
     :raises ValueError: If exec_mode is an unsupported value
     """
+    if level == "sample":
+        status_field = "alignment_status"
+    elif level == "genotype":
+        status_field = "genotype_status"
+    else:
+        LOG.warn('Unknown workflow level: "{}"'.format(level))
+        status_field = "alignment_status" # Or should we abort?
     try:
         check_for_preexisting_sample_runs(project, sample, restart_running_jobs,
-                                          restart_finished_jobs)
+                                          restart_finished_jobs, status_field)
     except RuntimeError as e:
         raise RuntimeError('Aborting processing of project/sample "{}/{}": '
                            '{}'.format(project, sample, e))
