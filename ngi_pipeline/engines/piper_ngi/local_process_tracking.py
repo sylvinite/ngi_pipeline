@@ -126,7 +126,7 @@ def update_charon_with_local_jobs_status(quiet=False, config=None, config_file_p
                                                     project_id, "piper_ngi",
                                                     "03_genotype_concordance")
                         try:
-                            update_gtc_for_samples(project_id, sample_id, piper_gt_dir)
+                            update_gtc_for_sample(project_id, sample_id, piper_gt_dir)
                         except (CharonError, IOError) as e:
                             LOG.error(e)
                 elif type(piper_exit_code) is int and piper_exit_code > 0:
@@ -298,7 +298,7 @@ def recurse_status_for_sample(project_obj, status_field, status_value, update_do
 
 
 @with_ngi_config
-def update_gtc_for_samples(project_id, sample_id, piper_gtc_path):
+def update_gtc_for_sample(project_id, sample_id, piper_gtc_path):
     """Find the genotype concordance file for this sample, if it exists,
     and update the sample record in Charon with the value parsed from it.
 
