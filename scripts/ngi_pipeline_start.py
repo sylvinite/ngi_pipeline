@@ -186,7 +186,8 @@ if __name__ == "__main__":
             help="Start genotype analysis for all samples in a project")
     genotype_project.add_argument("genotype_project_dirs", nargs="*",
             help=("The path to one or more pre-parsed project directories to "
-                  "run through genotype concordance analysis (Optional)"))
+                  "run through genotype concordance analysis. If not specified, "
+                  "all samples in vcf file are genotyped if possible. (Optional)"))
     genotype_project.add_argument("-g", "--genotype-file", action="store", required=True,
             help="The path to the genotype VCF file.")
     # Add sub-subparser for sample genotyping
@@ -322,8 +323,10 @@ if __name__ == "__main__":
         genotype_file_path = args.genotype_file
         project_obj_list = []
         if not args.genotype_project_dirs:
-            # User passed only the genotype file; try to determine which samples/projects
-            # we have data for
+            LOG.info('No projects specified; running genotype analysis for all '
+                     'samples present in VCF file.')
+            # User passed only the genotype file; try to determine samples/projects
+            # from vcf file
             projects_samples_dict = \
                     find_projects_from_samples(parse_samples_from_vcf(genotype_file_path))
             for project_id, samples in projects_samples_dict.iteritems():
@@ -332,7 +335,7 @@ if __name__ == "__main__":
                 except ValueError:
                     # Project has not yet been organized from flowcell level
                     LOG.warn('Project "{}" has not yet been organized from '
-                             'flowcell level; skipping.'.format(project_id))
+                             'flowcell to project level; skipping.'.format(project_id))
                     continue
                 project = recreate_project_from_filesystem(project_dir=path_to_project,
                                                            restrict_to_samples=samples)
