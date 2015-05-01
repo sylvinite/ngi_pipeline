@@ -19,7 +19,7 @@ def find_projects_from_samples(sample_list):
     projects_dict = collections.defaultdict(set)
     samples_by_project_id = {}
     no_owners_found = set()
-    all_projects = None
+    multiple_owners_found = set()
     charon_session = CharonSession()
 
     for sample_name in sample_list:
@@ -29,29 +29,17 @@ def find_projects_from_samples(sample_list):
             project_id = m.groups()[0]
             projects_dict[project_id].add(sample_name)
         else:
-        # Alright then we'll do this the hard way. I'm looking at you, Uppsala
-        # This is probably better implemented within Charon. I'm looking at you, Denis
-        # Also this will just grab the first project containing the sample --
-        # if it exists in more than one project I don't know what to tell you
-        # except that your sample naming scheme sucks.
-            if not all_projects:
-                all_projects = [project["projectid"] for project in \
-                                charon_session.projects_get_all()['projects']]
-            for project_id in all_projects:
-                owner_project_id = None
-                if not samples_by_project_id.get(project_id):
-                    try:
-                        samples = charon_session.project_get_samples(projectid=project_id)['samples']
-                    except CharonError as e:
-                        pass
-                    samples_by_project_id[project_id] = [sample['sampleid'] for sample in samples]
-                if sample_name in samples_by_project_id[project_id]:
-                    owner_project_id = project_id
-                    break
-            if owner_project_id:
-                projects_dict[str(owner_project_id)].add(sample_name)
-            else:
+            # Otherwise check all the projects for matching samples
+            owner_projects_list = charon_session.sample_get_projects(sample_name).get('projects')
+            if not owner_projects_list:
                 no_owners_found.add(sample_name)
+            elif len(owner_projects_list) > 1:
+                multiple_owners_found.add(sample_name)
+            else:
+                projects_dict[owner_projects_list[0]].add(sample_name)
     if no_owners_found:
         LOG.warn("No projects found for the following samples: {}".format(", ".join(no_owners_found)))
+    if multiple_owners_found:
+        LOG.warn('Multiple projects found with the following samples (owner '
+                 'could not be unamibugously determined): {}'.format(", ".join(multiple_owners_found)))
     return dict(projects_dict)

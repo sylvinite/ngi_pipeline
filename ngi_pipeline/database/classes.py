@@ -10,7 +10,6 @@ from ngi_pipeline.log.loggers import minimal_logger
 from ngi_pipeline.utils.classes import memoized
 from requests.exceptions import Timeout
 
-# Need a better way to log
 LOG = minimal_logger(__name__)
 
 
@@ -116,6 +115,9 @@ class CharonSession(requests.Session):
 
     def sample_get_libpreps(self, projectid, sampleid):
         return self.get(self.construct_charon_url('libpreps', projectid, sampleid)).json()
+
+    def sample_get_projects(self, sampleid):
+        return self.get(self.construct_charon_url('projectidsfromsampleid', sampleid)).json()
 
     def sample_update(self, projectid, sampleid, analysis_status=None,
                       qc_status=None, genotype_status=None,
