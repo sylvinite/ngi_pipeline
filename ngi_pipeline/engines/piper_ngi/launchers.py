@@ -66,9 +66,16 @@ def analyze(project, sample,
 
     :raises ValueError: If exec_mode is an unsupported value
     """
+    if level == "sample":
+        status_field = "alignment_status"
+    elif level == "genotype":
+        status_field = "genotype_status"
+    else:
+        LOG.warn('Unknown workflow level: "{}"'.format(level))
+        status_field = "alignment_status" # Or should we abort?
     try:
         check_for_preexisting_sample_runs(project, sample, restart_running_jobs,
-                                          restart_finished_jobs)
+                                          restart_finished_jobs, status_field)
     except RuntimeError as e:
         raise RuntimeError('Aborting processing of project/sample "{}/{}": '
                            '{}'.format(project, sample, e))
@@ -80,7 +87,16 @@ def analyze(project, sample,
         load_modules(modules_to_load)
     for workflow_subtask in workflows.get_subtasks_for_level(level=level):
         if level == "genotype":
-            if find_previous_genotype_analyses(project, sample):
+            genotype_status = None # Some records in Charon lack this field, I'm guessing
+            try:
+                charon_session = CharonSession()
+                genotype_status = charon_session.sample_get(projectid=project.project_id,
+                                                            sampleid=sample.name).get("genotype_status")
+            except CharonError as e:
+                LOG.error('Couldn\'t determine genotyping status for project/'
+                          'sample "{}/{}"; skipping analysis.'.format(project, sample))
+                continue
+            if find_previous_genotype_analyses(project, sample) or genotype_status == "DONE":
                 if not restart_finished_jobs:
                     LOG.info('Project/sample "{}/{}" has completed genotype '
                              'analysis previously; skipping (use flag to force '
@@ -91,6 +107,7 @@ def analyze(project, sample,
             kill_running_sample_analysis(workflow_subtask=workflow_subtask,
                                          project_id=project.project_id,
                                          sample_id=sample.name)
+        # This checks the local jobs database
         if not is_sample_analysis_running_local(workflow_subtask=workflow_subtask,
                                                 project_id=project.project_id,
                                                 sample_id=sample.name):

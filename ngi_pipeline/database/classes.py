@@ -10,7 +10,6 @@ from ngi_pipeline.log.loggers import minimal_logger
 from ngi_pipeline.utils.classes import memoized
 from requests.exceptions import Timeout
 
-# Need a better way to log
 LOG = minimal_logger(__name__)
 
 
@@ -57,8 +56,9 @@ class CharonSession(requests.Session):
         self._project_params = ('projectid', 'name', 'status', 'best_practice_analysis',
                                 'sequencing_facility', 'delivery_status')
         self._sample_params = ('sampleid', 'analysis_status', 'qc_status',
-                               'genotype_status', 'total_autosomal_coverage',
-                               'total_sequenced_reads', 'delivery_status')
+                               'genotype_status', 'genotype_concordance',
+                               'total_autosomal_coverage', 'total_sequenced_reads',
+                               'delivery_status')
         self._libprep_params = ('libprepid', 'qc')
         self._seqrun_params = ('seqrunid', 'lane_sequencing_status',
                                'alignment_status', 'genotype_status', 'runid',
@@ -103,8 +103,8 @@ class CharonSession(requests.Session):
     # Sample
     def sample_create(self, projectid, sampleid, analysis_status=None,
                       qc_status=None, genotype_status=None,
-                      total_autosomal_coverage=None,
-                      total_sequenced_reads=None):
+                      genotype_concordance=None, total_autosomal_coverage=None,
+                      total_sequenced_reads=None, delivery_status=None):
         url = self.construct_charon_url("sample", projectid)
         l_dict = locals()
         data = { k: l_dict.get(k) for k in self._sample_params }
@@ -117,9 +117,12 @@ class CharonSession(requests.Session):
     def sample_get_libpreps(self, projectid, sampleid):
         return self.get(self.construct_charon_url('libpreps', projectid, sampleid)).json()
 
+    def sample_get_projects(self, sampleid):
+        return self.get(self.construct_charon_url('projectidsfromsampleid', sampleid)).json()
+
     def sample_update(self, projectid, sampleid, analysis_status=None,
                       qc_status=None, genotype_status=None,
-                      total_autosomal_coverage=None,
+                      genotype_concordance=None, total_autosomal_coverage=None,
                       total_sequenced_reads=None, delivery_status=None):
         url = self.construct_charon_url("sample", projectid, sampleid)
         l_dict = locals()
