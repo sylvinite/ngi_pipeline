@@ -16,8 +16,8 @@ LOG = minimal_logger(__name__)
 @with_ngi_config
 def launch_analysis(projects_to_analyze, restart_failed_jobs=False,
                     restart_finished_jobs=False, restart_running_jobs=False,
-                    exec_mode="sbatch", quiet=False, manual=False,
-                    config=None, config_file_path=None):
+                    keep_existing_data=False, no_qc=False, exec_mode="sbatch",
+                    quiet=False, manual=False, config=None, config_file_path=None):
     """Launch the appropriate analysis for each fastq file in the project.
 
     :param list projects_to_analyze: The list of projects (Project objects) to analyze
@@ -57,23 +57,24 @@ def launch_analysis(projects_to_analyze, restart_failed_jobs=False,
             LOG.error("Could not launch qc analysis: {}".format(e))
         for sample in project:
             # Launch QC analysis
-            try:
-                LOG.info('Attempting to launch sample QC analysis '
-                         'for project "{}" / sample "{}" / engine '
-                         '"{}"'.format(project, sample, qc_analysis_module.__name__))
-                qc_analysis_module.analyze(project=project,
-                                           sample=sample,
-                                           config=config)
-            except Exception as e:
-                error_text = ('Cannot process project "{}" / sample "{}" / '
-                              'engine "{}" : {}'.format(project, sample,
-                                                        analysis_module.__name__,
-                                                        e))
-                LOG.error(error_text)
-                if not config.get("quiet"):
-                    mail_analysis(project_name=project.name, sample_name=sample.name,
-                                  engine_name=analysis_module.__name__,
-                                  level="ERROR", info_text=e)
+            if not no_qc:
+                try:
+                    LOG.info('Attempting to launch sample QC analysis '
+                             'for project "{}" / sample "{}" / engine '
+                             '"{}"'.format(project, sample, qc_analysis_module.__name__))
+                    qc_analysis_module.analyze(project=project,
+                                               sample=sample,
+                                               config=config)
+                except Exception as e:
+                    error_text = ('Cannot process project "{}" / sample "{}" / '
+                                  'engine "{}" : {}'.format(project, sample,
+                                                            analysis_module.__name__,
+                                                            e))
+                    LOG.error(error_text)
+                    if not config.get("quiet"):
+                        mail_analysis(project_name=project.name, sample_name=sample.name,
+                                      engine_name=analysis_module.__name__,
+                                      level="ERROR", info_text=e)
             # Launch actual best-practice analysis
             try:
                 charon_reported_status = charon_session.sample_get(project.project_id,
@@ -123,6 +124,7 @@ def launch_analysis(projects_to_analyze, restart_failed_jobs=False,
                                         sample=sample,
                                         restart_finished_jobs=restart_finished_jobs,
                                         restart_running_jobs=restart_running_jobs,
+                                        keep_existing_data=keep_existing_data,
                                         exec_mode=exec_mode,
                                         config=config)
             except Exception as e:
