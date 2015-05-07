@@ -14,6 +14,8 @@ def find_projects_from_samples(sample_list):
 
     :returns: a dict of {project_id: set(samples)}
     :rtype: dict of sets
+
+    :raises ValueError: If you fail to pass in a list. Nice work!
     """
     STHLM_SAMPLE_RE = re.compile(r'(P\d{4})_')
     projects_dict = collections.defaultdict(set)
@@ -21,16 +23,26 @@ def find_projects_from_samples(sample_list):
     no_owners_found = set()
     multiple_owners_found = set()
     charon_session = CharonSession()
+    if not type(sample_list) is list:
+        raise ValueError("Input should be list.")
 
     for sample_name in sample_list:
         # First see if we can just parse out the project id from the sample name
         m = STHLM_SAMPLE_RE.match(sample_name)
         if m:
             project_id = m.groups()[0]
-            projects_dict[project_id].add(sample_name)
+            try:
+                # Ensure that we guessed right
+                charon_session.project_get_sample(project_id, sample_name)
+            except CharonError as e:
+                LOG.debug('Project for sample "{}" appears to be "{}" but is not '
+                          'present in Charon ({})'.format(sample_name, project_id, e))
+                no_owners_found.add(sample_name)
+            else:
+                projects_dict[project_id].add(sample_name)
         else:
-            # Otherwise check all the projects for matching samples
-            owner_projects_list = charon_session.sample_get_projects(sample_name).get('projects')
+            # Otherwise check all the projects for matching samples (returns list or None)
+            owner_projects_list = charon_session.sample_get_projects(sample_name)
             if not owner_projects_list:
                 no_owners_found.add(sample_name)
             elif len(owner_projects_list) > 1:
