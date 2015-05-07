@@ -295,16 +295,19 @@ def recreate_project_from_filesystem(project_dir,
                 break
         else:
             syml_project_dir = None
-    project_id = os.path.split(real_project_dir)[1]
+    project_base_path, project_id = os.path.split(real_project_dir)
     if syml_project_dir:
-        project_name = os.path.split(syml_project_dir)[1]
+        project_base_path, project_name = os.path.split(syml_project_dir)
     else: # project name is the same as project id (Uppsala perhaps)
         project_name = project_id
+    if os.path.split(project_base_path)[1] == "DATA":
+        project_base_path = os.path.split(project_base_path)[0]
     LOG.info('Setting up project "{}"'.format(project_id))
     project_obj = NGIProject(name=project_name,
                              dirname=project_id,
                              project_id=project_id,
-                             base_path=config["analysis"]["top_dir"])
+                             #base_path=config["analysis"]["top_dir"])
+                             base_path=project_base_path)
     samples_pattern = os.path.join(real_project_dir, "*")
     samples = filter(os.path.isdir, glob.glob(samples_pattern))
     if not samples:
