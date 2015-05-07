@@ -115,6 +115,7 @@ def parse_mean_coverage_from_qualimap(piper_qc_dir, sample_id, seqrun_id=None, f
 
 
 def parse_genotype_concordance(genotype_concordance_file):
+    genotype_concordance_file = os.path.realpath(genotype_concordance_file)
     concordance_data = []
     gt_values_list = []
     with open(genotype_concordance_file, 'r') as f:
