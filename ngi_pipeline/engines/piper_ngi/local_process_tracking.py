@@ -127,7 +127,7 @@ def update_charon_with_local_jobs_status(quiet=False, config=None, config_file_p
                                                     "03_genotype_concordance")
                         try:
                             update_gtc_for_sample(project_id, sample_id, piper_gt_dir)
-                        except (CharonError, IOError) as e:
+                        except (CharonError, IOError, ValueError) as e:
                             LOG.error(e)
                 elif type(piper_exit_code) is int and piper_exit_code > 0:
                     # 1 -> Job failed
@@ -298,7 +298,7 @@ def recurse_status_for_sample(project_obj, status_field, status_value, update_do
 
 
 @with_ngi_config
-def update_gtc_for_sample(project_id, sample_id, piper_gtc_path):
+def update_gtc_for_sample(project_id, sample_id, piper_gtc_path, config=None, config_file_path=None):
     """Find the genotype concordance file for this sample, if it exists,
     and update the sample record in Charon with the value parsed from it.
 
@@ -306,13 +306,27 @@ def update_gtc_for_sample(project_id, sample_id, piper_gtc_path):
     :param str sample_id: The id the sample
     :param str piper_gtc_path: The path to the piper genotype concordance directory
 
+    :raises CharonError: If there is some Error -- with Charon
     :raises IOError: If the path specified is missing or inaccessible
+    :raises ValueError: If the specified sample has no data in the gtc file
     """
     gtc_file = os.path.join(piper_gtc_path, "{}.gt_concordance".format(sample_id))
-    concordance_value = parse_genotype_concordance(gtc_file)
+    try:
+        concordance_value = parse_genotype_concordance(gtc_file)[sample_id]
+    except KeyError:
+        raise ValueError('Concordance data for sample "{}" not found in gt '
+                         'concordance file "{}"'.format(sample_id, gtc_file))
+    gtc_lower_bound = config.get("genotyping", {}).get("lower_bound_cutoff")
+    status_dict = {}
+    if gtc_lower_bound:
+        if concordance_value < concordance_value:
+            status_dict = {"genotype_status": "FAILED"}
+        else:
+            status_dict = {"genotype_status": "PASSED"}
     charon_session = CharonSession()
     charon_session.sample_update(projectid=project_id, sampleid=sample_id,
-                                 genotype_concordance=concordance_value)
+                                 genotype_concordance=concordance_value,
+                                 **status_dict)
 
 @with_ngi_config
 def update_coverage_for_sample_seqruns(project_id, sample_id, piper_qc_dir,
