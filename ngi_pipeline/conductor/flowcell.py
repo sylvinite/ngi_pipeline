@@ -212,10 +212,6 @@ def setup_analysis_directory_structure(fc_dir, projects_to_analyze,
         project_name = project['project_name']
         project_original_name = project['project_original_name']
         samplesheet_path = fc_dir_structure.get("samplesheet_path")
-        # If specific projects are specified, skip those that do not match
-        if restrict_to_projects and project_name not in restrict_to_projects:
-            LOG.debug("Skipping project {}".format(project_name))
-            continue
         try:
             # Maps e.g. "Y.Mom_14_01" to "P123"
             project_id = get_project_id_from_name(project_name)
@@ -224,6 +220,11 @@ def setup_analysis_directory_structure(fc_dir, projects_to_analyze,
                      'Using project name ("{}") as project id '
                      '(error: {})'.format(project_name, e))
             project_id = project_name
+        # If specific projects are specified, skip those that do not match
+        if restrict_to_projects and project_name not in restrict_to_projects and \
+                                    project_id not in restrict_to_projects:
+            LOG.debug("Skipping project {} (not in restrict_to_projects)".format(project_name))
+            continue
         LOG.info("Setting up project {}".format(project.get("project_name")))
         # Create a project directory if it doesn't already exist, including
         # intervening "DATA" directory
@@ -279,7 +280,7 @@ def setup_analysis_directory_structure(fc_dir, projects_to_analyze,
                                                                            lane_num)
                 except (IndexError, ValueError) as e:
                     LOG.debug('Unable to determine library prep from sample sheet file '
-                             '("{}"); try to determine from Charon'.format(e))
+                              '("{}"); try to determine from Charon'.format(e))
                     try:
                         # Requires Charon access
                         libprep_name = determine_library_prep_from_fcid(project_id, sample_name, fc_full_id)
@@ -316,9 +317,9 @@ def setup_analysis_directory_structure(fc_dir, projects_to_analyze,
                             LOG.error(error_text)
                             if not config.get('quiet'):
                                 mail_analysis(project_name=project_name,
-                                          sample_name=sample_name,
-                                          level="ERROR",
-                                          info_text=error_text)
+                                              sample_name=sample_name,
+                                              level="ERROR",
+                                              info_text=error_text)
                             continue
                 libprep_object = sample_obj.add_libprep(name=libprep_name,
                                                         dirname=libprep_name)
@@ -345,17 +346,17 @@ def setup_analysis_directory_structure(fc_dir, projects_to_analyze,
                         try:
                             do_symlink(src_fastq_files, seqrun_dir)
                         except OSError:
-                            error_text=('Could not symlink files for project/sample'
-                                      'libprep/seqrun {}/{}/{}/{}'.format(project_obj,
-                                                                          sample_obj,
-                                                                          libprep_obj,
-                                                                          seqrun_obj))
+                            error_text = ('Could not symlink files for project/sample'
+                                          'libprep/seqrun {}/{}/{}/{}'.format(project_obj,
+                                                                              sample_obj,
+                                                                              libprep_obj,
+                                                                              seqrun_obj))
                             LOG.error(error_text)
                             if not config.get('quiet'):
                                 mail_analysis(project_name=project_name,
-                                          sample_name=sample_name,
-                                          level="ERROR",
-                                          info_text=error_text)
+                                              sample_name=sample_name,
+                                              level="ERROR",
+                                              info_text=error_text)
                             continue
     return projects_to_analyze
 
