@@ -34,8 +34,8 @@ STHLM_X_PROJECT_RE = re.compile(r'[A-z]_[A-z0-9]+_\d{2}_\d{2}')
 def process_demultiplexed_flowcell(demux_fcid_dir_path, restrict_to_projects=None,
                                    restrict_to_samples=None, restart_failed_jobs=False,
                                    restart_finished_jobs=False, restart_running_jobs=False,
-                                    quiet=False, manual=False,
-                                    config=None, config_file_path=None):
+                                   keep_existing_data=False, no_qc=False, quiet=False,
+                                   manual=False, config=None, config_file_path=None):
     """Call process_demultiplexed_flowcells, restricting to a single flowcell.
     Essentially a restrictive wrapper.
 
@@ -46,6 +46,8 @@ def process_demultiplexed_flowcell(demux_fcid_dir_path, restrict_to_projects=Non
                                      restricted to these. Optional.
     :param bool restart_failed_jobs: Restart jobs marked as "FAILED" in Charon.
     :param bool restart_finished_jobs: Restart jobs marked as "DONE" in Charon.
+    :param bool restart_running_jobs: Restart jobs marked as running in Charon
+    :param bool keep_existing_data: Keep existing analysis data when launching new jobs
     :param str config_file_path: The path to the NGI configuration file; optional.
     """
     if type(demux_fcid_dir_path) is not str:
@@ -55,7 +57,8 @@ def process_demultiplexed_flowcell(demux_fcid_dir_path, restrict_to_projects=Non
     process_demultiplexed_flowcells([demux_fcid_dir_path], restrict_to_projects,
                                     restrict_to_samples, restart_failed_jobs,
                                     restart_finished_jobs, restart_running_jobs,
-                                    config_file_path=config_file_path,
+                                    keep_existing_data=keep_existing_data,
+                                    no_qc=no_qc, config_file_path=config_file_path,
                                     quiet=quiet, manual=manual)
 
 
@@ -63,8 +66,8 @@ def process_demultiplexed_flowcell(demux_fcid_dir_path, restrict_to_projects=Non
 def process_demultiplexed_flowcells(demux_fcid_dirs, restrict_to_projects=None,
                                     restrict_to_samples=None, restart_failed_jobs=False,
                                     restart_finished_jobs=False, restart_running_jobs=False,
-                                    quiet=False, manual=False,
-                                    config=None, config_file_path=None):
+                                    keep_existing_data=False, no_qc=False, quiet=False,
+                                    manual=False, config=None, config_file_path=None):
     """Sort demultiplexed Illumina flowcells into projects and launch their analysis.
 
     :param list demux_fcid_dirs: The CASAVA-produced demux directory/directories.
@@ -74,6 +77,8 @@ def process_demultiplexed_flowcells(demux_fcid_dirs, restrict_to_projects=None,
                                      restricted to these. Optional.
     :param bool restart_failed_jobs: Restart jobs marked as "FAILED" in Charon.
     :param bool restart_finished_jobs: Restart jobs marked as "DONE" in Charon.
+    :param bool restart_running_jobs: Restart jobs marked as running in Charon
+    :param bool keep_existing_data: Keep existing analysis data when launching new jobs
     :param bool quiet: Don't send notification emails; added to config
     :param bool manual: This is being run from a user script; added to config
     :param dict config: The parsed NGI configuration file; optional.
@@ -91,7 +96,8 @@ def process_demultiplexed_flowcells(demux_fcid_dirs, restrict_to_projects=None,
                      'are missing'.format(project))
             create_charon_entries_from_project(project, sequencing_facility="NGI-U")
     launch_analysis(projects_to_analyze, restart_failed_jobs, restart_finished_jobs,
-                    restart_running_jobs, config=config)
+                    restart_running_jobs, keep_existing_data=keep_existing_data,
+                    no_qc=no_qc, config=config)
 
 
 @with_ngi_config

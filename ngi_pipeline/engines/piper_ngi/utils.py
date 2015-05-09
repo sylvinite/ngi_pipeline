@@ -132,27 +132,9 @@ def remove_previous_sample_analyses(project_obj):
     :returns: Nothing
     :rtype: None
     """
-    project_dir_path = os.path.join(project_obj.base_path, "ANALYSIS",
-                                    project_obj.project_id, "piper_ngi")
-    project_dir_pattern = os.path.join(project_dir_path, "??_*")
-    LOG.info('deleting previous analysis in {}'.format(project_dir_path))
-    for sample in project_obj:
-        sample_files = glob.glob(os.path.join(project_dir_pattern,
-                                              "{}*".format(sample.name)))
-        # P123_456 is renamed by Piper to P123-456? Sometimes? Always?
-        piper_sample_name = sample.name.replace("_", "-", 1)
-        sample_files.extend(glob.glob(os.path.join(project_dir_pattern,
-                                                   "{}*".format(piper_sample_name))))
-        sample_files.extend(glob.glob(os.path.join(project_dir_pattern,
-                                                   ".{}*.done".format(piper_sample_name))))
-        sample_files.extend(glob.glob(os.path.join(project_dir_pattern,
-                                                   ".{}*.failed".format(piper_sample_name))))
-    # Don't delete genotype files!
-    sample_files = filter(lambda x: not fnmatch.fnmatch(x, "*genotype_concordance*"),
-                          sample_files)
+    sample_files = find_previous_sample_analyses(project_obj, include_genotype_files=False)
     if sample_files:
-        LOG.info('Deleting files for samples {} under '
-                 '{}'.format(", ".join(project_obj.samples), project_dir_path))
+        LOG.info('Deleting files for samples {}'.format(", ".join(project_obj.samples)))
         errors = []
         for sample_file in sample_files:
             LOG.debug("Deleting file {}".format(sample_file))
@@ -169,6 +151,38 @@ def remove_previous_sample_analyses(project_obj):
         LOG.debug('No sample analysis files found to delete for project {} '
                   '/ samples {}'.format(project_obj, ", ".join(project_obj.samples)))
 
+
+def find_previous_sample_analyses(project_obj, include_genotype_files=False):
+    """Find analysis results for a sample, including .failed and .done files.
+    Doesn't throw an error if it can't read a directory.
+
+    :param NGIProject project_obj: The NGIProject object with relevant NGISamples
+    :param bool include_genotype_files: Include genotyping files (default False)
+
+    :returns: A list of files
+    :rtype: list
+    """
+    sample_files = [] # This isn't really necessary but scoping makes me want to do it
+    project_dir_path = os.path.join(project_obj.base_path, "ANALYSIS",
+                                    project_obj.project_id, "piper_ngi")
+    project_dir_pattern = os.path.join(project_dir_path, "??_*")
+    for sample in project_obj:
+        sample_files = glob.glob(os.path.join(project_dir_pattern,
+                                              "{}*".format(sample.name)))
+        # P123_456 is renamed by Piper to P123-456? Sometimes? Always?
+        piper_sample_name = sample.name.replace("_", "-", 1)
+        sample_files.extend(glob.glob(os.path.join(project_dir_pattern,
+                                                   "{}*".format(piper_sample_name))))
+        sample_files.extend(glob.glob(os.path.join(project_dir_pattern,
+                                                   ".{}*.done".format(piper_sample_name))))
+        sample_files.extend(glob.glob(os.path.join(project_dir_pattern,
+                                                   ".{}*.failed".format(piper_sample_name))))
+    # Include genotype files?
+    if not include_genotype_files:
+        sample_files = filter(lambda x: not fnmatch.fnmatch(x, "*genotype_concordance*"),
+                              sample_files)
+
+    return sample_files
 
 def rotate_previous_analysis(project_obj):
     """Rotates the files from the existing analysis starting at 03_merged_aligments"""

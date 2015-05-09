@@ -127,6 +127,10 @@ if __name__ == "__main__":
     # Add sub-subparser for flowcell analysis
     analyze_flowcell = subparsers_analyze.add_parser('flowcell',
             help='Start analysis of raw flowcells')
+    analyze_flowcell.add_argument("-k", "--keep-existing-data", action="store_true",
+            help="Keep/re-use existing analysis data when launching new analyses.")
+    analyze_flowcell.add_argument("--no-qc", action="store_true",
+            help="Skip qc analysis.")
     analyze_flowcell.add_argument("analyze_fc_dirs", nargs="+",
             help=("The path to one or more demultiplexed Illumina flowcell "
                   "directories to process and analyze."))
@@ -136,6 +140,10 @@ if __name__ == "__main__":
     # Add sub-subparser for project analysis
     analyze_project = subparsers_analyze.add_parser('project',
             help='Start the analysis of a pre-parsed project.')
+    analyze_project.add_argument("-k", "--keep-existing-data", action="store_true",
+            help="Keep/re-use existing analysis data when launching new analyses.")
+    analyze_project.add_argument("--no-qc", action="store_true",
+            help="Skip qc analysis.")
     analyze_project.add_argument('analyze_project_dirs', nargs='+',
             help='The path to the project folder to be analyzed.')
 
@@ -198,26 +206,31 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     # These options are available only if the script has been called with the 'analyze' option
-    if args.__dict__.get('restart_all_jobs'):
-        if validate_dangerous_user_thing(action=("restart all FAILED, RUNNING, "
-                                                 "and FINISHED jobs, deleting "
-                                                 "previous analyses")):
+    restart_all_jobs = args.__dict__.get('restart_all_jobs')
+    if restart_all_jobs:
+        if not args.__dict__.get("keep_existing_data"):
+            # Validate if not keep_existing_data
+            restart_all_jobs = validate_dangerous_user_thing(action=("restart all FAILED, RUNNING, "
+                                                                     "and FINISHED jobs, deleting "
+                                                                     "previous analyses"))
+        if restart_all_jobs: # 'if' b.c. there's no 'if STILL' operator (kludge kludge kludge)
             args.restart_failed_jobs = True
             args.restart_finished_jobs = True
             args.restart_running_jobs = True
     else:
-        if args.__dict__.get("restart_failed_jobs"):
-            args.restart_failed_jobs = \
-                validate_dangerous_user_thing(action=("restart FAILED jobs, deleting "
-                                                      "previous analysies files"))
-        if args.__dict__.get("restart_finished_jobs"):
-            args.restart_finished_jobs = \
-                validate_dangerous_user_thing(action=("restart FINISHED jobs, deleting "
-                                                      "previous analyseis files"))
-        if args.__dict__.get("restart_running_jobs"):
-            args.restart_finished_jobs = \
-                validate_dangerous_user_thing(action=("restart RUNNING jobs, deleting "
-                                                      "previous analysis files"))
+        if not args.__dict__.get("keep_existing_data"):
+            if args.__dict__.get("restart_failed_jobs"):
+                args.restart_failed_jobs = \
+                    validate_dangerous_user_thing(action=("restart FAILED jobs, deleting "
+                                                          "previous analysies files"))
+            if args.__dict__.get("restart_finished_jobs"):
+                args.restart_finished_jobs = \
+                    validate_dangerous_user_thing(action=("restart FINISHED jobs, deleting "
+                                                          "previous analysis files"))
+            if args.__dict__.get("restart_running_jobs"):
+                args.restart_finished_jobs = \
+                    validate_dangerous_user_thing(action=("restart RUNNING jobs, deleting "
+                                                          "previous analysis files"))
     # Charon-specific arguments ('organize', 'analyze', 'qc')
     if args.__dict__.get("force_update"):
         args.force_update = \
@@ -238,6 +251,8 @@ if __name__ == "__main__":
                                                  args.restart_failed_jobs,
                                                  args.restart_finished_jobs,
                                                  args.restart_running_jobs,
+                                                 keep_existing_data=args.keep_existing_data,
+                                                 no_qc=args.no_qc,
                                                  quiet=args.quiet,
                                                  manual=True)
 
@@ -250,12 +265,12 @@ if __name__ == "__main__":
                 continue
             project = recreate_project_from_filesystem(project_dir=project_dir,
                                                        restrict_to_samples=args.restrict_to_samples)
-            if project and os.path.split(project.base_path)[1] == "DATA":
-                project.base_path = os.path.split(project.base_path)[0]
             launchers.launch_analysis([project],
                                       restart_failed_jobs=args.restart_failed_jobs,
                                       restart_finished_jobs=args.restart_finished_jobs,
                                       restart_running_jobs=args.restart_running_jobs,
+                                      keep_existing_data=args.keep_existing_data,
+                                      no_qc=args.no_qc,
                                       quiet=args.quiet,
                                       manual=True)
 
@@ -288,8 +303,6 @@ if __name__ == "__main__":
         for qc_project_dir in args.qc_project_dirs:
             project = recreate_project_from_filesystem(project_dir=qc_project_dir,
                                                        restrict_to_samples=args.restrict_to_samples)
-            if project and os.path.split(project.base_path)[1] == "DATA":
-                project.base_path = os.path.split(project.base_path)[0]
             if not project.samples:
                 LOG.info('No samples found for project {} (path {})'.format(project.project_id,
                                                                             qc_project_dir))
@@ -339,8 +352,6 @@ if __name__ == "__main__":
                     continue
                 project = recreate_project_from_filesystem(project_dir=path_to_project,
                                                            restrict_to_samples=samples)
-                if project and os.path.split(project.base_path)[1] == "DATA":
-                    project.base_path = os.path.split(project.base_path)[0]
                 project_obj_list.append(project)
         else:
             for genotype_project_dir in args.genotype_project_dirs:
@@ -348,8 +359,6 @@ if __name__ == "__main__":
                          "file {}".format(genotype_project_dir, genotype_file_path))
                 project = recreate_project_from_filesystem(project_dir=genotype_project_dir,
                                                            restrict_to_samples=args.restrict_to_samples)
-                if project and os.path.split(project.base_path)[1] == "DATA":
-                    project.base_path = os.path.split(project.base_path)[0]
                 project_obj_list.append(project)
         for project in project_obj_list:
             for sample in project:

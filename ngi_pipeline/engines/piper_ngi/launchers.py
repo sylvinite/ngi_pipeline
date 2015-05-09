@@ -24,6 +24,7 @@ from ngi_pipeline.engines.piper_ngi.utils import check_for_preexisting_sample_ru
                                                  create_log_file_path, \
                                                  create_sbatch_header, \
                                                  find_previous_genotype_analyses, \
+                                                 find_previous_sample_analyses, \
                                                  get_valid_seqruns_for_sample, \
                                                  launch_piper_job, \
                                                  record_analysis_details, \
@@ -49,6 +50,7 @@ def analyze(project, sample,
             exec_mode="sbatch", 
             restart_finished_jobs=False,
             restart_running_jobs=False,
+            keep_existing_data=False,
             level="sample",
             genotype_file=None,
             config=None, config_file_path=None):
@@ -125,9 +127,9 @@ def analyze(project, sample,
                                                             project_name=project.dirname,
                                                             project_id=project.project_id,
                                                             sample_id=sample.name)
-                # We're not using any of the previous analysis files at the moment
                 if level == "sample":
-                    remove_previous_sample_analyses(project)
+                    if not keep_existing_data:
+                        remove_previous_sample_analyses(project)
                 elif level == "genotype":
                     remove_previous_genotype_analyses(project)
 
@@ -265,18 +267,12 @@ def collect_files_for_sample_analysis(project_obj, sample_obj,
             seqrun_obj = libprep_obj.add_seqrun(name=fs_seqrun_name, dirname=fs_seqrun_name)
             seqrun_obj.add_fastq_files(fastq)
 
-    ### BAM / ALIGNMENT QC
-    # Access the filesystem to determine which alignment (bam) files are available.
-    # If there are any, add them to the list of files to include in the new analysis.
-    # Include alignment qc files.
-    project_analysis_dir = os.path.join(project_obj.base_path, "ANALYSIS", project_obj.dirname)
-    project_aln_dir = os.path.join(project_analysis_dir, "01_raw_alignments")
-    project_alnqc_dir = os.path.join(project_analysis_dir, "02_preliminary_alignment_qc")
-    sample_analysis_file_pattern = "{sample_name}.*.{sample_name}.*".format(sample_name=sample_obj.name)
-    aln_files_to_copy = glob.glob(os.path.join(project_aln_dir, sample_analysis_file_pattern))
-    qc_files_to_copy = glob.glob(os.path.join(project_alnqc_dir, sample_analysis_file_pattern))
+    ### EXISTING DATA
+    # If we still have data here at this point, we'll copy it over. If we had
+    # decided to scrap it, it would have been deleted already.
+    files_to_copy = find_previous_sample_analyses(proj_obj)
 
-    return (proj_obj, aln_files_to_copy, qc_files_to_copy)
+    return (proj_obj, files_to_copy)
 
 @with_ngi_config
 def sbatch_piper_sample(command_line_list, workflow_name, project, sample,
@@ -294,10 +290,8 @@ def sbatch_piper_sample(command_line_list, workflow_name, project, sample,
     job_identifier = "{}-{}-{}".format(project.project_id, sample, workflow_name)
     # Paths to the various data directories
     project_dirname = project.dirname
-    perm_analysis_dir = os.path.join(project.base_path, "ANALYSIS", project_dirname, "piper_ngi")
-    scratch_analysis_dir = os.path.join("$SNIC_TMP/ANALYSIS/", project_dirname, "piper_ngi")
-    scratch_aln_dir = os.path.join(scratch_analysis_dir, "01_raw_alignments")
-    scratch_qc_dir = os.path.join(scratch_analysis_dir, "02_preliminary_alignment_qc")
+    perm_analysis_dir = os.path.join(project.base_path, "ANALYSIS", project_dirname, "piper_ngi", "")
+    scratch_analysis_dir = os.path.join("$SNIC_TMP/ANALYSIS/", project_dirname, "piper_ngi", "")
     #ensure that the analysis dir exists
     safe_makedir(perm_analysis_dir)
     try:
@@ -329,7 +323,7 @@ def sbatch_piper_sample(command_line_list, workflow_name, project, sample,
         for module_name in modules_to_load:
             sbatch_text_list.append("module load {}".format(module_name))
 
-    project, src_aln_files, src_alnqc_files = \
+    project, files_to_copy = \
             collect_files_for_sample_analysis(project, sample, restart_finished_jobs)
 
     # Fastq files to copy
@@ -363,21 +357,18 @@ def sbatch_piper_sample(command_line_list, workflow_name, project, sample,
         raise ValueError(('No valid fastq files available to process for '
                           'project/sample {}/{}'.format(project, sample)))
 
-    # BAM files / Alignment QC files
-    input_files_list = [src_aln_files, src_alnqc_files]
-    output_dirs_list = [scratch_aln_dir, scratch_qc_dir]
-    echo_text_list = ["Copying any pre-existing alignment files",
-                      "Copying any pre-existing alignment qc files"]
-    for echo_text, input_files, output_dir in zip(echo_text_list,
-                                                  input_files_list,
-                                                  output_dirs_list):
-        if input_files:
-            sbatch_text_list.append("echo -ne '\\n\\n{}' at ".format(echo_text))
-            sbatch_text_list.append("date")
-            sbatch_text_list.append("mkdir -p {}".format(output_dir))
-            sbatch_text_list.append(("rsync -rptoDLv {input_files}"
-                                     "{output_directory}/").format(input_files=" ".join(input_files),
-                                                                   output_directory=output_dir))
+    # Pre-existing analysis files
+    if files_to_copy:
+        sbatch_text_list.append("echo -ne '\\n\\nCopying pre-existing analysis files at '")
+        sbatch_text_list.append("date")
+        sbatch_text_list.append(("rsync -rptoDLv {input_files}"
+                                 "{output_directory}/").format(input_files=" ".join(files_to_copy),
+                                                               output_directory=scratch_analysis_dir))
+        # Delete pre-existing analysis files after copy
+        sbatch_text_list.append("echo -ne '\\n\\nDeleting pre-existing analysis files at '")
+        sbatch_text_list.append("date")
+        sbatch_text_list.append("rm -rf {input_files}".format(input_files=" ".join(files_to_copy)))
+
     sbatch_text_list.append("echo -ne '\\n\\nExecuting command lines at '")
     sbatch_text_list.append("date")
     sbatch_text_list.append("# Run the actual commands")
