@@ -19,9 +19,7 @@ from ngi_pipeline.database.filesystem import create_charon_entries_from_project
 from ngi_pipeline.engines import qc_ngi
 from ngi_pipeline.log.loggers import minimal_logger
 from ngi_pipeline.server import main as server_main
-from ngi_pipeline.utils.charon import find_projects_from_samples
-from ngi_pipeline.utils.filesystem import locate_project, recreate_project_from_filesystem
-from ngi_pipeline.utils.parsers import parse_samples_from_vcf
+from ngi_pipeline.utils.filesystem import recreate_project_from_filesystem
 
 LOG = minimal_logger("ngi_pipeline_start")
 inflector = inflect.engine()
@@ -119,6 +117,19 @@ if __name__ == "__main__":
     organize_flowcell.add_argument("-p", "--project", dest="restrict_to_projects", action="append",
             help="Restrict processing to these projects. Use flag multiple times for multiple projects.")
 
+    # Add subparser for deletion
+    parser_delete = subparsers.add_paser('delete', help="Delete data systematically.")
+    subparsers_delete = parser_delete.add_subparsers(help="Choose unit to delete.")
+    delete_analysis = subparsers_delete.add_parser('analysis',
+            help=("The name of the project whose analysis you would delete. Note "
+                  "that unless samples are specified, the entire project analaysis "
+                  "directory will be deleted!"))
+    delete_analysis.add_argument("-w", "--workflow",
+            help="The workflow analysis data to delete.")
+    delete_analysis.add_argument("-s", "--sample", dest="restrict_to_samples", action="append",
+            help=("Restrict deletion to these samples. Use flag multiple times for multiple samples."
+                  "multiple samples. Only effective if the engine has implemented "
+                  "a function to remove specific sample analysis files."))
 
     # Add subparser for analysis
     parser_analyze = subparsers.add_parser('analyze', help="Launch analysis.")
@@ -127,10 +138,6 @@ if __name__ == "__main__":
     # Add sub-subparser for flowcell analysis
     analyze_flowcell = subparsers_analyze.add_parser('flowcell',
             help='Start analysis of raw flowcells')
-    analyze_flowcell.add_argument("-k", "--keep-existing-data", action="store_true",
-            help="Keep/re-use existing analysis data when launching new analyses.")
-    analyze_flowcell.add_argument("--no-qc", action="store_true",
-            help="Skip qc analysis.")
     analyze_flowcell.add_argument("analyze_fc_dirs", nargs="+",
             help=("The path to one or more demultiplexed Illumina flowcell "
                   "directories to process and analyze."))
@@ -138,6 +145,12 @@ if __name__ == "__main__":
             help=("Restrict analysis to these projects. "
                   "Use flag multiple times for multiple projects."))
     # Add sub-subparser for project analysis
+    analyze_project = subparsers_analyze.add_parser('project',
+            help='Start the analysis of a pre-parsed project.')
+    analyze_project.add_argument('analyze_project_dirs', nargs='+',
+            help='The path to the project folder to be analyzed.')
+
+    # Add subparser for qc
     analyze_project = subparsers_analyze.add_parser('project',
             help='Start the analysis of a pre-parsed project.')
     analyze_project.add_argument("-k", "--keep-existing-data", action="store_true",
@@ -316,57 +329,16 @@ if __name__ == "__main__":
                                                     ", ".join(organize_fc_dirs_list)))
         projects_to_analyze = \
                 organize_projects_from_flowcell(demux_fcid_dirs=organize_fc_dirs_list,
-                                                restrict_to_projects=args.restrict_to_projects,
-                                                restrict_to_samples=args.restrict_to_samples,
-                                                fallback_libprep=args.fallback_libprep,
-                                                quiet=args.quiet)
-        for project in projects_to_analyze:
-            try:
-                create_charon_entries_from_project(project=project,
-                                                   best_practice_analysis=args.best_practice_analysis,
-                                                   sequencing_facility=args.sequencing_facility,
-                                                   force_overwrite=args.force_update,
-                                                   delete_existing=args.delete_existing)
-            except Exception as e:
-                print(e, file=sys.stderr)
-        LOG.info("Done with organization.")
-
-    elif 'genotype_project_dirs' in args:
-        from ngi_pipeline.engines import piper_ngi
-        genotype_file_path = args.genotype_file
-        project_obj_list = []
-        if not args.genotype_project_dirs:
-            LOG.info('No projects specified; running genotype analysis for all '
-                     'samples present in VCF file.')
-            # User passed only the genotype file; try to determine samples/projects
-            # from vcf file
-            projects_samples_dict = \
-                    find_projects_from_samples(parse_samples_from_vcf(genotype_file_path))
-            for project_id, samples in projects_samples_dict.iteritems():
-                try:
-                    path_to_project = locate_project(project_id)
-                except ValueError:
-                    # Project has not yet been organized from flowcell level
-                    LOG.warn('Project "{}" has not yet been organized from '
-                             'flowcell to project level; skipping.'.format(project_id))
-                    continue
-                project = recreate_project_from_filesystem(project_dir=path_to_project,
-                                                           restrict_to_samples=samples)
-                project_obj_list.append(project)
-        else:
-            for genotype_project_dir in args.genotype_project_dirs:
-                LOG.info("Starting genotype analysis of project {} with genotype "
-                         "file {}".format(genotype_project_dir, genotype_file_path))
-                project = recreate_project_from_filesystem(project_dir=genotype_project_dir,
-                                                           restrict_to_samples=args.restrict_to_samples)
-                project_obj_list.append(project)
-        for project in project_obj_list:
+            project = recreate_project_from_filesystem(project_dir=genotype_project_dir,
+                                                       restrict_to_samples=args.restrict_to_samples)
+            if project and os.path.split(project.base_path)[1] == "DATA":
+                project.base_path = os.path.split(project.base_path)[0]
             for sample in project:
-                piper_ngi.launchers.analyze(project, sample,
-                                            genotype_file=genotype_file_path,
-                                            restart_finished_jobs=args.restart_finished_jobs,
-                                            restart_running_jobs=args.restart_running_jobs,
-                                            level="genotype")
+                piper_ngi.launchers.genotype(project, sample,
+                                             genotype_file=genotype_file_path,
+                                             restart_finished_jobs=args.restart_finished_jobs,
+                                             restart_running_jobs=args.restart_running_jobs,
+                                             level="genotype")
 
     elif 'port' in args:
         LOG.info('Starting ngi_pipeline server at port {}'.format(args.port))
