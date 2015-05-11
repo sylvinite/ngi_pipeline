@@ -51,10 +51,11 @@ def launch_analysis(projects_to_analyze, restart_failed_jobs=False,
         except (RuntimeError, KeyError, CharonError) as e: # BPA missing from Charon?
             LOG.error('Skipping project "{}" because of error: {}'.format(project, e))
             continue
-        try:
-            qc_analysis_module = load_engine_module("qc", config)
-        except RuntimeError as e:
-            LOG.error("Could not launch qc analysis: {}".format(e))
+        if not no_qc:
+            try:
+                qc_analysis_module = load_engine_module("qc", config)
+            except RuntimeError as e:
+                LOG.error("Could not launch qc analysis: {}".format(e))
         for sample in project:
             # Launch QC analysis
             if not no_qc:
