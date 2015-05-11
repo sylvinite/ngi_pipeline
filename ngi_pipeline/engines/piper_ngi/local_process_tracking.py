@@ -83,7 +83,8 @@ def update_charon_with_local_jobs_status(quiet=False, config=None, config_file_p
                 if piper_exit_code == 0:
                     # 0 -> Job finished successfully
                     if workflow == "merge_process_variantcall":
-                        status_field = "analysis_status"
+                        sample_status_field = "analysis_status"
+                        seqrun_status_field = "alignment_status"
                         set_status = "ANALYZED" # sample level
                     elif workflow == "genotype_concordance":
                         status_field = "genotype_status"
@@ -103,9 +104,9 @@ def update_charon_with_local_jobs_status(quiet=False, config=None, config_file_p
                                       workflow=workflow)
                     charon_session.sample_update(projectid=project_id,
                                                  sampleid=sample_id,
-                                                 **{status_field: set_status})
+                                                 **{sample_status_field: set_status})
                     recurse_status_for_sample(project_obj,
-                                              status_field=status_field,
+                                              status_field=seqrun_status_field,
                                               status_value=recurse_status,
                                               config=config)
                     # Job is only deleted if the Charon status update succeeds
@@ -143,13 +144,14 @@ def update_charon_with_local_jobs_status(quiet=False, config=None, config_file_p
                                       info_text=error_text,
                                       workflow=workflow)
                     if workflow == "merge_process_variantcall":
-                        status_field = "analysis_status"
+                        sample_status_field = "analysis_status"
+                        seqrun_status_field = "alignment_status"
                     elif workflow == "genotype_concordance":
                         status_field = "genotype_status"
                     charon_session.sample_update(projectid=project_id,
                                                  sampleid=sample_id,
-                                                 **{status_field: set_status})
-                    recurse_status_for_sample(project_obj, status_field=status_field,
+                                                 **{sample_status_field: set_status})
+                    recurse_status_for_sample(project_obj, status_field=seqrun_status_field,
                                               status_value=set_status, config=config)
                     # Job is only deleted if the Charon update succeeds
                     session.delete(sample_entry)
@@ -189,14 +191,15 @@ def update_charon_with_local_jobs_status(quiet=False, config=None, config_file_p
                                           info_text=error_text,
                                           workflow=workflow)
                         if workflow == "merge_process_variantcall":
-                            status_field = "analysis_status"
+                            sample_status_field = "analysis_status"
+                            seqrun_status_field = "alignment_status"
                         elif workflow == "genotype_concordance":
                             status_field = "genotype_status"
                         charon_session.sample_update(projectid=project_id,
                                                      sampleid=sample_id,
-                                                     **{status_field: set_status})
+                                                     **{sample_status_field: set_status})
                         recurse_status_for_sample(project_obj,
-                                                  status_field=status_field,
+                                                  status_field=seqrun_status_field,
                                                   status_value=set_status,
                                                   config=config)
                         # Job is only deleted if the Charon update succeeds
@@ -403,7 +406,7 @@ def record_process_sample(project, sample, workflow_subtask, analysis_module_nam
                                                                        e.message))
         extra_args = None
         if workflow_subtask == "merge_process_variantcall":
-            status_field = "analysis_status"
+            status_field = "alignment_status"
             recurse_status = "RUNNING"
             extra_args = {"mean_autosomal_coverage": 0}
         elif workflow_subtask == "genotype_concordance":
