@@ -144,6 +144,10 @@ if __name__ == "__main__":
     # Add sub-subparser for flowcell analysis
     analyze_flowcell = subparsers_analyze.add_parser('flowcell',
             help='Start analysis of raw flowcells')
+    analyze_flowcell.add_argument("-k", "--keep-existing-data", action="store_true",
+            help="Keep/re-use existing analysis data when launching new analyses.")
+    analyze_flowcell.add_argument("--no-qc", action="store_true",
+            help="Skip qc analysis.")
     analyze_flowcell.add_argument("analyze_fc_dirs", nargs="+",
             help=("The path to one or more demultiplexed Illumina flowcell "
                   "directories to process and analyze."))
