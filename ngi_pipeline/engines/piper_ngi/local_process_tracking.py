@@ -406,7 +406,8 @@ def record_process_sample(project, sample, workflow_subtask, analysis_module_nam
                                                                        e.message))
         extra_args = None
         if workflow_subtask == "merge_process_variantcall":
-            status_field = "alignment_status"
+            seqrun_status_field = "alignment_status"
+            sample_status_field = "UNDER_ANALYSIS"
             recurse_status = "RUNNING"
             extra_args = {"mean_autosomal_coverage": 0}
         elif workflow_subtask == "genotype_concordance":
@@ -421,14 +422,14 @@ def record_process_sample(project, sample, workflow_subtask, analysis_module_nam
                      '{}/{} to {}'.format(project, sample, set_status))
             CharonSession().sample_update(projectid=project.project_id,
                                           sampleid=sample.name,
-                                          **{status_field: set_status})
+                                          **{sample_status_field: set_status})
             project_obj = create_project_obj_from_analysis_log(project.name,
                                                                project.project_id,
                                                                project.base_path,
                                                                sample.name,
                                                                workflow_subtask)
             recurse_status_for_sample(project_obj,
-                                      status_field=status_field,
+                                      status_field=seqrun_status_field,
                                       status_value=recurse_status,
                                       extra_args=extra_args,
                                       config=config)
@@ -510,12 +511,13 @@ def kill_running_sample_analysis(workflow_subtask, project_id, sample_id):
                     if workflow_subtask == "genotype_concordance":
                         status_field = "genotype_status"
                     elif workflow_subtask == "merge_process_variantcall":
-                        status_field = "analysis_status"
+                        sample_status_field = "analysis_status"
+                        seqrun_status_field = "alignment_status"
                     charon_session.sample_update(projectid=project_id,
                                                  sampleid=sample_id,
-                                                 **{status_field: set_status})
+                                                 **{sample_status_field: set_status})
                     recurse_status_for_sample(project_obj,
-                                              status_field=status_field,
+                                              status_field=seqrun_status_field,
                                               status_value=set_status)
                 except CharonError as e:
                     LOG.error('Couldn\'t update Charon field "{}" to "{} for '
