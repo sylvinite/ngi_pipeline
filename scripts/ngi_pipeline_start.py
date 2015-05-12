@@ -157,8 +157,6 @@ if __name__ == "__main__":
     # Add sub-subparser for project analysis
     analyze_project = subparsers_analyze.add_parser('project',
             help='Start the analysis of a pre-parsed project.')
-    analyze_project.add_argument('analyze_project_dirs', nargs='+',
-            help='The path to the project folder to be analyzed.')
     analyze_project.add_argument("-k", "--keep-existing-data", action="store_true",
             help="Keep/re-use existing analysis data when launching new analyses.")
     analyze_project.add_argument("--no-qc", action="store_true",
