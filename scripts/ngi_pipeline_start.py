@@ -7,8 +7,11 @@ cluster (UPPMAX for NGI), or trigger analysis itself.
 from __future__ import print_function
 
 import argparse
+import glob
+import importlib
 import inflect
 import os
+import shutil
 import sys
 
 from ngi_pipeline.conductor import flowcell
@@ -19,7 +22,7 @@ from ngi_pipeline.database.filesystem import create_charon_entries_from_project
 from ngi_pipeline.engines import qc_ngi
 from ngi_pipeline.log.loggers import minimal_logger
 from ngi_pipeline.server import main as server_main
-from ngi_pipeline.utils.filesystem import recreate_project_from_filesystem
+from ngi_pipeline.utils.filesystem import locate_project, recreate_project_from_filesystem
 
 LOG = minimal_logger("ngi_pipeline_start")
 inflector = inflect.engine()
@@ -111,25 +114,28 @@ if __name__ == "__main__":
     organize_flowcell.add_argument("-d", "--delete", dest="delete_existing", action="store_true",
             help="Delete existing projects in Charon. Similarly dangerous.")
     organize_flowcell.add_argument("--force-create-project", action="store_true",
-            help="TESTING ONLY: Create a project if it does not exist in Charon using the project name as the project id.")
+            help="TESTING ONLY: Create a project if it does not exist in Charon "
+                 "using the project name as the project id.")
     organize_flowcell.add_argument("-s", "--sample", dest="restrict_to_samples", action="append",
             help="Restrict processing to these samples. Use flag multiple times for multiple samples.")
     organize_flowcell.add_argument("-p", "--project", dest="restrict_to_projects", action="append",
             help="Restrict processing to these projects. Use flag multiple times for multiple projects.")
 
     # Add subparser for deletion
-    parser_delete = subparsers.add_paser('delete', help="Delete data systematically.")
+    parser_delete = subparsers.add_parser('delete', help="Delete data systematically.")
     subparsers_delete = parser_delete.add_subparsers(help="Choose unit to delete.")
-    delete_analysis = subparsers_delete.add_parser('analysis',
-            help=("The name of the project whose analysis you would delete. Note "
-                  "that unless samples are specified, the entire project analaysis "
-                  "directory will be deleted!"))
-    delete_analysis.add_argument("-w", "--workflow",
-            help="The workflow analysis data to delete.")
+    delete_analysis = subparsers_delete.add_parser('analysis', help="Delete analysis files.")
+    delete_analysis.add_argument("delete_proj_analysis", nargs="+",
+            help=("The name of the project whose analysis you would delete.\n"
+                  "NOTE: if no analysis engine is specified, entire project "
+                  "analysis directory will be deleted."))
+    delete_analysis.add_argument("-e", "--engine",
+            help=("The engine whose  analysis data you would delete. Only required"
+                  "for full project analysis deletion (not with specific samples."))
     delete_analysis.add_argument("-s", "--sample", dest="restrict_to_samples", action="append",
-            help=("Restrict deletion to these samples. Use flag multiple times for multiple samples."
-                  "multiple samples. Only effective if the engine has implemented "
-                  "a function to remove specific sample analysis files."))
+            help=("Restrict deletion to these samples. Use flag multiple times "
+                  "for multiple samples.\nNOTE: requires engine has implemented "
+                  "individual sample removal functionality."))
 
     # Add subparser for analysis
     parser_analyze = subparsers.add_parser('analyze', help="Launch analysis.")
@@ -254,6 +260,8 @@ if __name__ == "__main__":
 
 
     # Finally execute corresponding functions
+
+    ## Analyze Flowcell
     if 'analyze_fc_dirs' in args:
         LOG.info('Starting flowcell analysis of flowcell {} '
                  '{}'.format(inflector.plural("directory", len(args.analyze_fc_dirs)),
@@ -269,6 +277,7 @@ if __name__ == "__main__":
                                                  quiet=args.quiet,
                                                  manual=True)
 
+    ## Analyze Project
     elif 'analyze_project_dirs' in args:
         for analyze_project_dir in args.analyze_project_dirs:
             try:
@@ -276,9 +285,10 @@ if __name__ == "__main__":
             except ValueError as e:
                 LOG.error(e)
                 continue
-            project = recreate_project_from_filesystem(project_dir=project_dir,
-                                                       restrict_to_samples=args.restrict_to_samples)
-            launchers.launch_analysis([project],
+            project_obj = \
+                    recreate_project_from_filesystem(project_dir=project_dir,
+                                                     restrict_to_samples=args.restrict_to_samples)
+            launchers.launch_analysis([project_obj],
                                       restart_failed_jobs=args.restart_failed_jobs,
                                       restart_finished_jobs=args.restart_finished_jobs,
                                       restart_running_jobs=args.restart_running_jobs,
@@ -287,6 +297,101 @@ if __name__ == "__main__":
                                       quiet=args.quiet,
                                       manual=True)
 
+    elif 'delete_proj_analysis' in args:
+        from ngi_pipeline.conductor.launchers import get_engine_for_bp
+        delete_proj_analysis_list = list(set(args.delete_proj_analysis))
+        for delete_proj_analysis in delete_proj_analysis_list:
+            if args.restrict_to_samples:
+                try:
+                    project_dir = locate_project(delete_proj_analysis)
+                except ValueError as e:
+                    LOG.error(e)
+                    continue
+                # Remove specific samples from the project if this code is implemented
+                project_obj = \
+                        recreate_project_from_filesystem(project_dir=project_dir,
+                                                         restrict_to_samples=args.restrict_to_samples)
+                if not project_obj.samples:
+                    LOG.error("No samples found for project {}. Skipping.".format(project_obj))
+                    continue
+                try:
+                    analysis_module = get_engine_for_bp(project_obj)
+                except Exception as e:
+                    if args.engine:
+                        # Try to import using the user-supplied engine
+                        analysis_engine = args.engine
+                        if not analysis_engine.startswith("ngi_pipeline.engines."):
+                            analysis_engine = "ngi_pipeline.engines." + analysis_engine
+                        try:
+                            analysis_module = importlib.import_module(analysis_engine)
+                        except ImportError:
+                            LOG.error('Analysis engine for project "{}" could not '
+                                      'be determined from Charon and user-supplied '
+                                      'engine "{}" was not importable.'.format(project_obj,
+                                                                               analysis_engine))
+                            continue
+                    else:
+                        LOG.error('Analysis engine for project "{}" could not '
+                                  'be determined from Charon and no value was '
+                                  'supplied. Skipping. ({})'.format(project_obj, e))
+                        continue
+                if args.engine and args.engine not in analysis_module.__name__:
+                    LOG.error('Engine "{}" was specified for project "{}" but Charon '
+                              'indicates engine is "{}". This parameter is not '
+                              'required for individual sample deletion as it is '
+                              'loaded from Charon. Skipping.'.format(args.engine,
+                                                                     project_obj,
+                                                                     analysis_module.__name__))
+                    continue
+                if validate_dangerous_user_thing( \
+                        action=('delete the following sample analyses for engine "{}": '
+                                 '{}'.format(args.engine,
+                                             ", ".join(
+                                                 [s.name for s in project_obj.samples.values()])))):
+                    try:
+                        analysis_module.utils.remove_previous_sample_analyses(project_obj)
+                    except AttributeError:
+                        LOG.error('Analysis module "{}" has not implemented '
+                                  'the function "utils.remove_previous_sample_analyses, '
+                                  'so individual sample analyses cannot be removed. '
+                                  'Skipping project analysis deletion for project '
+                                  '"{}"'.format(analysis_module.__name__, project_obj))
+                        continue
+            else:
+                try:
+                    delete_tree_path = locate_project(delete_proj_analysis, subdir="ANALYSIS")
+                except ValueError as e:
+                    LOG.error(e)
+                    continue
+                for item in glob.glob(os.path.join(os.path.split(delete_tree_path)[0], "*")):
+                    if os.path.islink(item):
+                        if os.path.realpath(item) == delete_tree_path:
+                            delete_symlink_path = item
+                if args.engine:
+                    delete_tree_path = os.path.join(delete_tree_path, args.engine)
+                    if not os.path.exists(delete_tree_path):
+                        LOG.error('User-specified engine analysis path does not '
+                                  'exist; skipping: {}'.format(delete_tree_path))
+                        continue
+                    if delete_symlink_path:
+                        delete_symlink_path = os.path.join(delete_symlink_path, args.engine)
+                if validate_dangerous_user_thing(action=('delete ALL ANALYSIS files '
+                                                         'under {}'.format(delete_tree_path))):
+                    try:
+                        LOG.info("Deleting {}...".format(delete_tree_path))
+                        shutil.rmtree(delete_tree_path)
+                        LOG.info("Deleted {}".format(delete_tree_path))
+                    except OSError as e:
+                        LOG.error('Error when deleting {}: {}'.format(delete_tree_path, e))
+                    if delete_symlink_path:
+                        try:
+                            LOG.info("Unlinking symlink {}...".format(delete_symlink_path))
+                            os.unlink(delete_symlink_path)
+                            LOG.info("Removed symlink {}".format(delete_symlink_path))
+                        except OSError as e:
+                            LOG.error("Error when unlinking {}: {}".format(delete_symlink_path, e))
+
+    ## QC Flowcell
     elif 'qc_flowcell_dirs' in args:
         qc_flowcell_dirs_list = list(set(args.qc_flowcell_dirs))
         LOG.info("Organizing flowcell {} {}".format(inflector.plural("directory",
@@ -312,6 +417,7 @@ if __name__ == "__main__":
             for sample in project:
                 qc_ngi.launchers.analyze(project, sample, quiet=args.quiet)
 
+    ## QC Project
     elif 'qc_project_dirs' in args:
         for qc_project_dir in args.qc_project_dirs:
             project = recreate_project_from_filesystem(project_dir=qc_project_dir,
@@ -322,6 +428,7 @@ if __name__ == "__main__":
             for sample in project:
                 qc_ngi.launchers.analyze(project, sample, quiet=args.quiet)
 
+    ## Organize Flowcell
     elif 'organize_fc_dirs' in args:
         organize_fc_dirs_list = list(set(args.organize_fc_dirs))
         LOG.info("Organizing flowcell {} {}".format(inflector.plural("directory",
@@ -329,17 +436,59 @@ if __name__ == "__main__":
                                                     ", ".join(organize_fc_dirs_list)))
         projects_to_analyze = \
                 organize_projects_from_flowcell(demux_fcid_dirs=organize_fc_dirs_list,
-            project = recreate_project_from_filesystem(project_dir=genotype_project_dir,
-                                                       restrict_to_samples=args.restrict_to_samples)
-            if project and os.path.split(project.base_path)[1] == "DATA":
-                project.base_path = os.path.split(project.base_path)[0]
-            for sample in project:
-                piper_ngi.launchers.genotype(project, sample,
-                                             genotype_file=genotype_file_path,
-                                             restart_finished_jobs=args.restart_finished_jobs,
-                                             restart_running_jobs=args.restart_running_jobs,
-                                             level="genotype")
+                                                restrict_to_projects=args.restrict_to_projects,
+                                                restrict_to_samples=args.restrict_to_samples,
+                                                fallback_libprep=args.fallback_libprep,
+                                                quiet=args.quiet)
+        for project in projects_to_analyze:
+            try:
+                create_charon_entries_from_project(project=project,
+                                                   best_practice_analysis=args.best_practice_analysis,
+                                                   sequencing_facility=args.sequencing_facility,
+                                                   force_overwrite=args.force_update,
+                                                   delete_existing=args.delete_existing)
+            except Exception as e:
+                print(e, file=sys.stderr)
+        LOG.info("Done with organization.")
 
+    elif 'genotype_project_dirs' in args:
+        from ngi_pipeline.engines import piper_ngi
+        genotype_file_path = args.genotype_file
+        project_obj_list = []
+        if not args.genotype_project_dirs:
+            LOG.info('No projects specified; running genotype analysis for all '
+                     'samples present in VCF file.')
+            # User passed only the genotype file; try to determine samples/projects
+            # from vcf file
+            projects_samples_dict = \
+                    find_projects_from_samples(parse_samples_from_vcf(genotype_file_path))
+            for project_id, samples in projects_samples_dict.iteritems():
+                try:
+                    path_to_project = locate_project(project_id)
+                except ValueError:
+                    # Project has not yet been organized from flowcell level
+                    LOG.warn('Project "{}" has not yet been organized from '
+                             'flowcell to project level; skipping.'.format(project_id))
+                    continue
+                project = recreate_project_from_filesystem(project_dir=path_to_project,
+                                                           restrict_to_samples=samples)
+                project_obj_list.append(project)
+        else:
+            for genotype_project_dir in args.genotype_project_dirs:
+                LOG.info("Starting genotype analysis of project {} with genotype "
+                         "file {}".format(genotype_project_dir, genotype_file_path))
+                project = recreate_project_from_filesystem(project_dir=genotype_project_dir,
+                                                           restrict_to_samples=args.restrict_to_samples)
+                project_obj_list.append(project)
+        for project in project_obj_list:
+            for sample in project:
+                piper_ngi.launchers.analyze(project, sample,
+                                            genotype_file=genotype_file_path,
+                                            restart_finished_jobs=args.restart_finished_jobs,
+                                            restart_running_jobs=args.restart_running_jobs,
+                                            level="genotype")
+
+    ## Server
     elif 'port' in args:
         LOG.info('Starting ngi_pipeline server at port {}'.format(args.port))
         server_main.start(args.port)
