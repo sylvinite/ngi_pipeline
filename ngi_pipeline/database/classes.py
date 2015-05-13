@@ -12,19 +12,6 @@ from requests.exceptions import Timeout
 
 LOG = minimal_logger(__name__)
 
-
-try:
-    CHARON_API_TOKEN = os.environ['CHARON_API_TOKEN']
-    CHARON_BASE_URL = os.environ['CHARON_BASE_URL']
-    # Remove trailing slashes
-    m = re.match(r'(?P<url>.*\w+)/*', CHARON_BASE_URL)
-    if m:
-        CHARON_BASE_URL = m.groups()[0]
-except KeyError as e:
-    raise ValueError('Could not get required environmental variable '
-                     '"{}"; cannot connect to database.'.format(e))
-
-
 class Singleton(type):
     _instances = {}
     def __call__(cls, *args, **kwargs):
@@ -45,6 +32,10 @@ class CharonSession(requests.Session):
         try:
             self._api_token = _charon_vars_dict['charon_api_token']
             self._api_token_dict = {'X-Charon-API-token': self._api_token}
+            # Remove trailing slashes
+            m = re.match(r'(?P<url>.*\w+)/*', _charon_vars_dict['charon_base_url'])
+            if m:
+                _charon_vars_dict['charon_base_url'] = m.groups()[0]
             self._base_url = _charon_vars_dict['charon_base_url']
         except KeyError as e:
             raise ValueError('Unable to load needed Charon variable: {}'.format(e.msg))
