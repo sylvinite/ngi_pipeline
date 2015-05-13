@@ -16,6 +16,8 @@ def load_charon_variables(config=None, config_file_path=None):
     vars_dict = {}
     var_names = ('charon_api_token', 'charon_base_url')
     for var_name in var_names:
-        vars_dict[var_name] = config.get("charon", {}).get(var_name) or \
-                                  os.environ.get(var_name.upper())
+        var_value = config.get("charon", {}).get(var_name) or \
+                               os.environ.get(var_name.upper())
+        if var_value:
+            vars_dict[var_name] = var_value
     return vars_dict
