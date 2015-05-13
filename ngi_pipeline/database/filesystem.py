@@ -23,10 +23,11 @@ def create_charon_entries_from_project(project, best_practice_analysis="whole_ge
     """
     charon_session = CharonSession()
     try:
-        status="OPEN"
+        status = "OPEN"
         LOG.info('Creating project "{}" with status "{}", best practice analysis "{}", '
-                 'and sequencing_facility {}'.format(project, status, best_practice_analysis,
-                                                   sequencing_facility))
+                 'and sequencing_facility {}'.format(project, status,
+                                                     best_practice_analysis,
+                                                     sequencing_facility))
         charon_session.project_create(projectid=project.project_id,
                                       name=project.name,
                                       status=status,

@@ -28,15 +28,14 @@ def get_subtasks_for_level(level):
     :param str level: The level (e.g. "sample")
     :returns: The names (strings) of the workflows that should be run at that level
     :rtype: tuple
-
-    :raises NotImplementedError: If the level has no associated subtasks
     """
     if level == "sample":
         return ("merge_process_variantcall",)
     elif level == "genotype":
         return ("genotype_concordance",)
     else:
-        raise NotImplementedError('The level "{}" has no associated subtasks.')
+        LOG.error('The level "{}" has no associated subtasks.')
+        return []
 
 
 @with_ngi_config
@@ -116,7 +115,6 @@ def workflow_dna_variantcalling(qscripts_dir_path, setup_xml_path, global_config
     :returns: The Piper command to be executed.
     :rtype: str
     """
-    ## TODO need to add -jobNative arguments (--qos=seqver)
     cl_string = PIPER_CL_TEMPLATE
     workflow_qscript_path = os.path.join(qscripts_dir_path, "DNABestPracticeVariantCalling.scala")
     job_walltime = slurm_time_to_seconds(config.get("slurm", {}).get("time") or "4-00:00:00")

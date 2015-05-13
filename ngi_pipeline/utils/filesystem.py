@@ -86,12 +86,15 @@ def locate_flowcell(flowcell, config=None, config_file_path=None):
 
 
 @with_ngi_config
-def locate_project(project, config=None, config_file_path=None):
+def locate_project(project, subdir="DATA", resolve_symlinks=True,
+                   config=None, config_file_path=None):
     """Given a project, returns the full path to the project if possible,
     searching the config file's specified analysis.top_dir if needed.
     If the project passed in is already a valid path, returns that.
 
     :param str project: The name of (or path to) the project
+    :param str subdir: The subdirectory to use ("DATA" or "ANALYSIS")
+    :param bool resolve_symlinks: Resolve symlinks when found (default True)
     :returns: The path to the project
     :rtype: str
     :raises ValueError: If a valid path cannot be found
@@ -100,7 +103,7 @@ def locate_project(project, config=None, config_file_path=None):
         return os.path.abspath(project)
     else:
         try:
-            project_data_dir = os.path.join(config["analysis"]["top_dir"], "DATA")
+            project_data_dir = os.path.join(config["analysis"]["top_dir"], subdir)
         except (KeyError, TypeError) as e:
             raise ValueError('Path to project data directory not available in '
                              'config file (analysis.top_dir) and project '
@@ -113,6 +116,11 @@ def locate_project(project, config=None, config_file_path=None):
                              'data directory as specified in configuration '
                              'file (at {}).'.format(project_dir))
         else:
+            if os.path.islink(project_dir):
+                try:
+                    return os.path.realpath(project_dir)
+                except OSError:
+                    pass
             return project_dir
 
 
@@ -175,7 +183,7 @@ def do_link(src_files, dst_dir, link_type='soft'):
         base_file = os.path.basename(src_file)
         dst_file = os.path.join(dst_dir, base_file)
         if not os.path.isfile(dst_file):
-            link_f(src_file, dst_file)
+            link_f(os.path.realpath(src_file), dst_file)
 
 
 def do_rsync(src_files, dst_dir):
@@ -295,16 +303,18 @@ def recreate_project_from_filesystem(project_dir,
                 break
         else:
             syml_project_dir = None
-    project_id = os.path.split(real_project_dir)[1]
+    project_base_path, project_id = os.path.split(real_project_dir)
     if syml_project_dir:
-        project_name = os.path.split(syml_project_dir)[1]
+        project_base_path, project_name = os.path.split(syml_project_dir)
     else: # project name is the same as project id (Uppsala perhaps)
         project_name = project_id
+    if os.path.split(project_base_path)[1] == "DATA":
+        project_base_path = os.path.split(project_base_path)[0]
     LOG.info('Setting up project "{}"'.format(project_id))
     project_obj = NGIProject(name=project_name,
                              dirname=project_id,
                              project_id=project_id,
-                             base_path=config["analysis"]["top_dir"])
+                             base_path=project_base_path)
     samples_pattern = os.path.join(real_project_dir, "*")
     samples = filter(os.path.isdir, glob.glob(samples_pattern))
     if not samples:
@@ -312,7 +322,8 @@ def recreate_project_from_filesystem(project_dir,
     for sample_dir in samples:
         sample_name = os.path.basename(sample_dir)
         if restrict_to_samples and sample_name not in restrict_to_samples:
-            LOG.debug('Skipping sample "{}": not in specified samples "{}"'.format(sample_name, ', '.join(restrict_to_samples)))
+            LOG.debug('Skipping sample "{}": not in specified samples '
+                      '"{}"'.format(sample_name, ', '.join(restrict_to_samples)))
             continue
         LOG.info('Setting up sample "{}"'.format(sample_name))
         sample_obj = project_obj.add_sample(name=sample_name, dirname=sample_name)
@@ -324,11 +335,12 @@ def recreate_project_from_filesystem(project_dir,
         for libprep_dir in libpreps:
             libprep_name = os.path.basename(libprep_dir)
             if restrict_to_libpreps and libprep_name not in restrict_to_libpreps:
-                LOG.debug('Skipping libprep "{}": not in specified libpreps "{}"'.format(libprep_name, ', '.join(restrict_to_libpreps)))
+                LOG.debug('Skipping libprep "{}": not in specified libpreps '
+                          '"{}"'.format(libprep_name, ', '.join(restrict_to_libpreps)))
                 continue
             LOG.info('Setting up libprep "{}"'.format(libprep_name))
             libprep_obj = sample_obj.add_libprep(name=libprep_name,
-                                                    dirname=libprep_name)
+                                                 dirname=libprep_name)
 
             seqruns_pattern = os.path.join(libprep_dir, "*_*_*_*")
             seqruns = filter(os.path.isdir, glob.glob(seqruns_pattern))
@@ -337,11 +349,12 @@ def recreate_project_from_filesystem(project_dir,
             for seqrun_dir in seqruns:
                 seqrun_name = os.path.basename(seqrun_dir)
                 if restrict_to_seqruns and seqrun_name not in restrict_to_seqruns:
-                    LOG.debug('Skipping seqrun "{}": not in specified seqruns "{}"'.format(seqrun_name, ', '.join(restrict_to_seqruns)))
+                    LOG.debug('Skipping seqrun "{}": not in specified seqruns '
+                              '"{}"'.format(seqrun_name, ', '.join(restrict_to_seqruns)))
                     continue
                 LOG.info('Setting up seqrun "{}"'.format(seqrun_name))
                 seqrun_obj = libprep_obj.add_seqrun(name=seqrun_name,
-                                                          dirname=seqrun_name)
+                                                    dirname=seqrun_name)
                 for fq_file in fastq_files_under_dir(seqrun_dir):
                     fq_name = os.path.basename(fq_file)
                     LOG.info('Adding fastq file "{}" to seqrun "{}"'.format(fq_name, seqrun_obj))

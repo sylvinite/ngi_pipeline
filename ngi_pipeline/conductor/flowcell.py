@@ -34,8 +34,8 @@ STHLM_X_PROJECT_RE = re.compile(r'[A-z]_[A-z0-9]+_\d{2}_\d{2}')
 def process_demultiplexed_flowcell(demux_fcid_dir_path, restrict_to_projects=None,
                                    restrict_to_samples=None, restart_failed_jobs=False,
                                    restart_finished_jobs=False, restart_running_jobs=False,
-                                    quiet=False, manual=False,
-                                    config=None, config_file_path=None):
+                                   keep_existing_data=False, no_qc=False, quiet=False,
+                                   manual=False, config=None, config_file_path=None):
     """Call process_demultiplexed_flowcells, restricting to a single flowcell.
     Essentially a restrictive wrapper.
 
@@ -46,6 +46,8 @@ def process_demultiplexed_flowcell(demux_fcid_dir_path, restrict_to_projects=Non
                                      restricted to these. Optional.
     :param bool restart_failed_jobs: Restart jobs marked as "FAILED" in Charon.
     :param bool restart_finished_jobs: Restart jobs marked as "DONE" in Charon.
+    :param bool restart_running_jobs: Restart jobs marked as running in Charon
+    :param bool keep_existing_data: Keep existing analysis data when launching new jobs
     :param str config_file_path: The path to the NGI configuration file; optional.
     """
     if type(demux_fcid_dir_path) is not str:
@@ -55,7 +57,8 @@ def process_demultiplexed_flowcell(demux_fcid_dir_path, restrict_to_projects=Non
     process_demultiplexed_flowcells([demux_fcid_dir_path], restrict_to_projects,
                                     restrict_to_samples, restart_failed_jobs,
                                     restart_finished_jobs, restart_running_jobs,
-                                    config_file_path=config_file_path,
+                                    keep_existing_data=keep_existing_data,
+                                    no_qc=no_qc, config_file_path=config_file_path,
                                     quiet=quiet, manual=manual)
 
 
@@ -63,8 +66,8 @@ def process_demultiplexed_flowcell(demux_fcid_dir_path, restrict_to_projects=Non
 def process_demultiplexed_flowcells(demux_fcid_dirs, restrict_to_projects=None,
                                     restrict_to_samples=None, restart_failed_jobs=False,
                                     restart_finished_jobs=False, restart_running_jobs=False,
-                                    quiet=False, manual=False,
-                                    config=None, config_file_path=None):
+                                    keep_existing_data=False, no_qc=False, quiet=False,
+                                    manual=False, config=None, config_file_path=None):
     """Sort demultiplexed Illumina flowcells into projects and launch their analysis.
 
     :param list demux_fcid_dirs: The CASAVA-produced demux directory/directories.
@@ -74,6 +77,8 @@ def process_demultiplexed_flowcells(demux_fcid_dirs, restrict_to_projects=None,
                                      restricted to these. Optional.
     :param bool restart_failed_jobs: Restart jobs marked as "FAILED" in Charon.
     :param bool restart_finished_jobs: Restart jobs marked as "DONE" in Charon.
+    :param bool restart_running_jobs: Restart jobs marked as running in Charon
+    :param bool keep_existing_data: Keep existing analysis data when launching new jobs
     :param bool quiet: Don't send notification emails; added to config
     :param bool manual: This is being run from a user script; added to config
     :param dict config: The parsed NGI configuration file; optional.
@@ -91,7 +96,8 @@ def process_demultiplexed_flowcells(demux_fcid_dirs, restrict_to_projects=None,
                      'are missing'.format(project))
             create_charon_entries_from_project(project, sequencing_facility="NGI-U")
     launch_analysis(projects_to_analyze, restart_failed_jobs, restart_finished_jobs,
-                    restart_running_jobs, config=config)
+                    restart_running_jobs, keep_existing_data=keep_existing_data,
+                    no_qc=no_qc, config=config)
 
 
 @with_ngi_config
@@ -189,10 +195,11 @@ def setup_analysis_directory_structure(fc_dir, projects_to_analyze,
     if not restrict_to_samples: restrict_to_samples = []
     config["quiet"] = quiet # Hack because I enter here from a script sometimes
     analysis_top_dir = os.path.abspath(config["analysis"]["top_dir"])
-    if not os.path.exists(analysis_top_dir):
-        error_msg = "Error: Analysis top directory {} does not exist".format(analysis_top_dir)
-        LOG.error(error_msg)
-        raise OSError(error_msg)
+    try:
+        safe_makedir(analysis_top_dir)
+    except OSError as e:
+        LOG.error('Error: Analysis top directory {} does not exist and could not '
+                  'be created.'.format(analysis_top_dir))
     fc_dir = fc_dir if os.path.isabs(fc_dir) else os.path.join(analysis_top_dir, fc_dir)
     if not os.path.exists(fc_dir):
         LOG.error("Error: Flowcell directory {} does not exist".format(fc_dir))
@@ -211,10 +218,6 @@ def setup_analysis_directory_structure(fc_dir, projects_to_analyze,
         project_name = project['project_name']
         project_original_name = project['project_original_name']
         samplesheet_path = fc_dir_structure.get("samplesheet_path")
-        # If specific projects are specified, skip those that do not match
-        if restrict_to_projects and project_name not in restrict_to_projects:
-            LOG.debug("Skipping project {}".format(project_name))
-            continue
         try:
             # Maps e.g. "Y.Mom_14_01" to "P123"
             project_id = get_project_id_from_name(project_name)
@@ -223,6 +226,11 @@ def setup_analysis_directory_structure(fc_dir, projects_to_analyze,
                      'Using project name ("{}") as project id '
                      '(error: {})'.format(project_name, e))
             project_id = project_name
+        # If specific projects are specified, skip those that do not match
+        if restrict_to_projects and project_name not in restrict_to_projects and \
+                                    project_id not in restrict_to_projects:
+            LOG.debug("Skipping project {} (not in restrict_to_projects)".format(project_name))
+            continue
         LOG.info("Setting up project {}".format(project.get("project_name")))
         # Create a project directory if it doesn't already exist, including
         # intervening "DATA" directory
@@ -278,7 +286,7 @@ def setup_analysis_directory_structure(fc_dir, projects_to_analyze,
                                                                            lane_num)
                 except (IndexError, ValueError) as e:
                     LOG.debug('Unable to determine library prep from sample sheet file '
-                             '("{}"); try to determine from Charon'.format(e))
+                              '("{}"); try to determine from Charon'.format(e))
                     try:
                         # Requires Charon access
                         libprep_name = determine_library_prep_from_fcid(project_id, sample_name, fc_full_id)
@@ -315,9 +323,9 @@ def setup_analysis_directory_structure(fc_dir, projects_to_analyze,
                             LOG.error(error_text)
                             if not config.get('quiet'):
                                 mail_analysis(project_name=project_name,
-                                          sample_name=sample_name,
-                                          level="ERROR",
-                                          info_text=error_text)
+                                              sample_name=sample_name,
+                                              level="ERROR",
+                                              info_text=error_text)
                             continue
                 libprep_object = sample_obj.add_libprep(name=libprep_name,
                                                         dirname=libprep_name)
@@ -344,17 +352,17 @@ def setup_analysis_directory_structure(fc_dir, projects_to_analyze,
                         try:
                             do_symlink(src_fastq_files, seqrun_dir)
                         except OSError:
-                            error_text=('Could not symlink files for project/sample'
-                                      'libprep/seqrun {}/{}/{}/{}'.format(project_obj,
-                                                                          sample_obj,
-                                                                          libprep_obj,
-                                                                          seqrun_obj))
+                            error_text = ('Could not symlink files for project/sample'
+                                          'libprep/seqrun {}/{}/{}/{}'.format(project_obj,
+                                                                              sample_obj,
+                                                                              libprep_obj,
+                                                                              seqrun_obj))
                             LOG.error(error_text)
                             if not config.get('quiet'):
                                 mail_analysis(project_name=project_name,
-                                          sample_name=sample_name,
-                                          level="ERROR",
-                                          info_text=error_text)
+                                              sample_name=sample_name,
+                                              level="ERROR",
+                                              info_text=error_text)
                             continue
     return projects_to_analyze
 

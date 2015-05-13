@@ -22,6 +22,9 @@ environment:
     flowcell_inbox: /proj/a2014205/archive
 
 
+#genotyping:
+#    lower_bound_cutoff: 0.9
+
 logging:
     log_file: /proj/a2014205/ngi_resources/ngi_pipeline.log
 
@@ -41,7 +44,7 @@ piper:
         - java/sun_jdk1.7.0_25
         - R/2.15.0
     threads: 16
-    #shell_jobrunner: Shell
+    shell_jobrunner: Shell
     #jobNative:
     #    - arg1
     #    - arg2
