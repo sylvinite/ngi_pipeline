@@ -78,23 +78,12 @@ supported_genomes:
 test_data:
     workflows:
         whole_genome_reseq:
-            remote:
-                #rsync:
-                #    user: funk_002
-                #    remote_path: /proj/a2009002/webexport/opendata/HiSeqX_CEPH/NA10860-PCR-free-150pM/02-FASTQ/
-                #    local_parent_dir: /proj/a2014205/nobackup/NGI/test_data/merge_variant_call/
-                #    post_download:
-                #        - "module load bioinfo-tools"
-                #        - "module load seqtk"
-                #        - "seqtk sample {fastq_path} 10000"
-                #wget:
-                #    remote_path: http://chapmanb.s3.amazonaws.com/100326_FC6107FAAXX.tar.gz
-                #    local_parent_dir: /proj/a2014205/nobackup/NGI/test_data/merge_variant_call/
-                #wget:
-                #   remote_path: ftp://ftp-trace.ncbi.nih.gov/giab/ftp/technical/NIST_NA12878_HG001_HiSeq_300x/131219_D00360_005_BH814YADXX/Project_RM8398/Sample_U0a/U0a_CGATGT_L001_R?_001.fastq.gz
-                #   local_parent_dir: 
+            customize_config:
+                analysis:
+                    top_dir: /proj/a2014205/nobackup/NGI/test_data/
+                charon:
+                    charon_base_url: http://charon-dev.scilifelab.se
             local_files:
-                #flowcell: /proj/a2014205/nobackup/NGI/test_data/whole_genome_reseq/100326_D00000_000_A6107FAAXX
-                project: /proj/a2014205/nobackup/NGI/test_data/whole_genome_reseq/P1234
-                vcf: /proj/a2014205/nobackup/NGI/test_data/whole_genome_reseq/04-vcf/
-            #charon_base_url: http://charon-dev.scilifelab.se
+                flowcell: /proj/a2014205/nobackup/NGI/test_data/whole_genome_reseq/100326_D00000_000_A6107FAAXX
+                project: /proj/a2014205/nobackup/NGI/test_data/whole_genome_reseq/DATA/P0000
+                vcf: /proj/a2014205/nobackup/NGI/test_data/whole_genome_reseq/vcf/
