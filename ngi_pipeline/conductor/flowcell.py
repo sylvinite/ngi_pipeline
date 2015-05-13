@@ -66,8 +66,8 @@ def process_demultiplexed_flowcell(demux_fcid_dir_path, restrict_to_projects=Non
 def process_demultiplexed_flowcells(demux_fcid_dirs, restrict_to_projects=None,
                                     restrict_to_samples=None, restart_failed_jobs=False,
                                     restart_finished_jobs=False, restart_running_jobs=False,
-                                    keep_existing_data=False, no_qc=False, quiet=False,
-                                    manual=False, config=None, config_file_path=None):
+                                    fallback_libprep=None, keep_existing_data=False, no_qc=False,
+                                    quiet=False, manual=False, config=None, config_file_path=None):
     """Sort demultiplexed Illumina flowcells into projects and launch their analysis.
 
     :param list demux_fcid_dirs: The CASAVA-produced demux directory/directories.
@@ -78,6 +78,7 @@ def process_demultiplexed_flowcells(demux_fcid_dirs, restrict_to_projects=None,
     :param bool restart_failed_jobs: Restart jobs marked as "FAILED" in Charon.
     :param bool restart_finished_jobs: Restart jobs marked as "DONE" in Charon.
     :param bool restart_running_jobs: Restart jobs marked as running in Charon
+    :param str fallback_libprep: If libprep cannot be determined, use this value if supplied (default None)
     :param bool keep_existing_data: Keep existing analysis data when launching new jobs
     :param bool quiet: Don't send notification emails; added to config
     :param bool manual: This is being run from a user script; added to config
@@ -89,6 +90,7 @@ def process_demultiplexed_flowcells(demux_fcid_dirs, restrict_to_projects=None,
     projects_to_analyze = organize_projects_from_flowcell(demux_fcid_dirs=demux_fcid_dirs,
                                                           restrict_to_projects=restrict_to_projects,
                                                           restrict_to_samples=restrict_to_samples,
+                                                          fallback_libprep=fallback_libprep,
                                                           quiet=quiet, config=config)
     for project in projects_to_analyze:
         if UPPSALA_PROJECT_RE.match(project.project_id):
