@@ -6,14 +6,17 @@ import subprocess
 import tempfile
 import unittest
 
-from ngi_pipeline.conductor import flowcell, launchers
+from ngi_pipeline.conductor.flowcell import process_demultiplexed_flowcells
+from ngi_pipeline.database.classes import CharonSession, CharonError
 from ngi_pipeline.log.loggers import minimal_logger
 from ngi_pipeline.utils.config import load_yaml_config, locate_ngi_config
 from ngi_pipeline.utils.filesystem import locate_project, recreate_project_from_filesystem
+from ngi_pipeline.utils.pyutils import update_dict
 
 LOG = minimal_logger(__name__)
 
 class AutomatedAnalysisTest(unittest.TestCase):
+    ## Not used / WIP
     def _install_test_files(self, workflow_dict):
         """Download required sequence and reference files."""
         url = workflow_dict.get("remote_url")
@@ -24,6 +27,7 @@ class AutomatedAnalysisTest(unittest.TestCase):
             if not os.path.exists(dest_dir):
                 self._download_to_dir(url, dest_dir)
 
+    ## Not used / WIP
     def _download_to_dir(self, url, dest_dir):
         tmp_dir = tempfile.mkdtemp()
         output_dir = os.path.join(tmp_dir, os.path.basename(url))
@@ -41,22 +45,43 @@ class AutomatedAnalysisTest(unittest.TestCase):
     def test_workflows(self):
         config_file_path = locate_ngi_config()
         config = load_yaml_config(config_file_path)
+
         for workflow_name, workflow_dict in config.get("test_data", {}).get("workflows", {}).iteritems():
-            self._install_test_files(workflow_dict)
+            # Load and rewrite config file as needed
+            customize_config_dict = workflow_dict.get("customize_config")
+            if customize_config_dict:
+                config = update_dict(config, customize_config_dict)
+
+            #self._install_test_files(workflow_dict)
             LOG.info('Starting test analysis pipeline for workflow "{}"'.format(workflow_name))
-            workflow_dict.get("local_files")
-            project_path = workflow_dict.get("project")
-            flowcell_path = workflow_dict.get("flowcell")
-            if project_path:
-                try:
-                    project_dir = locate_project(project_path)
-                except ValueError as e:
-                    LOG.error('Test of workflow "{}" failed: {}'.format(workflow_name, e))
-                    continue
-                project = recreate_project_from_filesystem(project_dir=project_dir)
-                if project and os.path.split(project.base_path)[1] == "DATA":
-                    project.base_path = os.path.split(project.base_path)[0]
-                launchers.launch_analysis([project])
-            elif flowcell_path:
-                # This is problematic because it will create a permanent record in Charon
-                flowcell.process_demultiplexed_flowcell([flowcell_path])
+            try:
+                local_files = workflow_dict["local_files"]
+            except KeyError:
+                raise ValueError("Required paths to input files for testing do not"
+                                 "exist in config file (test_data.workflows."
+                                 "{}.local_files); cannot proceed.".format(workflow_name))
+            try:
+                flowcell_path = local_files["flowcell"]
+            except KeyError:
+                raise ValueError("Path to flowcell is required and not specified "
+                                 "in configuration file (test_data.workflows."
+                                 "{}.local_files.flowcell); cannot proceed.".format(workflow_name))
+            try:
+                test_project = workflow_dict["test_project"]
+                test_proj_id = test_project["project_id"]
+                test_proj_name = test_project["project_name"]
+                test_proj_bpa = test_project["bpa"]
+            except KeyError as e:
+                raise ValueError("Test project information is missing from config "
+                                 "file (under test_data.workflows.{}.test_project "
+                                 "({}); cannot proceed.".format(workflow_name, e.msg))
+            charon_session = CharonSession(config=config)
+            try:
+                charon_session.project_delete(projectid=test_proj_id)
+            except CharonError:
+                pass
+            charon_session.project_create(projectid=test_proj_id, name=test_proj_name,
+                                          status="OPEN", best_practice_analysis=test_proj_bpa)
+
+            process_demultiplexed_flowcells([flowcell_path], fallback_libprep="A",
+                                            config=config)
