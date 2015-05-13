@@ -407,8 +407,9 @@ def record_process_sample(project, sample, workflow_subtask, analysis_module_nam
         extra_args = None
         if workflow_subtask == "merge_process_variantcall":
             seqrun_status_field = "alignment_status"
-            sample_status_field = "UNDER_ANALYSIS"
-            recurse_status = "RUNNING"
+            seqrun_status_value = "RUNNING"
+            sample_status_field = "analysis_status"
+            sample_status_value = "UNDER_ANALYSIS"
             extra_args = {"mean_autosomal_coverage": 0}
         elif workflow_subtask == "genotype_concordance":
             status_field = "genotype_status"
@@ -419,10 +420,10 @@ def record_process_sample(project, sample, workflow_subtask, analysis_module_nam
         try:
             set_status = "UNDER_ANALYSIS"
             LOG.info('Updating Charon status for project/sample '
-                     '{}/{} to {}'.format(project, sample, set_status))
+                    '{}/{} key : {} value : {}'.format(project, sample, sample_status_field or status_field, sample_status_value or set_status))
             CharonSession().sample_update(projectid=project.project_id,
                                           sampleid=sample.name,
-                                          **{sample_status_field: set_status})
+                                          **{sample_status_field: sample_status_value})
             project_obj = create_project_obj_from_analysis_log(project.name,
                                                                project.project_id,
                                                                project.base_path,
@@ -430,7 +431,7 @@ def record_process_sample(project, sample, workflow_subtask, analysis_module_nam
                                                                workflow_subtask)
             recurse_status_for_sample(project_obj,
                                       status_field=seqrun_status_field,
-                                      status_value=recurse_status,
+                                      status_value=seqrun_status_value,
                                       extra_args=extra_args,
                                       config=config)
         except CharonError as e:
