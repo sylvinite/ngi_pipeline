@@ -183,7 +183,7 @@ def do_link(src_files, dst_dir, link_type='soft'):
         base_file = os.path.basename(src_file)
         dst_file = os.path.join(dst_dir, base_file)
         if not os.path.isfile(dst_file):
-            link_f(src_file, dst_file)
+            link_f(os.path.realpath(src_file), dst_file)
 
 
 def do_rsync(src_files, dst_dir):
