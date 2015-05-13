@@ -27,7 +27,7 @@ def launch_analysis(projects_to_analyze, restart_failed_jobs=False,
     for project in projects_to_analyze: # Get information from Charon regarding which best practice analyses to run
         try:
             engine = get_engine_for_bp(project, config, config_file_path)
-        except CharonError as e:
+        except (RuntimeError, CharonError) as e:
             LOG.error('Project {} could not be processed: {}'.format(project, e))
             continue
         engine.local_process_tracking.update_charon_with_local_jobs_status(config=config)
@@ -48,7 +48,7 @@ def launch_analysis(projects_to_analyze, restart_failed_jobs=False,
             continue
         try:
             analysis_module = get_engine_for_bp(project)
-        except (RuntimeError, KeyError, CharonError) as e: # BPA missing from Charon?
+        except (RuntimeError, CharonError) as e: # BPA missing from Charon?
             LOG.error('Skipping project "{}" because of error: {}'.format(project, e))
             continue
         if not no_qc:
