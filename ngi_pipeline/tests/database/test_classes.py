@@ -2,7 +2,7 @@ import json
 import requests
 import unittest
 
-from ngi_pipeline.database.classes import CharonSession, CHARON_BASE_URL, CharonError
+from ngi_pipeline.database.classes import CharonSession, CharonError
 from ngi_pipeline.tests.generate_test_data import generate_run_id
 
 class TestCharonFunctions(unittest.TestCase):
@@ -24,8 +24,9 @@ class TestCharonFunctions(unittest.TestCase):
 
     def test_construct_charon_url(self):
         append_list = ["road","to","nowhere"]
+        charon_session = CharonSession()
         # This is a weird test because it's the same code as I'm testing but it also seems weird to code it worse
-        finished_url = "{}/api/v1/{}".format(CHARON_BASE_URL,'/'.join([str(a) for a in append_list]))
+        finished_url = "{}/api/v1/{}".format(charon_session._base_url, '/'.join([str(a) for a in append_list]))
         # The method expects not a list but individual args
         self.assertEqual(finished_url, CharonSession().construct_charon_url(*append_list))
 
