@@ -41,7 +41,7 @@ def main(inbox=None, num_days=14, genotype_files=None, config=None, config_file_
                 gt_files_valid.append(os.path.abspath(gt_file))
 
     if not gt_files_valid:
-        LOG.info("No new genotype files found under {} newer than "
+        LOG.info("No genotype files found under {} newer than "
                  "{}".format(inbox, time.ctime(cutoff_age)))
     else:
         charon_session = CharonSession()
