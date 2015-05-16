@@ -24,7 +24,7 @@ from ngi_pipeline.log.loggers import minimal_logger
 from ngi_pipeline.server import main as server_main
 from ngi_pipeline.utils.filesystem import locate_project, recreate_project_from_filesystem
 
-LOG = minimal_logger("ngi_pipeline_start")
+LOG = minimal_logger(os.path.basename(__file__))
 inflector = inflect.engine()
 
 def validate_dangerous_user_thing(action=("do SOMETHING that Mario thinks you "
