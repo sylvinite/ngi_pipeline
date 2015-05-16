@@ -33,7 +33,7 @@ def find_projects_from_samples(sample_list):
             project_id = m.groups()[0]
             try:
                 # Ensure that we guessed right
-                charon_session.project_get_sample(project_id, sample_name)
+                charon_session.sample_get(project_id, sample_name)
             except CharonError as e:
                 LOG.debug('Project for sample "{}" appears to be "{}" but is not '
                           'present in Charon ({})'.format(sample_name, project_id, e))
