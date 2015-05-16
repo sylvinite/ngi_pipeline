@@ -32,7 +32,7 @@ def main(inbox=None, num_days=14, genotype_files=None, config=None, config_file_
                                  "or in configuration file ({}). Exiting.".format(config_file_path))
         inbox = os.path.abspath(inbox)
         # Convert to seconds
-        cutoff_age = time.time() - (num_days * 24 * 60 * 60)
+        cutoff_age = time.time() - (int(num_days) * 24 * 60 * 60)
         LOG.info("Searching for genotype files under {} modified after "
                  "{}".format(inbox, time.ctime(cutoff_age)))
         gt_files_valid = []
