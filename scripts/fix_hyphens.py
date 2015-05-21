@@ -2,22 +2,26 @@
 import glob
 import os
 import argparse
+import re
 
 def main(args):
 
-    project=os.path.basename(args.path)
-    for samplef in glob.glob(os.path.join(args.path,'*')):
-        sample=os.path.basename(samplef).split('_')[1]
-        for libf in glob.glob(os.path.join(samplef, '*')):
-            for runf in glob.glob(os.path.join(libf, '*')):
-                for file in glob.glob(os.path.join(runf, '{}-{}*'.format(project, sample))):
-                    print "working on"+file
-                    if os.path.islink(file):
-                        import pdb;pdb.set_trace()
-                        new_name="{}_{}{}".format(project,sample,os.path.basename(file).split(sample)[1])
-                        path=os.readlink(file);
-                        os.unlink(file)
-                        os.symlink(path, os.path.join(runf, new_name))
+    pattern=re.compile("(P[0-9]+)-([0-9]{3,4})")
+    for root, dirs, files in os.walk(args.path):
+        for dir in dirs :
+            matches=pattern.match(dir)
+            if matches:
+                replacement=dir.replace("{}-{}".format(matches.group(1), matches.group(2)), "{}_{}".format(matches.group(1),matches.group(2)))
+                print "replacing {} \nwith {}".format(os.path.join(root,dir), os.path.join(root,replacement))
+                os.rename(os.path.join(root,dir), os.path.join(root,replacement))
+        for file in files:
+            matches=pattern.match(file)
+            if matches:
+                replacement=file.replace("{}-{}".format(matches.group(1), matches.group(2)), "{}_{}".format(matches.group(1), matches.group(2)))
+                print "replacing {} \nwith {}".format(os.path.join(root,file), os.path.join(root,replacement))
+                os.rename(os.path.join(root,file), os.path.join(root,replacement))
+
+
 
 
 
