@@ -9,6 +9,38 @@ from ngi_pipeline.utils.communication import mail_analysis
 LOG = minimal_logger(__name__)
 
 
+def reset_charon_records(project_obj):
+    charon_session = CharonSession()
+    LOG.info("Resetting Charon record for project {}".format(project_obj))
+    charon_session.project_reset(projectid=project_obj.project_id)
+    LOG.info("Charon record for project {} reset".format(project_obj))
+    for sample_obj in project_obj:
+        LOG.info("Resetting Charon record for project/sample {}/{}".format(project_obj,
+                                                                           sample_obj))
+        charon_session.sample_reset(projectid=project_obj.project_id,
+                                    sampleid=sample_obj.sample_id)
+        LOG.info("Charon record for project/sample {}/{} reset".format(project_obj,
+                                                                       sample_obj))
+        for libprep_obj in sample_obj:
+            LOG.info("Resetting Charon record for project/sample"
+                     "libprep {}/{}/{}".format(project_obj, sample_obj, libprep_obj))
+            charon_session.libprep_reset(projectid=project_obj.project_id,
+                                         sampleid=sample_obj.sample_id,
+                                         libprepid=libprep_obj.libprep_id)
+            LOG.info("Charon record for project/sample/libprep {}/{}/{} "
+                     "reset".format(project_obj, sample_obj, libprep_obj))
+            for seqrun_obj in libprep_obj:
+                LOG.info("Resetting Charon record for project/sample/libprep/"
+                         "seqrun {}/{}/{}/{}".format(project_obj, sample_obj,
+                                                     libprep_obj, seqrun_obj))
+                charon_session.seqrun_reset(projectid=project_obj.project_id,
+                                            sampleid=sample_obj.sample_id,
+                                            libprepid=libprep_obj.libprep_id,
+                                            seqrunid=seqrun_obj.seqrun_id)
+                LOG.info("Charon record for project/sample/libprep/seqrun "
+                         "{}/{}/{}/{} reset".format(project_obj, sample_obj,
+                                                    libprep_obj, seqrun_obj))
+
 @with_ngi_config
 def recurse_status_for_sample(project_obj, status_field, status_value, update_done=False,
                               extra_args=None, config=None, config_file_path=None):
