@@ -136,6 +136,9 @@ if __name__ == "__main__":
             help=("Restrict deletion to these samples. Use flag multiple times "
                   "for multiple samples.\nNOTE: requires engine has implemented "
                   "individual sample removal functionality."))
+    delete_analysis.add_argument("-c", "--reset-charon", action="store_true",
+            help=("Reset status values in Charon when deleting analyses for "
+                  "a project/sample."))
 
     # Add subparser for analysis
     parser_analyze = subparsers.add_parser('analyze', help="Launch analysis.")
