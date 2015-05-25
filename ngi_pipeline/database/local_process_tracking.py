@@ -10,8 +10,7 @@ from ngi_pipeline.database.classes import CharonSession, CharonError
 from ngi_pipeline.database.communicate import get_project_id_from_name
 from ngi_pipeline.log.loggers import minimal_logger
 from ngi_pipeline.utils.classes import with_ngi_config
-from ngi_pipeline.utils.parsers import parse_qualimap_results, \
-                                       STHLM_UUSNP_SEQRUN_RE, \
+from ngi_pipeline.utils.parsers import STHLM_UUSNP_SEQRUN_RE, \
                                        STHLM_UUSNP_SAMPLE_RE
 
 LOG = minimal_logger(__name__)
