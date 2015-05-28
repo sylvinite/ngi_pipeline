@@ -6,24 +6,11 @@ import os
 import re
 import requests
 
+from ngi_pipeline.database.utils import load_charon_variables
 from ngi_pipeline.log.loggers import minimal_logger
-from ngi_pipeline.utils.classes import memoized
 from requests.exceptions import Timeout
 
 LOG = minimal_logger(__name__)
-
-
-try:
-    CHARON_API_TOKEN = os.environ['CHARON_API_TOKEN']
-    CHARON_BASE_URL = os.environ['CHARON_BASE_URL']
-    # Remove trailing slashes
-    m = re.match(r'(?P<url>.*\w+)/*', CHARON_BASE_URL)
-    if m:
-        CHARON_BASE_URL = m.groups()[0]
-except KeyError as e:
-    raise ValueError('Could not get required environmental variable '
-                     '"{}"; cannot connect to database.'.format(e))
-
 
 class Singleton(type):
     _instances = {}
@@ -37,12 +24,21 @@ class CharonSession(requests.Session):
     # Yeah that's right, I'm using __metaclass__
     # I even looked up how to do it on StackOverflow all by myself
     __metaclass__ = Singleton
-    def __init__(self):
+    def __init__(self, config=None, config_file_path=None):
         super(CharonSession, self).__init__()
 
-        self._api_token = CHARON_API_TOKEN
-        self._api_token_dict = {'X-Charon-API-token': self._api_token}
-        self._base_url = CHARON_BASE_URL
+        _charon_vars_dict = load_charon_variables(config=config,
+                                                  config_file_path=config_file_path)
+        try:
+            self._api_token = _charon_vars_dict['charon_api_token']
+            self._api_token_dict = {'X-Charon-API-token': self._api_token}
+            # Remove trailing slashes
+            m = re.match(r'(?P<url>.*\w+)/*', _charon_vars_dict['charon_base_url'])
+            if m:
+                _charon_vars_dict['charon_base_url'] = m.groups()[0]
+            self._base_url = _charon_vars_dict['charon_base_url']
+        except KeyError as e:
+            raise ValueError('Unable to load needed Charon variable: {}'.format(e.msg))
 
         self.get = validate_response(functools.partial(self.get,
                     headers=self._api_token_dict, timeout=3))
@@ -74,11 +70,15 @@ class CharonSession(requests.Session):
                                           set(['seqrunid', 'lane_sequencing_status',
                                                'total_reads']))
 
-    @memoized
     def construct_charon_url(self, *args):
         """Build a Charon URL, appending any *args passed."""
         return "{}/api/v1/{}".format(self._base_url,'/'.join([str(a) for a in args]))
 
+
+    def reset_base_url(self, charon_url):
+        LOG.info('Resetting Charon base URL from "{}" to "{}"'.format(self._base_url,
+                                                                      charon_url))
+        self._base_url = charon_url
 
     # Project
     def project_create(self, projectid, name=None, status=None,

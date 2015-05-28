@@ -7,9 +7,9 @@ import tempfile
 import unittest
 import filecmp
 
-from .filesystem import chdir, curdir_tmpdir, do_rsync, execute_command_line, \
-                        load_modules, safe_makedir, do_hardlink, do_symlink, \
-                        locate_flowcell, locate_project
+from ngi_pipeline.utils.filesystem import chdir, curdir_tmpdir, do_rsync, execute_command_line, \
+                                          load_modules, safe_makedir, do_hardlink, do_symlink, \
+                                          locate_flowcell, locate_project
 
 class TestFilesystemUtils(unittest.TestCase):
     def setUp(self):

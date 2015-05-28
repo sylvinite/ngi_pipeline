@@ -88,7 +88,7 @@ def update_charon_with_local_jobs_status(quiet=False, config=None, config_file_p
                         seqrun_status_field = "alignment_status"
                         set_status = "ANALYZED" # sample level
                     elif workflow == "genotype_concordance":
-                        status_field = "genotype_status"
+                        sample_status_field = seqrun_status_field = "genotype_status"
                         set_status = "DONE" # sample level
                     recurse_status = "DONE" # For the seqrun level
                     info_text = ('Workflow "{}" for {} finished succesfully. '
@@ -148,7 +148,7 @@ def update_charon_with_local_jobs_status(quiet=False, config=None, config_file_p
                         sample_status_field = "analysis_status"
                         seqrun_status_field = "alignment_status"
                     elif workflow == "genotype_concordance":
-                        status_field = "genotype_status"
+                        sample_status_field = seqrun_status_field = "genotype_status"
                     charon_session.sample_update(projectid=project_id,
                                                  sampleid=sample_id,
                                                  **{sample_status_field: set_status})
@@ -195,7 +195,7 @@ def update_charon_with_local_jobs_status(quiet=False, config=None, config_file_p
                             sample_status_field = "analysis_status"
                             seqrun_status_field = "alignment_status"
                         elif workflow == "genotype_concordance":
-                            status_field = "genotype_status"
+                            sample_status_field = seqrun_status_field = "genotype_status"
                         charon_session.sample_update(projectid=project_id,
                                                      sampleid=sample_id,
                                                      **{sample_status_field: set_status})
@@ -209,42 +209,40 @@ def update_charon_with_local_jobs_status(quiet=False, config=None, config_file_p
                     else: # Job still running
                         set_status = "UNDER_ANALYSIS"
                         if workflow == "merge_process_variantcall":
-                            status_field = "alignment_status"
+                            sample_status_field = "analysis_status"
+                            seqrun_status_field = "alignment_status"
                             recurse_status = "RUNNING"
                         elif workflow == "genotype_concordance":
-                            status_field = "genotype_status"
+                            sample_status_field = seqrun_status_field = "genotype_status"
                             recurse_status = "UNDER_ANALYSIS"
                         try:
                             charon_status = \
                                     charon_session.sample_get(projectid=project_id,
-                                                              sampleid=sample_id).get(status_field)
+                                                              sampleid=sample_id).get(sample_status_field)
                             if charon_status and not charon_status == set_status:
                                 LOG.warn('Tracking inconsistency for {}: Charon status '
                                          'for field "{}" is "{}" but local process tracking '
                                          'database indicates it is running. Setting value '
-                                         'in Charon to {}.'.format(label, status_field,
+                                         'in Charon to {}.'.format(label, sample_status_field,
                                                                    charon_status, set_status))
                                 charon_session.sample_update(projectid=project_id,
                                                              sampleid=sample_id,
-                                                             **{status_field: set_status})
+                                                             **{sample_status_field: set_status})
                                 recurse_status_for_sample(project_obj,
-                                                          status_field=status_field,
+                                                          status_field=seqrun_status_field,
                                                           status_value=recurse_status,
                                                           config=config)
                         except CharonError as e:
-                            error_text = ('Unable to update/verify Charon field '
-                                          '"{}" for {} as "{}": {}'.format(status_field,
-                                                                           label,
-                                                                           set_status,
-                                                                           e))
+                            error_text = ('Unable to update/verify Charon '
+                                          'for {}: {}'.format(label, e))
                             LOG.error(error_text)
                             if not config.get('quiet'):
                                 mail_analysis(project_name=project_name, sample_name=sample_id,
                                               engine_name=engine, level="ERROR",
                                               workflow=workflow, info_text=error_text)
             except CharonError as e:
-                error_text = ('Unable to update Charon field "{}" for {}: '
-                              '{}'.format(status_field, label, e))
+                error_text = ('Unable to update Charon for {}: '
+                              '{}'.format(label, e))
                 LOG.error(error_text)
                 if not config.get('quiet'):
                     mail_analysis(project_name=project_name, sample_name=sample_id,
@@ -368,23 +366,23 @@ def record_process_sample(project, sample, workflow_subtask, analysis_module_nam
                                                                        e.message))
         extra_args = None
         if workflow_subtask == "merge_process_variantcall":
+            sample_status_field = "analysis_status"
+            sample_status_value = "UNDER_ANALYSIS"
             seqrun_status_field = "alignment_status"
-            sample_status_field = "UNDER_ANALYSIS"
-            recurse_status = "RUNNING"
+            seqrun_status_value = "RUNNING"
             extra_args = {"mean_autosomal_coverage": 0}
         elif workflow_subtask == "genotype_concordance":
-            status_field = "genotype_status"
-            recurse_status = "UNDER_ANALYSIS"
+            sample_status_field = seqrun_status_field = "genotype_status"
+            sample_status_value = seqrun_status_value = "UNDER_ANALYSIS"
         else:
             raise ValueError('Charon field for workflow "{}" unknown; '
                              'cannot update Charon.'.format(workflow_subtask))
         try:
-            set_status = "UNDER_ANALYSIS"
             LOG.info('Updating Charon status for project/sample '
-                     '{}/{} to {}'.format(project, sample, set_status))
+                     '{}/{} key : {} value : {}'.format(project, sample, sample_status_field, sample_status_value))
             CharonSession().sample_update(projectid=project.project_id,
                                           sampleid=sample.name,
-                                          **{sample_status_field: set_status})
+                                          **{sample_status_field: sample_status_value})
             project_obj = create_project_obj_from_analysis_log(project.name,
                                                                project.project_id,
                                                                project.base_path,
@@ -392,12 +390,12 @@ def record_process_sample(project, sample, workflow_subtask, analysis_module_nam
                                                                workflow_subtask)
             recurse_status_for_sample(project_obj,
                                       status_field=seqrun_status_field,
-                                      status_value=recurse_status,
+                                      status_value=seqrun_status_value,
                                       extra_args=extra_args,
                                       config=config)
         except CharonError as e:
-            error_text = ('Could not update Charon status for {} for project/sample '
-                          '{}/{} due to error: {}'.format(status_field, project, sample, e))
+            error_text = ('Could not update Charon status for project/sample '
+                          '{}/{} due to error: {}'.format(project, sample, e))
 
             LOG.error(error_text)
             if not config.get('quiet'):
