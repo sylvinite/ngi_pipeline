@@ -145,7 +145,7 @@ def analyze(project, sample,
                             collect_files_for_sample_analysis(project,
                                                               sample,
                                                               restart_finished_jobs,
-                                                              "alignment_status")[0]
+                                                              status_field="alignment_status")[0]
                 setup_xml_cl, setup_xml_path = build_setup_xml(project=updated_project,
                                                                sample=sample,
                                                                workflow=workflow_subtask,
