@@ -9,7 +9,7 @@ from ngi_pipeline.utils.communication import mail_analysis
 LOG = minimal_logger(__name__)
 
 
-def reset_charon_records(project_obj):
+def reset_charon_records_by_object(project_obj):
     charon_session = CharonSession()
     LOG.info("Resetting Charon record for project {}".format(project_obj))
     charon_session.project_reset(projectid=project_obj.project_id)
@@ -40,6 +40,42 @@ def reset_charon_records(project_obj):
                 LOG.info("Charon record for project/sample/libprep/seqrun "
                          "{}/{}/{}/{} reset".format(project_obj, sample_obj,
                                                     libprep_obj, seqrun_obj))
+
+def reset_charon_records_by_name(project_id, samples=None):
+    charon_session = CharonSession()
+    LOG.info("Resetting Charon record for project {}".format(project_id))
+    charon_session.project_reset(projectid=project_id)
+    LOG.info("Charon record for project {} reset".format(project_id))
+    for sample in charon_session.project_get_samples(projectid=project_id).get('samples', []):
+        sample_id = sample['sampleid']
+        LOG.info("Resetting Charon record for project/sample {}/{}".format(project_id,
+                                                                           sample_id))
+        charon_session.sample_reset(projectid=project_id, sampleid=sample_id)
+        LOG.info("Charon record for project/sample {}/{} reset".format(project_id,
+                                                                       sample_id))
+        for libprep in charon_session.sample_get_libpreps(projectid=project_id,
+                                                          sampleid=sample_id).get('libpreps', []):
+            libprep_id = libprep['libprepid']
+            LOG.info("Resetting Charon record for project/sample"
+                     "libprep {}/{}/{}".format(project_id, sample_id, libprep_id))
+            charon_session.libprep_reset(projectid=project_id, sampleid=sample_id,
+                                         libprepid=libprep_id)
+            LOG.info("Charon record for project/sample/libprep {}/{}/{} "
+                     "reset".format(project_id, sample_id, libprep_id))
+            for seqrun in charon_session.libprep_get_seqruns(projectid=project_id,
+                                                             sampleid=sample_id,
+                                                             libprepid=libprep_id,
+                                                             seqrunid=seqrun_id).get('seqruns', []):
+                seqrun_id = seqrun['seqrunid']
+                LOG.info("Resetting Charon record for project/sample/libprep/"
+                         "seqrun {}/{}/{}/{}".format(project_id, sample_id,
+                                                     libprep_id, seqrun_id))
+                charon_session.seqrun_reset(projectid=project_id, sampleid=sample_id,
+                                            libprepid=libprep_id, seqrunid=seqrun_id)
+                LOG.info("Charon record for project/sample/libprep/seqrun "
+                         "{}/{}/{}/{} reset".format(project_id, sample_id,
+                                                    libprep_id, seqrun_id))
+
 
 @with_ngi_config
 def recurse_status_for_sample(project_obj, status_field, status_value, update_done=False,
