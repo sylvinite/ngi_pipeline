@@ -38,7 +38,7 @@ class CharonSession(requests.Session):
                 _charon_vars_dict['charon_base_url'] = m.groups()[0]
             self._base_url = _charon_vars_dict['charon_base_url']
         except KeyError as e:
-            raise ValueError('Unable to load needed Charon variable: {}'.format(e.msg))
+            raise ValueError('Unable to load needed Charon variable: {}'.format(e))
 
         self.get = validate_response(functools.partial(self.get,
                     headers=self._api_token_dict, timeout=3))
