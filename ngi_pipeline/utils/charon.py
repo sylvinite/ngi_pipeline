@@ -17,29 +17,46 @@ def reset_charon_records_by_object(project_obj):
     for sample_obj in project_obj:
         LOG.info("Resetting Charon record for project/sample {}/{}".format(project_obj,
                                                                            sample_obj))
-        charon_session.sample_reset(projectid=project_obj.project_id,
-                                    sampleid=sample_obj.sample_id)
-        LOG.info("Charon record for project/sample {}/{} reset".format(project_obj,
-                                                                       sample_obj))
+        try:
+            charon_session.sample_reset(projectid=project_obj.project_id,
+                                        sampleid=sample_obj.name)
+            LOG.info("Charon record for project/sample {}/{} reset".format(project_obj,
+                                                                           sample_obj))
+        except CharonError as e:
+            LOG.error("Unable to reset Charon record for project/sample {}/{}: "
+                      "{}".format(project_obj, sample_obj, e))
         for libprep_obj in sample_obj:
             LOG.info("Resetting Charon record for project/sample"
                      "libprep {}/{}/{}".format(project_obj, sample_obj, libprep_obj))
-            charon_session.libprep_reset(projectid=project_obj.project_id,
-                                         sampleid=sample_obj.sample_id,
-                                         libprepid=libprep_obj.libprep_id)
-            LOG.info("Charon record for project/sample/libprep {}/{}/{} "
-                     "reset".format(project_obj, sample_obj, libprep_obj))
+            try:
+                charon_session.libprep_reset(projectid=project_obj.project_id,
+                                             sampleid=sample_obj.name,
+                                             libprepid=libprep_obj.name)
+                LOG.info("Charon record for project/sample/libprep {}/{}/{} "
+                         "reset".format(project_obj, sample_obj, libprep_obj))
+            except CharonError as e:
+                LOG.error("Unable to reset Charon record for project/sample/libprep "
+                          "{}/{}/{}: {}".format(project_obj, sample_obj,
+                                                libprep_obj, e))
             for seqrun_obj in libprep_obj:
                 LOG.info("Resetting Charon record for project/sample/libprep/"
                          "seqrun {}/{}/{}/{}".format(project_obj, sample_obj,
                                                      libprep_obj, seqrun_obj))
-                charon_session.seqrun_reset(projectid=project_obj.project_id,
-                                            sampleid=sample_obj.sample_id,
-                                            libprepid=libprep_obj.libprep_id,
-                                            seqrunid=seqrun_obj.seqrun_id)
-                LOG.info("Charon record for project/sample/libprep/seqrun "
-                         "{}/{}/{}/{} reset".format(project_obj, sample_obj,
-                                                    libprep_obj, seqrun_obj))
+                try:
+                    charon_session.seqrun_reset(projectid=project_obj.project_id,
+                                                sampleid=sample_obj.name,
+                                                libprepid=libprep_obj.name,
+                                                seqrunid=seqrun_obj.name)
+                    LOG.info("Charon record for project/sample/libprep/seqrun "
+                             "{}/{}/{}/{} reset".format(project_obj, sample_obj,
+                                                        libprep_obj, seqrun_obj))
+                except CharonError as e:
+                    LOG.error("Unable to reset Charon record for project/sample/"
+                              "libprep/seqrun {}/{}/{}/{}: {}".format(project_obj,
+                                                                      sample_obj,
+                                                                      libprep_obj,
+                                                                      seqrun_obj,
+                                                                      e))
 
 def reset_charon_records_by_name(project_id, restrict_to_samples=None,
                                  restrict_to_libpreps=None, restrict_to_seqruns=None):
@@ -77,8 +94,7 @@ def reset_charon_records_by_name(project_id, restrict_to_samples=None,
                      "reset".format(project_id, sample_id, libprep_id))
             for seqrun in charon_session.libprep_get_seqruns(projectid=project_id,
                                                              sampleid=sample_id,
-                                                             libprepid=libprep_id,
-                                                             seqrunid=seqrun_id).get('seqruns', []):
+                                                             libprepid=libprep_id).get('seqruns', []):
                 seqrun_id = seqrun['seqrunid']
                 if restrict_to_seqruns and seqrun_id not in restrict_to_seqruns:
                     LOG.info("Skipping project/sample/libprep/seqrun {}/{}/{}/{}: "
