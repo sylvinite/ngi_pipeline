@@ -51,16 +51,24 @@ class CharonSession(requests.Session):
 
         self._project_params = ('projectid', 'name', 'status', 'best_practice_analysis',
                                 'sequencing_facility', 'delivery_status')
+        self._project_reset_params = tuple(set(self._project_params) - \
+                                           set(['projectid', 'name',
+                                                'best_practice_analysis',
+                                                'sequencing_facility']))
         self._sample_params = ('sampleid', 'analysis_status', 'qc_status',
                                'genotype_status', 'genotype_concordance',
                                'total_autosomal_coverage', 'total_sequenced_reads',
                                'delivery_status')
+        self._sample_reset_params = tuple(set(self._sample_params) - \
+                                          set(['sampleid', 'total_sequenced_reads']))
         self._libprep_params = ('libprepid', 'qc')
+        self._libprep_reset_params = tuple()
         self._seqrun_params = ('seqrunid', 'lane_sequencing_status',
-                               'alignment_status', 'genotype_status', 'runid',
+                               'alignment_status', 'genotype_status',
                                'total_reads', 'mean_autosomal_coverage')
         self._seqrun_reset_params = tuple(set(self._seqrun_params) - \
-                                          set(['lane_sequencing_status', 'total_reads']))
+                                          set(['seqrunid', 'lane_sequencing_status',
+                                               'total_reads']))
 
     def construct_charon_url(self, *args):
         """Build a Charon URL, appending any *args passed."""
@@ -97,6 +105,11 @@ class CharonSession(requests.Session):
     def projects_get_all(self):
         return self.get(self.construct_charon_url('projects')).json()
 
+    def project_reset(self, projectid):
+        url = self.construct_charon_url("project", projectid)
+        data = { k: None for k in self._project_reset_params}
+        return self.put(url, json.dumps(data)).text
+
     def project_delete(self, projectid):
         return self.delete(self.construct_charon_url('project', projectid)).text
 
@@ -129,6 +142,11 @@ class CharonSession(requests.Session):
         data = { k: l_dict.get(k) for k in self._sample_params if l_dict.get(k)}
         return self.put(url, json.dumps(data)).text
 
+    def sample_reset(self, projectid, sampleid):
+        url = self.construct_charon_url("sample", projectid, sampleid)
+        data = { k: None for k in self._sample_reset_params}
+        return self.put(url, json.dumps(data)).text
+
     def sample_delete(self, projectid, sampleid):
         return self.delete(self.construct_charon_url("sample", projectid, sampleid))
 
@@ -146,11 +164,15 @@ class CharonSession(requests.Session):
     def libprep_get_seqruns(self, projectid, sampleid, libprepid):
         return self.get(self.construct_charon_url('seqruns', projectid, sampleid, libprepid)).json()
 
-
     def libprep_update(self, projectid, sampleid, libprepid, qc=None):
         url = self.construct_charon_url("libprep", projectid, sampleid, libprepid)
         l_dict = locals()
         data = { k: l_dict.get(k) for k in self._libprep_params if l_dict.get(k)}
+        return self.put(url, json.dumps(data)).text
+
+    def libprep_reset(self, projectid, sampleid, libprepid):
+        url = self.construct_charon_url("libprep", projectid, sampleid, libprepid)
+        data = { k: None for k in self._libprep_reset_params}
         return self.put(url, json.dumps(data)).text
 
     def libprep_delete(self, projectid, sampleid, libprepid):
@@ -190,7 +212,6 @@ class CharonSession(requests.Session):
         return self.delete(self.construct_charon_url("seqrun", projectid, sampleid, libprepid, seqrunid))
 
 
-## TODO create different CharonError subclasses for different codes (e.g. 400, 404)
 class CharonError(Exception):
     def __init__(self, message, status_code=None, *args, **kwargs):
         self.status_code = status_code
