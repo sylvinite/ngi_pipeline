@@ -145,7 +145,7 @@ def analyze(project, sample,
                             collect_files_for_sample_analysis(project,
                                                               sample,
                                                               restart_finished_jobs,
-                                                              "alignment_status")[0]
+                                                              status_field="alignment_status")[0]
                 setup_xml_cl, setup_xml_path = build_setup_xml(project=updated_project,
                                                                sample=sample,
                                                                workflow=workflow_subtask,
@@ -361,7 +361,7 @@ def sbatch_piper_sample(command_line_list, workflow_name, project, sample,
     if files_to_copy:
         sbatch_text_list.append("echo -ne '\\n\\nCopying pre-existing analysis files at '")
         sbatch_text_list.append("date")
-        sbatch_text_list.append(("rsync -rptoDLv {input_files}"
+        sbatch_text_list.append(("rsync -rptoDLv {input_files} "
                                  "{output_directory}/").format(input_files=" ".join(files_to_copy),
                                                                output_directory=scratch_analysis_dir))
         # Delete pre-existing analysis files after copy

@@ -14,13 +14,14 @@ from ngi_pipeline.engines.piper_ngi.database import SampleAnalysis, get_db_sessi
 from ngi_pipeline.engines.piper_ngi.utils import create_exit_code_file_path, \
                                                  create_project_obj_from_analysis_log, \
                                                  get_finished_seqruns_for_sample
-from ngi_pipeline.engines.piper_ngi.results_parsers import parse_genotype_concordance, \
-                                                           parse_mean_coverage_from_qualimap
+from ngi_pipeline.engines.piper_ngi.parsers import parse_genotype_concordance, \
+                                                   parse_mean_coverage_from_qualimap
 from ngi_pipeline.utils.slurm import get_slurm_job_status, \
                                      kill_slurm_job_by_id
 from ngi_pipeline.utils.parsers import STHLM_UUSNP_SEQRUN_RE, \
                                        STHLM_UUSNP_SAMPLE_RE
 from sqlalchemy.exc import IntegrityError, OperationalError
+from ngi_pipeline.utils.charon import recurse_status_for_sample
 from ngi_pipeline.utils.classes import with_ngi_config
 
 
@@ -257,45 +258,6 @@ def update_charon_with_local_jobs_status(quiet=False, config=None, config_file_p
                                   workflow=workflow, info_text=error_text)
         session.commit()
 
-
-
-@with_ngi_config
-def recurse_status_for_sample(project_obj, status_field, status_value, update_done=False,
-                              extra_args=None, config=None, config_file_path=None):
-    """Set seqruns under sample to have status for field <status_field> to <status_value>
-    """
-
-    if not extra_args:
-        extra_args = {}
-    extra_args.update({status_field: status_value})
-    charon_session = CharonSession()
-    project_id = project_obj.project_id
-    for sample_obj in project_obj:
-        # There's only one sample but this is an iterator so we pretend to loop
-        sample_id = sample_obj.name
-        for libprep_obj in sample_obj:
-            libprep_id = libprep_obj.name
-            for seqrun_obj in libprep_obj:
-                seqrun_id = seqrun_obj.name
-                label = "{}/{}/{}/{}".format(project_id, sample_id, libprep_id, seqrun_id)
-                LOG.info('Updating status for field "{}" of project/sample/libprep/seqrun '
-                         '"{}" to "{}" in Charon '.format(status_field, label, status_value))
-                try:
-                    charon_session.seqrun_update(projectid=project_id,
-                                                 sampleid=sample_id,
-                                                 libprepid=libprep_id,
-                                                 seqrunid=seqrun_id,
-                                                 **extra_args)
-                except CharonError as e:
-                    error_text = ('Could not update {} for project/sample/libprep/seqrun '
-                                  '"{}" in Charon to "{}": {}'.format(status_field,
-                                                                      label,
-                                                                      status_value,
-                                                                      e))
-                    LOG.error(error_text)
-                    if not config.get('quiet'):
-                        mail_analysis(project_name=project_id, sample_name=sample_obj.name,
-                                      level="ERROR", info_text=error_text, workflow=status_field)
 
 
 @with_ngi_config

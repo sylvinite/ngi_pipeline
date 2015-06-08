@@ -18,11 +18,14 @@ from ngi_pipeline.conductor import flowcell
 from ngi_pipeline.conductor import launchers
 from ngi_pipeline.conductor.flowcell import organize_projects_from_flowcell, \
                                             setup_analysis_directory_structure
+from ngi_pipeline.database.classes import CharonError
 from ngi_pipeline.database.filesystem import create_charon_entries_from_project
 from ngi_pipeline.engines import qc_ngi
 from ngi_pipeline.log.loggers import minimal_logger
 from ngi_pipeline.server import main as server_main
-from ngi_pipeline.utils.charon import find_projects_from_samples
+from ngi_pipeline.utils.charon import find_projects_from_samples, \
+                                      reset_charon_records_by_object, \
+                                      reset_charon_records_by_name
 from ngi_pipeline.utils.filesystem import locate_project, recreate_project_from_filesystem
 from ngi_pipeline.utils.parsers import parse_samples_from_vcf
 
@@ -138,6 +141,9 @@ if __name__ == "__main__":
             help=("Restrict deletion to these samples. Use flag multiple times "
                   "for multiple samples.\nNOTE: requires engine has implemented "
                   "individual sample removal functionality."))
+    delete_analysis.add_argument("-c", "--reset-charon", action="store_true",
+            help=("Reset status values in Charon when deleting analyses for "
+                  "a project/sample."))
 
     # Add subparser for analysis
     parser_analyze = subparsers.add_parser('analyze', help="Launch analysis.")
@@ -345,7 +351,7 @@ if __name__ == "__main__":
                     continue
                 if validate_dangerous_user_thing( \
                         action=('delete the following sample analyses for engine "{}": '
-                                 '{}'.format(args.engine,
+                                 '{}'.format(analysis_module.__name__,
                                              ", ".join(
                                                  [s.name for s in project_obj.samples.values()])))):
                     try:
@@ -357,12 +363,18 @@ if __name__ == "__main__":
                                   'Skipping project analysis deletion for project '
                                   '"{}"'.format(analysis_module.__name__, project_obj))
                         continue
+                    try:
+                        reset_charon_records_by_object(project_obj)
+                    except CharonError as e:
+                        LOG.error("Error when resetting Charon records for project "
+                                  "{}: {}".format(project_obj, e))
             else:
                 try:
                     delete_tree_path = locate_project(delete_proj_analysis, subdir="ANALYSIS")
                 except ValueError as e:
                     LOG.error(e)
                     continue
+                delete_symlink_path = None
                 for item in glob.glob(os.path.join(os.path.split(delete_tree_path)[0], "*")):
                     if os.path.islink(item):
                         if os.path.realpath(item) == delete_tree_path:
@@ -376,7 +388,9 @@ if __name__ == "__main__":
                     if delete_symlink_path:
                         delete_symlink_path = os.path.join(delete_symlink_path, args.engine)
                 if validate_dangerous_user_thing(action=('delete ALL ANALYSIS files '
-                                                         'under {}'.format(delete_tree_path))):
+                                                         'under {} and RESET ALL '
+                                                         'CHARON RECORDS for this '
+                                                         'project'.format(delete_tree_path))):
                     try:
                         LOG.info("Deleting {}...".format(delete_tree_path))
                         shutil.rmtree(delete_tree_path)
@@ -390,6 +404,12 @@ if __name__ == "__main__":
                             LOG.info("Removed symlink {}".format(delete_symlink_path))
                         except OSError as e:
                             LOG.error("Error when unlinking {}: {}".format(delete_symlink_path, e))
+                    try:
+                        reset_charon_records_by_name(delete_proj_analysis)
+                    except CharonError as e:
+                        LOG.error("Error when resetting Charon records for project "
+                                  "{}: {}".format(delete_proj_analysis, e))
+
 
     ## QC Flowcell
     elif 'qc_flowcell_dirs' in args:

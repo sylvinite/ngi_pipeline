@@ -1,7 +1,7 @@
 import unittest
 import tempfile
 import os
-from command_creation_config import build_piper_cl, build_setup_xml
+from ngi_pipeline.engines.piper_ngi.command_creation_config import build_piper_cl, build_setup_xml
 from ngi_pipeline.conductor.classes import NGIProject
 from ngi_pipeline.utils.config import load_yaml_config, locate_ngi_config
 
@@ -65,6 +65,4 @@ class TestCommandCreation(unittest.TestCase):
         assert '--output_directory' in tcl
         assert tcl[tcl.index('--output_directory')+1] == \
                 os.path.join('$SNIC_TMP', 'ANALYSIS', self.proj_name, 'piper_ngi')
-        assert '--merge_alignments' in tcl
-        assert '--data_processing' in tcl
         assert '--variant_calling' in tcl
