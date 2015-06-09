@@ -355,7 +355,7 @@ def recreate_project_from_filesystem(project_dir,
                 LOG.info('Setting up seqrun "{}"'.format(seqrun_name))
                 seqrun_obj = libprep_obj.add_seqrun(name=seqrun_name,
                                                     dirname=seqrun_name)
-                for fq_file in fastq_files_under_dir(seqrun_dir):
+                for fq_file in fastq_files_under_dir(seqrun_dir, realpath=False):
                     fq_name = os.path.basename(fq_file)
                     LOG.info('Adding fastq file "{}" to seqrun "{}"'.format(fq_name, seqrun_obj))
                     seqrun_obj.add_fastq_files([fq_name])
