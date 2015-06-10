@@ -176,7 +176,7 @@ def find_previous_sample_analyses(project_obj, include_genotype_files=False):
         sample_files.extend(glob.glob(os.path.join(project_dir_pattern,
                                                    ".{}*.done".format(piper_sample_name))))
         sample_files.extend(glob.glob(os.path.join(project_dir_pattern,
-                                                   ".{}*.failed".format(piper_sample_name))))
+                                                   ".{}*.fail".format(piper_sample_name))))
     # Include genotype files?
     if not include_genotype_files:
         sample_files = filter(lambda x: not fnmatch.fnmatch(x, "*genotype_concordance*"),
