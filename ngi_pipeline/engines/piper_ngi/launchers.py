@@ -270,7 +270,7 @@ def collect_files_for_sample_analysis(project_obj, sample_obj,
     ### EXISTING DATA
     # If we still have data here at this point, we'll copy it over. If we had
     # decided to scrap it, it would have been deleted already.
-    files_to_copy = find_previous_sample_analyses(proj_obj)
+    files_to_copy = find_previous_sample_analyses(proj_obj, sample_obj)
 
     return (proj_obj, files_to_copy)
 
