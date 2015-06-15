@@ -163,6 +163,6 @@ def workflow_genotype_concordance(qscripts_dir_path, setup_xml_path,
     if output_dir:
         cl_string += " --output_directory {output_dir}"
     cl_string += " --alignment_and_qc"
-    cl_string += " --retry_failed 1"
+    cl_string += " --retry_failed 2"
     cl_string += " --genotypes {}".format(genotype_file)
     return cl_string.format(**locals())
