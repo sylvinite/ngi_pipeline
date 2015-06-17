@@ -8,7 +8,10 @@ analysis:
             analysis_engine: ngi_pipeline.engines.piper_ngi
         qc:
             analysis_engine: ngi_pipeline.engines.qc_ngi
-    top_dir: /proj/a2014205/nobackup/NGI/analysis_ready
+    top_dir: nobackup/denis/topdir
+    sthlm_root: 2014205
+    upps_root: 2015001
+    base_root: /proj
 
 
 database:
