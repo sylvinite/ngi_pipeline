@@ -170,15 +170,15 @@ def find_previous_sample_analyses(project_obj, sample_obj=None, include_genotype
         if sample_obj and sample.name != sample_obj.name:
             continue
         sample_files = glob.glob(os.path.join(project_dir_pattern,
-                                              "{}\.*".format(sample.name)))
+                                              "{}.*".format(sample.name)))
         # P123_456 is renamed by Piper to P123-456? Sometimes? Always?
-        piper_sample_name = sample.name.replace("_", "-", 1)
+        piper_sample_name = sample.name.replace("_", "?", 1)
         sample_files.extend(glob.glob(os.path.join(project_dir_pattern,
-                                                   "{}\.*".format(piper_sample_name))))
+                                                   "{}.*".format(piper_sample_name))))
         sample_files.extend(glob.glob(os.path.join(project_dir_pattern,
-                                                   ".{}\.*.done".format(piper_sample_name))))
+                                                   ".{}.*.done".format(piper_sample_name))))
         sample_files.extend(glob.glob(os.path.join(project_dir_pattern,
-                                                   ".{}\.*.fail".format(piper_sample_name))))
+                                                   ".{}.*.fail".format(piper_sample_name))))
     # Include genotype files?
     if not include_genotype_files:
         sample_files = filter(lambda x: not fnmatch.fnmatch(x, "*genotype_concordance*"),
