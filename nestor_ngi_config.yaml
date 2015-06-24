@@ -22,7 +22,9 @@ environment:
     project_id: a2014205
     conda_env: ngi
     ngi_scripts_dir: /proj/a2014205/software/ngi_pipeline/scripts
-    flowcell_inbox: /proj/a2014205/archive
+    flowcell_inbox: 
+            - /proj/a2014205/archive
+            - /proj/a2015179/archive
 
 
 #genotyping:
