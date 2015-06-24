@@ -41,33 +41,34 @@ def main(inbox=None, num_days=14, genotype_files=None, config=None, config_file_
                 if os.stat(gt_file).st_mtime > time.time() - cutoff_age:
                     gt_files_valid.append(os.path.abspath(gt_file))
 
-        if not gt_files_valid:
-            LOG.info("No genotype files found under {} newer than "
-                     "{}".format(inbox, time.ctime(cutoff_age)))
-    charon_session = CharonSession()
-    for gt_file_path in gt_files_valid:
-        project_samples_dict = \
-                find_projects_from_samples(parse_samples_from_vcf(gt_file_path))
-        for project_id, samples in project_samples_dict.iteritems():
-            LOG.info("Updating project {}...".format(project_id))
-            for sample in samples:
-                try:
-                    genotype_status = \
-                        charon_session.sample_get(projectid=project_id,
-                                                  sampleid=sample).get("genotype_status")
-                    if genotype_status in (None, "NOT_AVAILABLE"):
-                        LOG.info('Updating sample {} genotype_status '
-                                 'to "AVAILABLE"...'.format(sample))
-                        charon_session.sample_update(projectid=project_id,
-                                                     sampleid=sample,
-                                                     genotype_status="AVAILABLE")
-                    else:
-                        LOG.info('Not updating sample {} genotype_status '
-                                 '(already "{}")'.format(sample, genotype_status))
-                except CharonError as e:
-                    LOG.error('Could not update genotype status to "AVAILABLE" '
-                              'for project/sample "{}/{}": {}'.format(project_id,
-                                                                      sample,
+    if not gt_files_valid:
+        LOG.info("No genotype files found under {} newer than "
+                 "{}".format(inbox, time.ctime(cutoff_age)))
+    else:
+        charon_session = CharonSession()
+        for gt_file_path in gt_files_valid:
+            project_samples_dict = \
+                    find_projects_from_samples(parse_samples_from_vcf(gt_file_path))
+            for project_id, samples in project_samples_dict.iteritems():
+                LOG.info("Updating project {}...".format(project_id))
+                for sample in samples:
+                    try:
+                        genotype_status = \
+                            charon_session.sample_get(projectid=project_id,
+                                                      sampleid=sample).get("genotype_status")
+                        if genotype_status in (None, "NOT_AVAILABLE"):
+                            LOG.info('Updating sample {} genotype_status '
+                                     'to "AVAILABLE"...'.format(sample))
+                            charon_session.sample_update(projectid=project_id,
+                                                         sampleid=sample,
+                                                         genotype_status="AVAILABLE")
+                        else:
+                            LOG.info('Not updating sample {} genotype_status '
+                                     '(already "{}")'.format(sample, genotype_status))
+                    except CharonError as e:
+                        LOG.error('Could not update genotype status to "AVAILABLE" '
+                                  'for project/sample "{}/{}": {}'.format(project_id,
+                                                                          sample,
                                                                           e))
 
 if __name__=="__main__":
