@@ -103,7 +103,9 @@ def locate_project(project, subdir="DATA", resolve_symlinks=True,
         return os.path.abspath(project)
     else:
         try:
-            project_data_dir = os.path.join(config["analysis"]["top_dir"], subdir)
+            project_data_dir=os.path.join(config["analysis"]["base_root"], config["analysis"]["sthlm_root"], config["analysis"]["top_dir"], subdir)
+            if not os.path.exists(project_data_dir):
+                project_data_dir=os.path.join(config["analysis"]["base_root"], config["analysis"]["upps_root"], config["analysis"]["top_dir"], subdir)
         except (KeyError, TypeError) as e:
             raise ValueError('Path to project data directory not available in '
                              'config file (analysis.top_dir) and project '
