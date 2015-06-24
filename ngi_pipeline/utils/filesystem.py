@@ -70,19 +70,20 @@ def locate_flowcell(flowcell, config=None, config_file_path=None):
         return os.path.abspath(flowcell)
     else:
         try:
-            flowcell_inbox_dir = config["environment"]["flowcell_inbox"]
+            flowcell_inbox_dirs = config["environment"]["flowcell_inbox"]
         except (KeyError, TypeError) as e:
             raise ValueError('Path to incoming flowcell directory not available in '
                              'config file (environment.flowcell_inbox) and flowcell '
                              'is not an absolute path ({}).'.format(flowcell))
         else:
-            flowcell_dir = os.path.join(flowcell_inbox_dir, flowcell)
-        if not os.path.exists(flowcell_dir):
+            for flowcell_inbox_dir in flowcell_inbox_dirs:
+                flowcell_dir = os.path.join(flowcell_inbox_dir, flowcell)
+                if os.path.exists(flowcell_dir):
+                    return flowcell_dir
+
             raise ValueError('Flowcell directory passed as flowcell name (not full '
                              'path) and does not exist under incoming flowcell dir '
                              'as specified in configuration file (at {}).'.format(flowcell_dir))
-        else:
-            return flowcell_dir
 
 
 @with_ngi_config

@@ -26,19 +26,20 @@ def main(inbox=None, num_days=14, genotype_files=None, config=None, config_file_
     else:
         if not inbox:
             try:
-                inbox = config["environment"]["flowcell_inbox"]
+                inboxes = config["environment"]["flowcell_inbox"]
             except (KeyError, TypeError):
                 raise ValueError("No path to delivery inbox specified by argument "
                                  "or in configuration file ({}). Exiting.".format(config_file_path))
-        inbox = os.path.abspath(inbox)
-        # Convert to seconds
-        cutoff_age = time.time() - (int(num_days) * 24 * 60 * 60)
-        LOG.info("Searching for genotype files under {} modified after "
-                 "{}".format(inbox, time.ctime(cutoff_age)))
-        gt_files_valid = []
-        for gt_file in filter(GENOTYPE_FILE_RE.match, glob.glob(os.path.join(inbox, "*"))):
-            if os.stat(gt_file).st_mtime > time.time() - cutoff_age:
-                gt_files_valid.append(os.path.abspath(gt_file))
+        for inbox in inboxes:
+            inbox = os.path.abspath(inbox)
+            # Convert to seconds
+            cutoff_age = time.time() - (int(num_days) * 24 * 60 * 60)
+            LOG.info("Searching for genotype files under {} modified after "
+                     "{}".format(inbox, time.ctime(cutoff_age)))
+            gt_files_valid = []
+            for gt_file in filter(GENOTYPE_FILE_RE.match, glob.glob(os.path.join(inbox, "*"))):
+                if os.stat(gt_file).st_mtime > time.time() - cutoff_age:
+                    gt_files_valid.append(os.path.abspath(gt_file))
 
     if not gt_files_valid:
         LOG.info("No genotype files found under {} newer than "
