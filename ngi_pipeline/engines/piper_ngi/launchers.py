@@ -135,17 +135,17 @@ def analyze(project, sample,
 
                 # Update the project to keep only valid fastq files for setup.xml creation
                 if level == "genotype":
-                    updated_project = \
+                    updated_project, default_files_to_copy = \
                             collect_files_for_sample_analysis(project,
                                                               sample,
                                                               restart_finished_jobs=True,
-                                                              status_field="genotype_status")[0]
+                                                              status_field="genotype_status")
                 else:
-                    updated_project = \
+                    updated_project, default_files_to_copy = \
                             collect_files_for_sample_analysis(project,
                                                               sample,
                                                               restart_finished_jobs,
-                                                              status_field="alignment_status")[0]
+                                                              status_field="alignment_status")
                 setup_xml_cl, setup_xml_path = build_setup_xml(project=updated_project,
                                                                sample=sample,
                                                                workflow=workflow_subtask,
@@ -162,7 +162,8 @@ def analyze(project, sample,
                     slurm_job_id = sbatch_piper_sample([setup_xml_cl, piper_cl],
                                                        workflow_subtask,
                                                        project, sample,
-                                                       restart_finished_jobs=restart_finished_jobs)
+                                                       restart_finished_jobs=restart_finished_jobs,
+                                                       files_to_copy=default_files_to_copy)
                     for x in xrange(10):
                         # Time delay to let sbatch get its act together
                         # (takes a few seconds to be visible with sacct)
@@ -276,7 +277,7 @@ def collect_files_for_sample_analysis(project_obj, sample_obj,
 
 @with_ngi_config
 def sbatch_piper_sample(command_line_list, workflow_name, project, sample,
-                        libprep=None, restart_finished_jobs=False,
+                        libprep=None, restart_finished_jobs=False, files_to_copy=None
                         config=None, config_file_path=None):
     """sbatch a piper sample-level workflow.
 
@@ -323,7 +324,8 @@ def sbatch_piper_sample(command_line_list, workflow_name, project, sample,
         for module_name in modules_to_load:
             sbatch_text_list.append("module load {}".format(module_name))
 
-    project, files_to_copy = \
+    if not files_to_copy:
+        project, files_to_copy = \
             collect_files_for_sample_analysis(project, sample, restart_finished_jobs)
 
     # Fastq files to copy
