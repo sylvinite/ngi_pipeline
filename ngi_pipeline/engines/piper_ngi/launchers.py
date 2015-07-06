@@ -277,7 +277,7 @@ def collect_files_for_sample_analysis(project_obj, sample_obj,
 
 @with_ngi_config
 def sbatch_piper_sample(command_line_list, workflow_name, project, sample,
-                        libprep=None, restart_finished_jobs=False, files_to_copy=None
+                        libprep=None, restart_finished_jobs=False, files_to_copy=None,
                         config=None, config_file_path=None):
     """sbatch a piper sample-level workflow.
 
