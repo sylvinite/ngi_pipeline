@@ -304,8 +304,8 @@ def get_valid_seqruns_for_sample(project_id, sample_id,
                 if aln_status != "DONE" or include_done_seqruns:
                     libpreps[libprep_id].append(seqrun_id)
                 else:
-                    LOG.info('Skipping seqrun "{}" due to alignment_status '
-                             '"{}"'.format(seqrun_id, aln_status))
+                    LOG.info('Skipping seqrun "{}" due to {}'
+                             '"{}"'.format(seqrun_id,status_field, aln_status))
         else:
             LOG.info('Skipping libprep "{}" due to qc status '
                      '"{}"'.format(libprep, libprep.get("qc")))
