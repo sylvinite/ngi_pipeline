@@ -79,7 +79,7 @@ def launch_analysis(projects_to_analyze, restart_failed_jobs=False,
             # Launch actual best-practice analysis
             try:
                 charon_reported_status = charon_session.sample_get(project.project_id,
-                                                                   sample)['analysis_status']
+                                                                   sample).get('analysis_status')
                 # Check Charon to ensure this hasn't already been processed
                 if charon_reported_status == "UNDER_ANALYSIS":
                     if not restart_running_jobs:
