@@ -132,7 +132,7 @@ def analyze(project, sample,
                         remove_previous_sample_analyses(project)
                 elif level == "genotype":
                     if not keep_existing_data:
-                        remove_previous_sample_analyses(project)
+                        remove_previous_genotype_analyses(project)
 
                 # Update the project to keep only valid fastq files for setup.xml creation
                 if level == "genotype":
