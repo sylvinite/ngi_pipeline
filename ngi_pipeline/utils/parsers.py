@@ -65,8 +65,6 @@ def determine_library_prep_from_fcid(project_id, sample_name, fcid):
                             ##     this just picks the first one it encounters; instead,
                             ##     it should raise an Exception. Requires restructuring.
                             return libprep['libprepid']
-                else:
-                    raise CharonError("No seqruns found!", 404)
             else:
                 raise CharonError("No match", 404)
         else:
