@@ -130,9 +130,11 @@ def analyze(project, sample,
                 if level == "sample":
                     if not keep_existing_data:
                         remove_previous_sample_analyses(project)
+                        default_files_to_copy=None
                 elif level == "genotype":
                     if not keep_existing_data:
                         remove_previous_genotype_analyses(project)
+                        default_files_to_copy=None
 
                 # Update the project to keep only valid fastq files for setup.xml creation
                 if level == "genotype":
@@ -332,22 +334,21 @@ def sbatch_piper_sample(command_line_list, workflow_name, project, sample,
     # Fastq files to copy
     fastq_src_dst_list = []
     directories_to_create = set()
-    for sample in project:
-        for libprep in sample:
-            for seqrun in libprep:
-                project_specific_path = os.path.join(project.dirname,
+    for libprep in sample:
+        for seqrun in libprep:
+            project_specific_path = os.path.join(project.dirname,
                                                      sample.dirname,
                                                      libprep.dirname,
                                                      seqrun.dirname)
-                directories_to_create.add(os.path.join("$SNIC_TMP/DATA/",
+            directories_to_create.add(os.path.join("$SNIC_TMP/DATA/",
                                                        project_specific_path))
-                for fastq in seqrun.fastq_files:
-                    src_file = os.path.join(project.base_path, "DATA",
+            for fastq in seqrun.fastq_files:
+                src_file = os.path.join(project.base_path, "DATA",
                                             project_specific_path, fastq)
-                    dst_file = os.path.join("$SNIC_TMP/DATA/",
+                dst_file = os.path.join("$SNIC_TMP/DATA/",
                                             project_specific_path,
                                             fastq)
-                    fastq_src_dst_list.append([src_file, dst_file])
+                fastq_src_dst_list.append([src_file, dst_file])
 
     sbatch_text_list.append("echo -ne '\\n\\nCopying fastq files at '")
     sbatch_text_list.append("date")
