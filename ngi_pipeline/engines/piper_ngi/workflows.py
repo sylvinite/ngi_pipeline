@@ -99,7 +99,7 @@ def workflow_merge_process_variantcall(*args, **kwargs):
     # Same command line but with some additional options
     return workflow_dna_variantcalling(*args, **kwargs) +  \
             (" --variant_calling "
-             "--analyze_separately --retry_failed 2")
+             "--analyze_separately --retry_failed 2 --keep_pre_bqsr_bam")
 
 
 def workflow_dna_variantcalling(qscripts_dir_path, setup_xml_path, global_config_path,

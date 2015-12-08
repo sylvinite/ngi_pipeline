@@ -1,7 +1,9 @@
+import mock
 import unittest
 import tempfile
 import os
 from ngi_pipeline.engines.piper_ngi.command_creation_config import build_piper_cl, build_setup_xml
+from ngi_pipeline.engines.piper_ngi.launchers import analyze
 from ngi_pipeline.conductor.classes import NGIProject
 from ngi_pipeline.utils.config import load_yaml_config, locate_ngi_config
 
@@ -10,6 +12,8 @@ class TestCommandCreation(unittest.TestCase):
     def setUpClass(cls):
         cls.proj_name = "Y.Mom_15_01"
         cls.proj_id = "P1155"
+        cls.libprep_id = "P1155_prepA"
+        cls.seqrun_id = "P1155_seqrunA"
         cls.sample_name = "P1155_101"
         cls.engine_name = "piper_ngi"
         cls.proj_basepath = tempfile.mkdtemp()
@@ -24,13 +28,27 @@ class TestCommandCreation(unittest.TestCase):
         cls.sample_obj = cls.project_obj.add_sample(name=cls.sample_name,
                                                     dirname=cls.sample_name)
 
+        cls.charon_mock = mock.Mock()
+        cls.charon_mock.sample_get_libpreps = mock.Mock(return_value = {
+            'libpreps': [{'qc': 'PASSED', 'libprepid': cls.libprep_id}]})
+        cls.charon_mock.libprep_get_seqruns = mock.Mock(return_value = {
+            'seqruns': [{'seqrunid': cls.seqrun_id}]})
+        cls.charon_mock.seqrun_get = mock.Mock(return_value = {
+            'alignment_status': ''})
+        cls.charon_mock.project_get = mock.Mock(return_value={
+            'sequencing_facility': 'Unknown'})
+
     def test_build_setup_xml(self):
-        setup_xml_cl, output_xml_filepath = \
-                build_setup_xml(project=self.project_obj,
-                                sample=self.sample_obj,
-                                workflow=self.workflow_name,
-                                local_scratch_mode=True,
-                                config=self.config)
+
+        with mock.patch('ngi_pipeline.engines.piper_ngi.command_creation_config.CharonSession',
+                        spec=False,
+                        return_value=self.charon_mock) as dbmock:
+            setup_xml_cl, output_xml_filepath = \
+                    build_setup_xml(project=self.project_obj,
+                                    sample=self.sample_obj,
+                                    workflow=self.workflow_name,
+                                    local_scratch_mode=True,
+                                    config=self.config)
         expected_filepath = os.path.join(self.proj_basepath, "ANALYSIS", self.proj_name,
                                          "piper_ngi", "setup_xml_files",
                                          "{}-{}-{}-setup.xml".format(self.proj_name,
@@ -66,3 +84,10 @@ class TestCommandCreation(unittest.TestCase):
         assert tcl[tcl.index('--output_directory')+1] == \
                 os.path.join('$SNIC_TMP', 'ANALYSIS', self.proj_name, 'piper_ngi')
         assert '--variant_calling' in tcl
+
+    def test_analyze(self):
+        with mock.patch('ngi_pipeline.engines.piper_ngi.utils.CharonSession',
+                        spec=False,
+                        return_value=self.charon_mock) as dbmock:
+            analyze(self.project_obj, self.sample_obj)
+        return True

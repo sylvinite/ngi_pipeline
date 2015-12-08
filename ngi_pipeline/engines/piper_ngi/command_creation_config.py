@@ -97,7 +97,9 @@ def build_setup_xml(project, sample, workflow, local_scratch_mode, config):
 
     cl_args = {'project': project.dirname}
     try:
-        cl_args["sequencing_center"] = CharonSession().project_get(project.project_id)["sequencing_facility"]
+        charon_session = CharonSession()
+        charon_project = charon_session.project_get(project.project_id)
+        cl_args["sequencing_center"] = charon_project["sequencing_facility"]
     except (KeyError, CharonError) as e:
         LOG.warn('Could not determine sequencing center from Charon ({}); setting to "Unknown".'.format(e))
         cl_args["sequencing_center"] = "Unknown"
