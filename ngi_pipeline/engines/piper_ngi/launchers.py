@@ -53,7 +53,8 @@ def analyze(project, sample,
             keep_existing_data=False,
             level="sample",
             genotype_file=None,
-            config=None, config_file_path=None):
+            config=None, config_file_path=None,
+            generate_bqsr_bam=False):
     """Analyze data at the sample level.
 
     :param NGIProject project: the project to analyze
@@ -159,7 +160,8 @@ def analyze(project, sample,
                                           setup_xml_path=setup_xml_path,
                                           exit_code_path=exit_code_path,
                                           config=config,
-                                          exec_mode=exec_mode)
+                                          exec_mode=exec_mode,
+                                          generate_bqsr_bam=generate_bqsr_bam)
                 if exec_mode == "sbatch":
                     process_id = None
                     slurm_job_id = sbatch_piper_sample([setup_xml_cl, piper_cl],

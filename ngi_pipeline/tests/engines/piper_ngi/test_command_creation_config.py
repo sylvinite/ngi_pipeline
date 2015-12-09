@@ -27,7 +27,7 @@ class TestCommandCreation(unittest.TestCase):
                                      base_path=cls.proj_basepath)
         cls.sample_obj = cls.project_obj.add_sample(name=cls.sample_name,
                                                     dirname=cls.sample_name)
-
+        # create a mock that can replace calls to charon
         cls.charon_mock = mock.Mock()
         cls.charon_mock.sample_get_libpreps = mock.Mock(return_value = {
             'libpreps': [{'qc': 'PASSED', 'libprepid': cls.libprep_id}]})
@@ -71,19 +71,31 @@ class TestCommandCreation(unittest.TestCase):
 
 
     def test_build_piper_cl(self):
-        cl = build_piper_cl(project=self.project_obj, workflow_name=self.workflow_name,
-                            setup_xml_path=self.xml_path, exit_code_path=self.exit_file,
-                            config=self.config, exec_mode='sbatch')
 
-        tcl = cl.split(" ")
+        def _validate_cl(tcl):
+            assert tcl[0] == 'piper'
+            assert '--xml_input' in tcl
+            assert tcl[tcl.index('--xml_input')+1] == self.xml_path
+            assert '--output_directory' in tcl
+            assert tcl[tcl.index('--output_directory')+1] == \
+                    os.path.join('$SNIC_TMP', 'ANALYSIS', self.proj_name, 'piper_ngi')
+            assert '--variant_calling' in tcl
 
-        assert tcl[0] == 'piper'
-        assert '--xml_input' in tcl
-        assert tcl[tcl.index('--xml_input')+1] == self.xml_path
-        assert '--output_directory' in tcl
-        assert tcl[tcl.index('--output_directory')+1] == \
-                os.path.join('$SNIC_TMP', 'ANALYSIS', self.proj_name, 'piper_ngi')
-        assert '--variant_calling' in tcl
+        kwargs = {'project': self.project_obj,
+                  'workflow_name': self.workflow_name,
+                  'setup_xml_path': self.xml_path,
+                  'exit_code_path': self.exit_file,
+                  'config': self.config,
+                  'exec_mode': 'sbatch'}
+
+        cl = build_piper_cl(**kwargs).split(" ")
+        _validate_cl(cl)
+        assert '--keep_pre_bqsr_bam' in cl
+
+        cl = build_piper_cl(generate_bqsr_bam=True, **kwargs).split(" ")
+        _validate_cl(cl)
+        assert '--keep_pre_bqsr_bam' not in cl
+
 
     def test_analyze(self):
         with mock.patch('ngi_pipeline.engines.piper_ngi.utils.CharonSession',

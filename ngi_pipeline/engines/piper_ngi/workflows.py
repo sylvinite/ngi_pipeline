@@ -41,7 +41,7 @@ def get_subtasks_for_level(level):
 @with_ngi_config
 def return_cl_for_workflow(workflow_name, qscripts_dir_path, setup_xml_path, global_config_path,
                            output_dir=None, exec_mode="local", genotype_file=None,
-                           config=None, config_file_path=None):
+                           config=None, config_file_path=None, generate_bqsr_bam=False):
     """Return an executable-ready Piper command line.
 
     :param str workflow_name: The name of the Piper workflow to be run.
@@ -70,7 +70,8 @@ def return_cl_for_workflow(workflow_name, qscripts_dir_path, setup_xml_path, glo
                              global_config_path=global_config_path,
                              config=config, exec_mode=exec_mode,
                              genotype_file=genotype_file,
-                             output_dir=output_dir) 
+                             output_dir=output_dir,
+                             generate_bqsr_bam=generate_bqsr_bam)
 
 #def workflow_dna_alignonly(*args, **kwargs):
 #    """Return the command line for basic DNA Alignment.
@@ -97,9 +98,9 @@ def workflow_merge_process_variantcall(*args, **kwargs):
     :rtype: str
     """
     # Same command line but with some additional options
-    return workflow_dna_variantcalling(*args, **kwargs) +  \
-            (" --variant_calling "
-             "--analyze_separately --retry_failed 2 --keep_pre_bqsr_bam")
+    return workflow_dna_variantcalling(*args, **kwargs) + \
+           " --variant_calling --analyze_separately --retry_failed 2" + \
+           ("" if kwargs.get('generate_bqsr_bam', False) else " --keep_pre_bqsr_bam")
 
 
 def workflow_dna_variantcalling(qscripts_dir_path, setup_xml_path, global_config_path,
