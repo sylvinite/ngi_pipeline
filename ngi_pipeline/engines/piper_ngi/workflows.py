@@ -15,6 +15,7 @@ PIPER_CL_TEMPLATE = ("piper -S {workflow_qscript_path}"
                      " --global_config {global_config_path}"
                      " --number_of_threads {num_threads}"
                      " --scatter_gather {scatter_gather}"
+                     " --job_scatter_gather_directory {job_scatter_gather_directory}"
                      " -jobRunner {job_runner}"
                      " --job_walltime {job_walltime}"
                      " --disableJobReport"
@@ -132,14 +133,15 @@ def workflow_dna_variantcalling(qscripts_dir_path, setup_xml_path, global_config
     if exec_mode == "sbatch":
         # Execute from within an sbatch file (run jobs on the local node)
         num_threads = int(config.get("piper", {}).get("threads") or 16)
-        job_runner = config.get("piper", {}).get("shell_jobrunner") or \
-                     "ParallelShell --super_charge --ways_to_split 4 --job_scatter_gather_directory $SNIC_TMP/scatter_gather"
+        job_runner = config.get("piper", {}).get("shell_jobrunner") or "ParallelShell --super_charge --ways_to_split 4"
         scatter_gather = 1
+        job_scatter_gather_directory = os.path.join("$SNIC_TMP", "scatter_gather")
     else: # exec_mode == "local"
         # Start a local process that sbatches jobs
         job_runner = "Drmaa"
         scatter_gather = 23
         num_threads = 1
+        job_scatter_gather_directory = os.path.join(output_dir, "scatter_gather")
     return cl_string.format(**locals())
 
 

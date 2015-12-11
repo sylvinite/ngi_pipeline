@@ -57,6 +57,8 @@ java -Xmx14G -jar ${GATK_HOME}/GenomeAnalysisTK.jar \
 -I ${BAMIN} \
 -R ${FASTAREF} \
 -baq CALCULATE_AS_NECESSARY \
+--disable_indel_quals \
+--emit_original_quals \
 -BQSR ${RECALTABLE} \
 -nct 2 \
 -o ${BAMOUT}

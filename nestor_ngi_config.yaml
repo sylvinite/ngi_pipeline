@@ -50,7 +50,7 @@ piper:
         - R/2.15.0
     threads: 16
     shell_jobrunner: Shell
-    #shell_jobrunner: ParallelShell --super_charge --ways_to_split 4 --job_scatter_gather_directory $SNIC_TMP/scatter_gather
+    #shell_jobrunner: ParallelShell --super_charge --ways_to_split 4
     #jobNative:
     #    - arg1
     #    - arg2
