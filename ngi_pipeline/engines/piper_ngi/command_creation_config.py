@@ -137,8 +137,9 @@ def build_setup_xml(project, sample, workflow, local_scratch_mode, config):
                            "--sequencing_platform {sequencing_tech} "
                            "--sequencing_center {sequencing_center} "
                            "--uppnex_project_id {uppmax_proj} "
-                           "--reference {reference_path} "
-                           "--qos {qos}").format(**cl_args)
+                           "--reference {reference_path}").format(**cl_args)
+    if "qos" in cl_args:
+        setupfilecreator_cl += " --qos {qos}".format(**cl_args)
     for samp in project:
         for libprep in samp:
             for seqrun in libprep:
