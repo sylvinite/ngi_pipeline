@@ -99,9 +99,14 @@ def workflow_merge_process_variantcall(*args, **kwargs):
     :rtype: str
     """
     # Same command line but with some additional options
-    return workflow_dna_variantcalling(*args, **kwargs) + \
-           " --variant_calling --analyze_separately --retry_failed 2" + \
-           ("" if kwargs.get('generate_bqsr_bam', False) else " --keep_pre_bqsr_bam")
+    cl_string = workflow_dna_variantcalling(*args, **kwargs)
+    cl_args = ["--variant_calling",
+               "--analyze_separately",
+               "--retry_failed",
+               "2"]
+    if not kwargs.get('generate_bqsr_bam', False):
+        cl_args.append("--keep_pre_bqsr_bam")
+    return "{} {}".format(cl_string, " ".join(cl_args))
 
 
 def workflow_dna_variantcalling(qscripts_dir_path, setup_xml_path, global_config_path,
