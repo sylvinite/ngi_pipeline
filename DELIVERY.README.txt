@@ -78,8 +78,9 @@ ProjectID -> SampleN -> 02-FASTQ
 --------------------------------------------------------------------
 --bam2fastq.sh
 SLURM (or bash) script that can be used for generating FASTQ files from
-a BAM file. The script is formatted to be submitted and run on a SLURM
-cluster. See top of the script file for further usage instructions.
+a BAM file. The script is formatted to be submitted and run on a
+UPPMAX SLURM cluster. See top of the script file for further usage
+instructions.
 
 ProjectID -> SampleN -> 03-BAM
 --------------------------------------------------------------------
