@@ -15,6 +15,7 @@ PIPER_CL_TEMPLATE = ("piper -S {workflow_qscript_path}"
                      " --global_config {global_config_path}"
                      " --number_of_threads {num_threads}"
                      " --scatter_gather {scatter_gather}"
+                     " --job_scatter_gather_directory {job_scatter_gather_directory}"
                      " -jobRunner {job_runner}"
                      " --job_walltime {job_walltime}"
                      " --disableJobReport"
@@ -41,7 +42,7 @@ def get_subtasks_for_level(level):
 @with_ngi_config
 def return_cl_for_workflow(workflow_name, qscripts_dir_path, setup_xml_path, global_config_path,
                            output_dir=None, exec_mode="local", genotype_file=None,
-                           config=None, config_file_path=None):
+                           config=None, config_file_path=None, generate_bqsr_bam=False):
     """Return an executable-ready Piper command line.
 
     :param str workflow_name: The name of the Piper workflow to be run.
@@ -70,7 +71,8 @@ def return_cl_for_workflow(workflow_name, qscripts_dir_path, setup_xml_path, glo
                              global_config_path=global_config_path,
                              config=config, exec_mode=exec_mode,
                              genotype_file=genotype_file,
-                             output_dir=output_dir) 
+                             output_dir=output_dir,
+                             generate_bqsr_bam=generate_bqsr_bam)
 
 #def workflow_dna_alignonly(*args, **kwargs):
 #    """Return the command line for basic DNA Alignment.
@@ -97,9 +99,14 @@ def workflow_merge_process_variantcall(*args, **kwargs):
     :rtype: str
     """
     # Same command line but with some additional options
-    return workflow_dna_variantcalling(*args, **kwargs) +  \
-            (" --variant_calling "
-             "--analyze_separately --retry_failed 2")
+    cl_string = workflow_dna_variantcalling(*args, **kwargs)
+    cl_args = ["--variant_calling",
+               "--analyze_separately",
+               "--retry_failed",
+               "2"]
+    if not kwargs.get('generate_bqsr_bam', False):
+        cl_args.append("--keep_pre_bqsr_bam")
+    return "{} {}".format(cl_string, " ".join(cl_args))
 
 
 def workflow_dna_variantcalling(qscripts_dir_path, setup_xml_path, global_config_path,
@@ -131,14 +138,15 @@ def workflow_dna_variantcalling(qscripts_dir_path, setup_xml_path, global_config
     if exec_mode == "sbatch":
         # Execute from within an sbatch file (run jobs on the local node)
         num_threads = int(config.get("piper", {}).get("threads") or 16)
-        job_runner = config.get("piper", {}).get("shell_jobrunner") or \
-                     "ParallelShell --super_charge --ways_to_split 4 --job_scatter_gather_directory $SNIC_TMP/scatter_gather"
+        job_runner = config.get("piper", {}).get("shell_jobrunner") or "ParallelShell --super_charge --ways_to_split 4"
         scatter_gather = 1
+        job_scatter_gather_directory = os.path.join("$SNIC_TMP", "scatter_gather")
     else: # exec_mode == "local"
         # Start a local process that sbatches jobs
         job_runner = "Drmaa"
         scatter_gather = 23
         num_threads = 1
+        job_scatter_gather_directory = os.path.join(output_dir, "scatter_gather")
     return cl_string.format(**locals())
 
 

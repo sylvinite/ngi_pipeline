@@ -149,6 +149,7 @@ if __name__ == "__main__":
     parser_analyze = subparsers.add_parser('analyze', help="Launch analysis.")
     subparsers_analyze = parser_analyze.add_subparsers(parser_class=ArgumentParserWithTheFlagsThatIWant,
             help='Choose unit to analyze')
+
     # Add sub-subparser for flowcell analysis
     analyze_flowcell = subparsers_analyze.add_parser('flowcell',
             help='Start analysis of raw flowcells')
@@ -156,6 +157,8 @@ if __name__ == "__main__":
             help="Keep/re-use existing analysis data when launching new analyses.")
     analyze_flowcell.add_argument("--no-qc", action="store_true",
             help="Skip qc analysis.")
+    analyze_flowcell.add_argument("--generate_bqsr_bam", action="store_true", dest="generate_bqsr_bam",
+            default=False, help="Generate the recalibrated BAM file")
     analyze_flowcell.add_argument("analyze_fc_dirs", nargs="+",
             help=("The path to one or more demultiplexed Illumina flowcell "
                   "directories to process and analyze."))
@@ -169,6 +172,8 @@ if __name__ == "__main__":
             help="Keep/re-use existing analysis data when launching new analyses.")
     analyze_project.add_argument("--no-qc", action="store_true",
             help="Skip qc analysis.")
+    analyze_project.add_argument("--generate_bqsr_bam", action="store_true", dest="generate_bqsr_bam",
+            default=False, help="Generate the recalibrated BAM file")
     analyze_project.add_argument('analyze_project_dirs', nargs='+',
             help='The path to the project folder to be analyzed.')
 
@@ -283,7 +288,8 @@ if __name__ == "__main__":
                                                  keep_existing_data=args.keep_existing_data,
                                                  no_qc=args.no_qc,
                                                  quiet=args.quiet,
-                                                 manual=True)
+                                                 manual=True,
+                                                 generate_bqsr_bam=args.generate_bqsr_bam)
 
     ## Analyze Project
     elif 'analyze_project_dirs' in args:
@@ -303,7 +309,8 @@ if __name__ == "__main__":
                                       keep_existing_data=args.keep_existing_data,
                                       no_qc=args.no_qc,
                                       quiet=args.quiet,
-                                      manual=True)
+                                      manual=True,
+                                      generate_bqsr_bam=args.generate_bqsr_bam)
 
     elif 'delete_proj_analysis' in args:
         from ngi_pipeline.conductor.launchers import get_engine_for_bp

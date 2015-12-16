@@ -22,7 +22,7 @@ def main(project):
         
         charon_session.sample_update(project, sample["sampleid"],
                                      analysis_status= "TO_ANALYZE",
-                                     genotyping_status=None,
+                                     genotype_status=None,
                                      total_autosomal_coverage="0",
                                      total_sequenced_reads="0")
         for sample_prep in charon_session.sample_get_libpreps(project, sample["sampleid"])['libpreps']:

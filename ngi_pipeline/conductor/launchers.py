@@ -17,7 +17,8 @@ LOG = minimal_logger(__name__)
 def launch_analysis(projects_to_analyze, restart_failed_jobs=False,
                     restart_finished_jobs=False, restart_running_jobs=False,
                     keep_existing_data=False, no_qc=False, exec_mode="sbatch",
-                    quiet=False, manual=False, config=None, config_file_path=None):
+                    quiet=False, manual=False, config=None, config_file_path=None,
+                    generate_bqsr_bam=False):
     """Launch the appropriate analysis for each fastq file in the project.
 
     :param list projects_to_analyze: The list of projects (Project objects) to analyze
@@ -127,7 +128,8 @@ def launch_analysis(projects_to_analyze, restart_failed_jobs=False,
                                         restart_running_jobs=restart_running_jobs,
                                         keep_existing_data=keep_existing_data,
                                         exec_mode=exec_mode,
-                                        config=config)
+                                        config=config,
+                                        generate_bqsr_bam=generate_bqsr_bam)
             except Exception as e:
                 error_text = ('Cannot process project "{}" / sample "{}" / '
                               'engine "{}" : {}'.format(project, sample,

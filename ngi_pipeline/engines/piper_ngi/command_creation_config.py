@@ -11,7 +11,7 @@ LOG = minimal_logger(__name__)
 
 ## TODO change this to use local_scratch_mode boolean instead of exec_mode
 def build_piper_cl(project, workflow_name, setup_xml_path, exit_code_path,
-                   config, genotype_file=None, exec_mode="local"):
+                   config, genotype_file=None, exec_mode="local", generate_bqsr_bam=False):
     """Determine which workflow to run for a project and build the appropriate command line.
     :param NGIProject project: The project object to analyze.
     :param str workflow_name: The name of the workflow to execute (e.g. "dna_alignonly")
@@ -63,7 +63,8 @@ def build_piper_cl(project, workflow_name, setup_xml_path, exit_code_path,
                                           genotype_file=genotype_file,
                                           global_config_path=piper_global_config_path,
                                           output_dir=output_dir,
-                                          exec_mode=exec_mode)
+                                          exec_mode=exec_mode,
+                                          generate_bqsr_bam=generate_bqsr_bam)
     # Blank out the file if it already exists
     safe_makedir(os.path.dirname(exit_code_path))
     open(exit_code_path, 'w').close()
@@ -97,7 +98,9 @@ def build_setup_xml(project, sample, workflow, local_scratch_mode, config):
 
     cl_args = {'project': project.dirname}
     try:
-        cl_args["sequencing_center"] = CharonSession().project_get(project.project_id)["sequencing_facility"]
+        charon_session = CharonSession()
+        charon_project = charon_session.project_get(project.project_id)
+        cl_args["sequencing_center"] = charon_project["sequencing_facility"]
     except (KeyError, CharonError) as e:
         LOG.warn('Could not determine sequencing center from Charon ({}); setting to "Unknown".'.format(e))
         cl_args["sequencing_center"] = "Unknown"
@@ -134,8 +137,9 @@ def build_setup_xml(project, sample, workflow, local_scratch_mode, config):
                            "--sequencing_platform {sequencing_tech} "
                            "--sequencing_center {sequencing_center} "
                            "--uppnex_project_id {uppmax_proj} "
-                           "--reference {reference_path} "
-                           "--qos {qos}").format(**cl_args)
+                           "--reference {reference_path}").format(**cl_args)
+    if "qos" in cl_args:
+        setupfilecreator_cl += " --qos {qos}".format(**cl_args)
     for samp in project:
         for libprep in samp:
             for seqrun in libprep:

@@ -35,7 +35,7 @@ def process_demultiplexed_flowcell(demux_fcid_dir_path, restrict_to_projects=Non
                                    restrict_to_samples=None, restart_failed_jobs=False,
                                    restart_finished_jobs=False, restart_running_jobs=False,
                                    keep_existing_data=False, no_qc=False, quiet=False,
-                                   manual=False, config=None, config_file_path=None):
+                                   manual=False, config=None, config_file_path=None, generate_bqsr_bam=False):
     """Call process_demultiplexed_flowcells, restricting to a single flowcell.
     Essentially a restrictive wrapper.
 
@@ -59,7 +59,7 @@ def process_demultiplexed_flowcell(demux_fcid_dir_path, restrict_to_projects=Non
                                     restart_finished_jobs, restart_running_jobs,
                                     keep_existing_data=keep_existing_data,
                                     no_qc=no_qc, config_file_path=config_file_path,
-                                    quiet=quiet, manual=manual)
+                                    quiet=quiet, manual=manual, generate_bqsr_bam=generate_bqsr_bam)
 
 
 @with_ngi_config
@@ -67,7 +67,8 @@ def process_demultiplexed_flowcells(demux_fcid_dirs, restrict_to_projects=None,
                                     restrict_to_samples=None, restart_failed_jobs=False,
                                     restart_finished_jobs=False, restart_running_jobs=False,
                                     fallback_libprep=None, keep_existing_data=False, no_qc=False,
-                                    quiet=False, manual=False, config=None, config_file_path=None):
+                                    quiet=False, manual=False, config=None, config_file_path=None,
+                                    generate_bqsr_bam=False):
     """Sort demultiplexed Illumina flowcells into projects and launch their analysis.
 
     :param list demux_fcid_dirs: The CASAVA-produced demux directory/directories.
@@ -99,7 +100,7 @@ def process_demultiplexed_flowcells(demux_fcid_dirs, restrict_to_projects=None,
             create_charon_entries_from_project(project, sequencing_facility="NGI-U")
     launch_analysis(projects_to_analyze, restart_failed_jobs, restart_finished_jobs,
                     restart_running_jobs, keep_existing_data=keep_existing_data,
-                    no_qc=no_qc, config=config)
+                    no_qc=no_qc, config=config, generate_bqsr_bam=generate_bqsr_bam)
 
 
 @with_ngi_config
