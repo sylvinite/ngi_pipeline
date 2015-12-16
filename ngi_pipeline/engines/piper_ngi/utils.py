@@ -122,22 +122,23 @@ def remove_previous_genotype_analyses(project_obj):
                   '/ samples {}'.format(project_obj, ", ".join(project_obj.samples)))
 
 
-def remove_previous_sample_analyses(project_obj):
+def remove_previous_sample_analyses(project_obj, sample_obj=None):
     """Remove analysis results for a sample, including .failed and .done files.
     Doesn't throw an error if it can't read a directory, but does if it can't
     delete a file it knows about.
 
     :param NGIProject project_obj: The NGIProject object with relevant NGISamples
+    :param NGISample sample_obj: The relevant NGISample object 
 
     :returns: Nothing
     :rtype: None
     """
-    sample_files = find_previous_sample_analyses(project_obj, include_genotype_files=False)
+    sample_files = find_previous_sample_analyses(project_obj, sample_obj=sample_obj, include_genotype_files=False)
     if sample_files:
-        LOG.info('Deleting files for samples {}'.format(", ".join(project_obj.samples)))
+        LOG.info("Deleting files for samples {}".format(sample_obj or project.obj.samples))
         errors = []
         for sample_file in sample_files:
-            LOG.debug("Deleting file {}".format(sample_file))
+            LOG.info("Deleting file {}".format(sample_file))
             try:
                 if os.path.isdir(sample_file):
                     shutil.rmtree(sample_file)
@@ -162,22 +163,22 @@ def find_previous_sample_analyses(project_obj, sample_obj=None, include_genotype
     :returns: A list of files
     :rtype: list
     """
-    sample_files = [] # This isn't really necessary but scoping makes me want to do it
+    sample_files = set() # This isn't really necessary but scoping makes me want to do it
     project_dir_path = os.path.join(project_obj.base_path, "ANALYSIS",
                                     project_obj.project_id, "piper_ngi")
     project_dir_pattern = os.path.join(project_dir_path, "??_*")
     for sample in project_obj:
         if sample_obj and sample.name != sample_obj.name:
             continue
-        sample_files = glob.glob(os.path.join(project_dir_pattern,
-                                              "{}.*".format(sample.name)))
+        sample_files.update(glob.glob(os.path.join(project_dir_pattern,
+                                              "{}.*".format(sample.name))))
         # P123_456 is renamed by Piper to P123-456? Sometimes? Always?
         piper_sample_name = sample.name.replace("_", "?", 1)
-        sample_files.extend(glob.glob(os.path.join(project_dir_pattern,
+        sample_files.update(glob.glob(os.path.join(project_dir_pattern,
                                                    "{}.*".format(piper_sample_name))))
-        sample_files.extend(glob.glob(os.path.join(project_dir_pattern,
+        sample_files.update(glob.glob(os.path.join(project_dir_pattern,
                                                    ".{}.*.done".format(piper_sample_name))))
-        sample_files.extend(glob.glob(os.path.join(project_dir_pattern,
+        sample_files.update(glob.glob(os.path.join(project_dir_pattern,
                                                    ".{}.*.fail".format(piper_sample_name))))
     # Include genotype files?
     if not include_genotype_files:

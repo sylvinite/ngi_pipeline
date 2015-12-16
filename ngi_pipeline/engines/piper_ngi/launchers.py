@@ -130,7 +130,7 @@ def analyze(project, sample,
                                                             sample_id=sample.name)
                 if level == "sample":
                     if not keep_existing_data:
-                        remove_previous_sample_analyses(project)
+                        remove_previous_sample_analyses(project, sample)
                         default_files_to_copy=None
                 elif level == "genotype":
                     if not keep_existing_data:
