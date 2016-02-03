@@ -10,7 +10,8 @@ LOG = minimal_logger(__name__)
 
 def create_charon_entries_from_project(project, best_practice_analysis="whole_genome_reseq",
                                        sequencing_facility="NGI-S",
-                                       force_overwrite=False, delete_existing=False):
+                                       force_overwrite=False, delete_existing=False,
+                                       retry_on_fail=True):
     """Given a project object, creates the relevant entries in Charon.
     This code is remarkably shoddy as I created it in a hurry and then later
     it became a part of the pipeline. Use at your own risk! Ha ha.
@@ -22,6 +23,7 @@ def create_charon_entries_from_project(project, best_practice_analysis="whole_ge
     :param bool delete_existing: Don't just update existing entries, delete them and create new ones (default false)
     """
     charon_session = CharonSession()
+    update_failed=False
     try:
         status = "OPEN"
         LOG.info('Creating project "{}" with status "{}", best practice analysis "{}", '
@@ -55,6 +57,7 @@ def create_charon_entries_from_project(project, best_practice_analysis="whole_ge
                 charon_session.sample_delete(projectid=project.project_id,
                                              sampleid=sample.name)
             except CharonError as e:
+                update_failed=True
                 LOG.error('Could not delete sample "{}": {}'.format(sample, e))
         try:
             analysis_status = "TO_ANALYZE"
@@ -76,6 +79,7 @@ def create_charon_entries_from_project(project, best_practice_analysis="whole_ge
                     LOG.info('Project "{}" / sample "{}" already exists; moving '
                              'to libpreps'.format(project, sample))
             else:
+                update_failed=True
                 LOG.error(e)
                 continue
         for libprep in sample:
@@ -113,6 +117,7 @@ def create_charon_entries_from_project(project, best_practice_analysis="whole_ge
                         LOG.info('Project "{}" / sample "{}" / libprep "{}" already '
                                  'exists; moving to libpreps'.format(project, sample, libprep))
                 else:
+                    update_failed=True
                     LOG.error(e)
                     continue
             for seqrun in libprep:
@@ -124,6 +129,7 @@ def create_charon_entries_from_project(project, best_practice_analysis="whole_ge
                                                      libprepid=libprep.name,
                                                      seqrunid=seqrun.name)
                     except CharonError as e:
+                        update_failed=True
                         LOG.error('Could not delete seqrun "{}": {}'.format(seqrun, e))
                 try:
                     alignment_status="NOT_RUNNING"
@@ -160,9 +166,18 @@ def create_charon_entries_from_project(project, best_practice_analysis="whole_ge
                                      'seqrun "{}" already exists; next...'.format(project, sample,
                                                                                   libprep, seqrun))
                     else:
+                        update_failed=True
                         LOG.error(e)
                         continue
 
+    if update_failed :
+        if retry_on_fail:
+            create_charon_entries_from_project(project, best_practice_analysis=best_practice_analysis,
+                                       sequencing_facility=sequencing_facility
+                                       force_overwrite=force_overwrite, delete_existing=delete_existing,
+                                       retry_on_fail=False):
+        else:
+            raise CharonError("A network error blocks Charon updating.")
 
 def recreate_project_from_db(analysis_top_dir, project_name, project_id):
     project_dir = os.path.join(analysis_top_dir, "DATA", project_name)

@@ -477,6 +477,7 @@ if __name__ == "__main__":
                                                    force_overwrite=args.force_update,
                                                    delete_existing=args.delete_existing)
             except Exception as e:
+                LOG.error(e.message)
                 print(e, file=sys.stderr)
         LOG.info("Done with organization.")
 
