@@ -173,9 +173,9 @@ def create_charon_entries_from_project(project, best_practice_analysis="whole_ge
     if update_failed :
         if retry_on_fail:
             create_charon_entries_from_project(project, best_practice_analysis=best_practice_analysis,
-                                       sequencing_facility=sequencing_facility
+                                       sequencing_facility=sequencing_facility,
                                        force_overwrite=force_overwrite, delete_existing=delete_existing,
-                                       retry_on_fail=False):
+                                       retry_on_fail=False)
         else:
             raise CharonError("A network error blocks Charon updating.")
 
