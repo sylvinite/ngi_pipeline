@@ -13,6 +13,7 @@ import shutil
 import stat
 import subprocess
 import tempfile
+import hashlib
 
 from ngi_pipeline.conductor.classes import NGIProject
 from ngi_pipeline.log.loggers import minimal_logger
@@ -202,6 +203,12 @@ def do_rsync(src_files, dst_dir):
     subprocess.check_call(cl)
     #execute_command_line(cl)
     return [ os.path.join(dst_dir,os.path.basename(f)) for f in src_files ]
+
+ def calculateMd5 (md5_file):
+        """Calculate md5sum of a file"""
+    md5sum=hashlib.md5()
+    md5sum.update(md5_file)
+    return md5sum
 
 
 def safe_makedir(dname, mode=0o2770):
