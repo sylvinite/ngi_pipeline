@@ -10,7 +10,7 @@ import yaml
 from ngi_pipeline.conductor.classes import NGIProject
 from ngi_pipeline.database.classes import CharonSession
 from ngi_pipeline.log.loggers import log_process_non_blocking, minimal_logger
-from ngi_pipeline.utils.filesystem import execute_command_line, rotate_file, safe_makedir
+from ngi_pipeline.utils.filesystem import execute_command_line, rotate_file, safe_makedir, locate_project
 
 LOG = minimal_logger(__name__)
 
@@ -40,6 +40,35 @@ def launch_piper_job(command_line, project, log_file_path=None):
         log_process_non_blocking(popen_object.stdout, LOG.info)
         log_process_non_blocking(popen_object.stderr, LOG.warn)
     return popen_object
+
+def spawn_child_md5(project):
+    """Spawns deatached child processes that calculates 
+    md5sum on the bam files in dir 05 and .genomic.vcf files
+    in dir 07.
+    """
+    path=locate_project(project, 'ANALYSIS')
+    fileList05=glob.glob("{}/piper_ngi/05_processed_alignments/*".format(path))
+    fileList07=glob.glob("{}/piper_ngi/07_variant_calls/*".format(path))
+
+    for item in fileList05:
+        if item.endswith((".bam",".bai",".metrics")):
+            if os.path.isfile("{}.md5".format(item)):
+                continue
+            elif os.path.isfile("{}.part".format(item)):
+                continue
+            else:
+                command=["nohup bash -c \" md5sum {0} | cut -f 1 -d ' '  > {0}.part; mv {0}.part {0}.md5\" > /dev/null 2>&1".format(item)] 
+                subprocess.Popen(command, shell=True)
+
+    for item in fileList07:
+        if item.endswith((".genomic.vcf")):
+            if os.path.isfile("{}.md5".format(item)):
+                continue
+            elif os.path.isfile("{}.part".format(item)):
+                continue
+            else:
+                command=["nohup bash -c \" md5sum {0} | cut -f 1 -d ' '  > {0}.part; mv {0}.part {0}.md5\" > /dev/null 2>&1".format(item)] 
+                subprocess.Popen(command, shell=True)
 
 
 def find_previous_genotype_analyses(project_obj, sample_obj):
