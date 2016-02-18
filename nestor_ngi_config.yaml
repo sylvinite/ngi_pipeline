@@ -8,7 +8,10 @@ analysis:
             analysis_engine: ngi_pipeline.engines.piper_ngi
         qc:
             analysis_engine: ngi_pipeline.engines.qc_ngi
-    top_dir: /proj/a2014205/nobackup/NGI/analysis_ready
+    top_dir: nobackup/NGI/analysis_ready
+    sthlm_root: 2014205
+    upps_root: 2015179
+    base_root: /proj
 
 
 database:
@@ -19,7 +22,13 @@ environment:
     project_id: a2014205
     conda_env: ngi
     ngi_scripts_dir: /proj/a2014205/software/ngi_pipeline/scripts
+    flowcell_inbox: 
+            - /proj/a2014205/archive
+            - /proj/a2015179/archive
 
+
+#genotyping:
+#    lower_bound_cutoff: 0.9
 
 logging:
     log_file: /proj/a2014205/ngi_resources/ngi_pipeline.log
@@ -40,7 +49,12 @@ piper:
         - java/sun_jdk1.7.0_25
         - R/2.15.0
     threads: 16
-
+    shell_jobrunner: Shell
+    #shell_jobrunner: ParallelShell --super_charge --ways_to_split 4
+    #jobNative:
+    #    - arg1
+    #    - arg2
+    #    - arg3
 
 qc:
     load_modules:
@@ -66,3 +80,20 @@ slurm:
 
 supported_genomes:
     "GRCh37": /proj/a2014205/piper_references/gatk_bundle/2.8/b37/human_g1k_v37.fasta
+
+test_data:
+    workflows:
+        whole_genome_reseq:
+            test_project:
+                project_id: P0000
+                project_name: "Y.Mom_15_01"
+                bpa: "whole_genome_reseq"
+            customize_config:
+                analysis:
+                    top_dir: /proj/a2014205/nobackup/NGI/test_data/
+                charon:
+                    charon_base_url: http://charon-dev.scilifelab.se
+            local_files:
+                flowcell: /proj/a2014205/nobackup/NGI/test_data/whole_genome_reseq/150424_ST-E00214_0031_BH2WY7CCXX
+                #project: /proj/a2014205/nobackup/NGI/test_data/whole_genome_reseq/DATA/P0000
+                vcf: /proj/a2014205/nobackup/NGI/test_data/whole_genome_reseq/vcf/

@@ -4,10 +4,10 @@ import tempfile
 import unittest
 import yaml
 
-from .config import locate_ngi_config, load_json_config, load_xml_config, \
-                    load_yaml_config, load_generic_config, _expand_paths, \
-                    expand_path, lowercase_keys
-from ..tests import generate_test_data as gtd
+from ngi_pipeline.utils.config import locate_ngi_config, load_json_config, load_xml_config, \
+                                      load_yaml_config, load_generic_config, _expand_paths, \
+                                      expand_path, lowercase_keys
+from ngi_pipeline.tests import generate_test_data as gtd
 #from dicttoxml import dicttoxml
 
 
