@@ -13,7 +13,7 @@ from ngi_pipeline.utils.communication import mail_analysis
 from ngi_pipeline.engines.piper_ngi.database import SampleAnalysis, get_db_session
 from ngi_pipeline.engines.piper_ngi.utils import create_exit_code_file_path, \
                                                  create_project_obj_from_analysis_log, \
-                                                 get_finished_seqruns_for_sample, \
+                                                 get_finished_seqruns_for_sample
 from ngi_pipeline.engines.piper_ngi.parsers import parse_genotype_concordance, \
                                                    parse_mean_coverage_from_qualimap
 from ngi_pipeline.utils.slurm import get_slurm_job_status, \
