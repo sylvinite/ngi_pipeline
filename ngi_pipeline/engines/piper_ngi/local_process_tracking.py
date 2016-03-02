@@ -14,7 +14,6 @@ from ngi_pipeline.engines.piper_ngi.database import SampleAnalysis, get_db_sessi
 from ngi_pipeline.engines.piper_ngi.utils import create_exit_code_file_path, \
                                                  create_project_obj_from_analysis_log, \
                                                  get_finished_seqruns_for_sample, \
-                                                 spawn_child_md5
 from ngi_pipeline.engines.piper_ngi.parsers import parse_genotype_concordance, \
                                                    parse_mean_coverage_from_qualimap
 from ngi_pipeline.utils.slurm import get_slurm_job_status, \
@@ -111,8 +110,6 @@ def update_charon_with_local_jobs_status(quiet=False, config=None, config_file_p
                                               status_field=seqrun_status_field,
                                               status_value=recurse_status,
                                               config=config)
-                     #md5sum calculations 
-                    spawn_child_md5(project_id) 
                         # Job is only deleted if the Charon status update succeeds
                     session.delete(sample_entry)
                     if workflow == "merge_process_variantcall":
