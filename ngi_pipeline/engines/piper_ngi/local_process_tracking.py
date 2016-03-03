@@ -110,7 +110,7 @@ def update_charon_with_local_jobs_status(quiet=False, config=None, config_file_p
                                               status_field=seqrun_status_field,
                                               status_value=recurse_status,
                                               config=config)
-                        # Job is only deleted if the Charon status update succeeds
+                    # Job is only deleted if the Charon status update succeeds
                     session.delete(sample_entry)
                     if workflow == "merge_process_variantcall":
                         # Parse seqrun output results / update Charon
