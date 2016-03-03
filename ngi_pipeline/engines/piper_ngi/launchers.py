@@ -392,6 +392,19 @@ def sbatch_piper_sample(command_line_list, workflow_name, project, sample,
                                                    project_id=project.project_id,
                                                    sample_id=sample.name)
     sbatch_text_list.append("\nPIPER_RETURN_CODE=$?")
+
+    #Precalcuate md5sums
+    sbatch_text_list.append('MD5FILES="$SNIC_TMP/ANALYSIS/{}/piper_ngi/05_processed_alignments/*.bam'.format(project.project_id))
+    sbatch_text_list.append('$SNIC_TMP/ANALYSIS/{}/piper_ngi/05_processed_alignments/*.table'.format(project.project_id))
+    sbatch_text_list.append('$SNIC_TMP/ANALYSIS/{}/piper_ngi/07_variant_calls/*.genomic.vcf.gz'.format(project.project_id))
+    sbatch_text_list.append('$SNIC_TMP/ANALYSIS/{}/piper_ngi/07_variant_calls/*.annotated.vcf.gz"'.format(project.project_id))
+    sbatch_text_list.append('for f in $MD5FILES')
+    sbatch_text_list.append('do')
+    sbatch_text_list.append("    md5sum $f | awk '{print $1}' > $f.md5 &")
+    sbatch_text_list.append('done')
+    sbatch_text_list.append('wait')
+    
+    #Copying back files
     sbatch_text_list.append("echo -ne '\\n\\nCopying back the resulting analysis files at '")
     sbatch_text_list.append("date")
     sbatch_text_list.append("mkdir -p {}".format(perm_analysis_dir))
