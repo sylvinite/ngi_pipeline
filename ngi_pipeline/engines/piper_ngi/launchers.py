@@ -395,9 +395,9 @@ def sbatch_piper_sample(command_line_list, workflow_name, project, sample,
 
     #Precalcuate md5sums
     sbatch_text_list.append('MD5FILES="$SNIC_TMP/ANALYSIS/{}/piper_ngi/05_processed_alignments/*.bam'.format(project.project_id))
-    sbatch_text_list.append('$SNIC_TMP/ANALYSIS/{}/piper_ngi/05_processed_alignments/*.bai'.format(project.project_id))
-    sbatch_text_list.append('$SNIC_TMP/ANALYSIS/{}/piper_ngi/05_processed_alignments/*.metrics'.format(project.project_id))
-    sbatch_text_list.append('$SNIC_TMP/ANALYSIS/{}/piper_ngi/07_variant_calls/*vcf.gz"'.format(project.project_id))
+    sbatch_text_list.append('$SNIC_TMP/ANALYSIS/{}/piper_ngi/05_processed_alignments/*.table'.format(project.project_id))
+    sbatch_text_list.append('$SNIC_TMP/ANALYSIS/{}/piper_ngi/07_variant_calls/*.genomic.vcf.gz'.format(project.project_id))
+    sbatch_text_list.append('$SNIC_TMP/ANALYSIS/{}/piper_ngi/07_variant_calls/*.annotated.vcf.gz"'.format(project.project_id))
     sbatch_text_list.append('for f in $MD5FILES')
     sbatch_text_list.append('do')
     sbatch_text_list.append("    md5sum $f | awk '{print $1}' > $f.md5 &")

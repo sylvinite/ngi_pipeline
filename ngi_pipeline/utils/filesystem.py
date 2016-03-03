@@ -203,6 +203,7 @@ def do_rsync(src_files, dst_dir):
     #execute_command_line(cl)
     return [ os.path.join(dst_dir,os.path.basename(f)) for f in src_files ]
 
+
 def safe_makedir(dname, mode=0o2770):
     """Make a directory (tree) if it doesn't exist, handling concurrent race
     conditions.
