@@ -20,17 +20,27 @@ and one folder for each sample.
 ====================================================================
 ProjectID -> 00-Report
 ====================================================================
-00-Report folder contain sequence QC data, which provide
-information about the quality and other features of the fastq-files, both on
-sample and lane level. The reports are organized by sequence run.
+00-Report folder contain sequence QC, aggregate statistic and used software
+version report.
 
 |--ProjectID
    |--00-Report
-      |--Runfoldername1
-      |--Runfoldername2
-      ...
-      ...
-      |--RunfoldernameN
+      |--ProjectID_aggregate_report.csv
+      |--version_report.txt
+      |--SequenceQC
+
+--ProjectID_aggregate_report.csv
+A tab delimited file with sequence, alignment and variant statistics for each
+sample in the project.
+
+--SequenceQC
+SequenceQC folder contain sequence QC data, which provide information about the
+quality and other features of the fastq-files, both on sample and lane level.
+The reports are organized by sequence run.
+
+--version_report.txt
+Information from piper, about data sources and software version
+that have been used.
 
 ====================================================================
 ProjectID -> SampleN
@@ -47,18 +57,26 @@ Each sample will contain the following subfolders:
 
 ProjectID -> SampleN -> 00-Reports
 --------------------------------------------------------------------
-Contains three type of reports, version_report.txt, snpEff summary
-and sample report.
+Contains two type of reports, snpEff summary and sample report.
 
---version_report.txt
-Information from piper, about data sources and software version
-that have been used.
+|--ProjectID
+   |--SampleN
+      |--00-Report
+         |--SampleID_ign_sample_report.html
+         |--SampleID_ign_sample_report.pdf
+         |--SampleID.clean.dedup.recal.bam.recalibrated.indel.annotated.vcf.gz.snpEff.summary.csv
+         |--SampleID.clean.dedup.recal.bam.recalibrated.indel.annotated.vcf.gz.snpEff.summary.genes.txt
+         |--SampleID.clean.dedup.recal.bam.recalibrated.snp.annotated.vcf.gz.snpEff.summary.csv
+         |--SampleID.clean.dedup.recal.bam.recalibrated.snp.annotated.vcf.gz.snpEff.summary.genes.txt
 
 --snpEff summary report
-SnpEff generated report.
+SnpEff generated reports, summary.csv shows basic statistics about the
+analyzed variants, genes.txt file is a tab separated file having counts of
+number of variants affecting each transcript and gene.
 
 --Sample report
-Report summarizing information about the analysis, alignment and variants.
+Report summarizing information about the analysis, alignment and variants, a
+html and pdf version.
 
 ProjectID -> SampleN -> 01-QC
 --------------------------------------------------------------------
