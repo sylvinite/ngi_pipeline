@@ -50,7 +50,7 @@ piper:
         - R/2.15.0
     threads: 16
     job_walltime:
-        merge_process_variantcall: "7-00:00:00"
+        merge_process_variantcall: "10-00:00:00"
     shell_jobrunner: Shell
     #shell_jobrunner: ParallelShell --super_charge --ways_to_split 4
     #jobNative:
