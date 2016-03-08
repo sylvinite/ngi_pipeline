@@ -9,8 +9,8 @@ analysis:
         qc:
             analysis_engine: ngi_pipeline.engines.qc_ngi
     top_dir: nobackup/NGI/analysis_ready
-    sthlm_root: 2014205
-    upps_root: 2015179
+    sthlm_root: a2014205
+    upps_root: a2015179
     base_root: /proj
 
 
@@ -49,6 +49,8 @@ piper:
         - java/sun_jdk1.7.0_25
         - R/2.15.0
     threads: 16
+    job_walltime:
+        merge_process_variantcall: "7-00:00:00"
     shell_jobrunner: Shell
     #shell_jobrunner: ParallelShell --super_charge --ways_to_split 4
     #jobNative:
