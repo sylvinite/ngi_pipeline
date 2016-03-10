@@ -63,7 +63,6 @@ Contains two type of reports, snpEff summary and sample report.
    |--SampleN
       |--00-Report
          |--SampleID_ign_sample_report.html
-         |--SampleID_ign_sample_report.pdf
          |--SampleID.clean.dedup.recal.bam.recalibrated.indel.annotated.vcf.gz.snpEff.summary.csv
          |--SampleID.clean.dedup.recal.bam.recalibrated.indel.annotated.vcf.gz.snpEff.summary.genes.txt
          |--SampleID.clean.dedup.recal.bam.recalibrated.snp.annotated.vcf.gz.snpEff.summary.csv
@@ -75,8 +74,7 @@ analyzed variants, genes.txt file is a tab separated file having counts of
 number of variants affecting each transcript and gene.
 
 --Sample report
-Report summarizing information about the analysis, alignment and variants, a
-html and pdf version.
+Report summarizing information about the analysis, alignment and variants.
 
 ProjectID -> SampleN -> 01-QC
 --------------------------------------------------------------------
