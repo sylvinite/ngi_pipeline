@@ -123,6 +123,8 @@ def update_charon_with_local_jobs_status(quiet=False, config=None, config_file_p
                                                     "02_preliminary_alignment_qc")
                         update_coverage_for_sample_seqruns(project_id, sample_id,
                                                            piper_qc_dir)
+                        update_duplication_rates_for_sample(project_id, sample_id,
+                                                           piper_qc_dir)
                     elif workflow == "genotype_concordance":
                         piper_gt_dir = os.path.join(project_base_path, "ANALYSIS",
                                                     project_id, "piper_ngi",
@@ -290,6 +292,38 @@ def update_gtc_for_sample(project_id, sample_id, piper_gtc_path, config=None, co
     charon_session.sample_update(projectid=project_id, sampleid=sample_id,
                                  genotype_concordance=concordance_value,
                                  **status_dict)
+
+@with_ngi_config
+def update_duplication_rates_for_sample(project_id, sample_id, piper_qc_dir,
+                                       config=None, config_file_path=None):
+    """Update Charon with the duplication rates for said sample.
+
+    :param str piper_qc_dir: The path to the Piper qc dir (02_preliminary_alignment_qc at time of writing)
+    :param str sample_id: The sample name (e.g. P1170_105)
+
+    """
+    
+    file_path=os.join(piper_qc_dir,'05_processed_alignments', "{}.metrics".format(sample_id))
+    if os.path.isfile(file_path):
+        dup_pc=parse_deduplication_percentage()
+        try:
+            charon_session.sample_update(projectid=project_id,
+                                         sampleid=sample_id,
+                                         duplication_pc=dup_pc)
+        except CharonError as e:
+            error_text = ('Could not update project/sample/"{}" '
+                          'in Charon with mean autosomal coverage '
+                          '"{}": {}'.format("{}/{}".format(project_id, sampleid, ma_coverage, e))
+            LOG.error(error_text)
+            if not config.get('quiet'):
+                mail_analysis(project_name=project_id, sample_name=sample_id,
+                              engine_name="piper_ngi", level="ERROR", info_text=error_text)
+
+
+    else:
+        LOG.error("Cannot find {}.metrics file for duplication rate. Continuing.".format(sample_id))
+
+
 
 @with_ngi_config
 def update_coverage_for_sample_seqruns(project_id, sample_id, piper_qc_dir,
@@ -519,3 +553,6 @@ def get_exit_code(workflow_name, project_base_path, project_name, project_id,
         raise ValueError('Could not determine job exit status: not an integer ("{}")'.format(e))
     else:
         return None
+
+@with_ngi_config
+def run_multiqc(project_id,config=None, config_file_path=None):
