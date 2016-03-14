@@ -15,16 +15,20 @@ def mail(recipient, subject, text, origin="ngi_pipeline"):
     s.quit()
 
 @with_ngi_config
-def mail_ngi_info(se, message, config=None, config_file_path=None ):
+def mail_ngi_log_message(se, log_level, message, config=None, config_file_path=None ):
+    """Wrapper around mail_analysis reporting log messages by mail. 
+    It is reading recipient from the config object, and the project characteristics from the se a.k.a. "sample environment" object. 
+    See SampleEnv for details about sample environment.
+    """
     recipient = config.get('mail')['recipient']
     mail_analysis(  project_name = se.project_name,
                     sample_name = se.sample_id,
                     engine_name = se.engine,
-                    level = "INFO",
+                    level = log_level,
                     info_text = message,
                     workflow = se.workflow,
                     recipient = recipient) 
-    
+
 
 def mail_analysis(project_name, sample_name=None, engine_name=None,
                   level="ERROR", info_text=None, workflow=None,

@@ -9,7 +9,7 @@ import time
 from ngi_pipeline.conductor.classes import NGIProject
 from ngi_pipeline.database.classes import CharonSession, CharonError
 from ngi_pipeline.log.loggers import minimal_logger
-from ngi_pipeline.utils.communication import mail_analysis, mail_ngi_info
+from ngi_pipeline.utils.communication import mail_analysis, mail_ngi_log_message
 from ngi_pipeline.engines.piper_ngi.database import SampleAnalysis, get_db_session
 from ngi_pipeline.engines.piper_ngi.utils import create_exit_code_file_path, \
                                                  create_project_obj_from_analysis_log, \
@@ -71,7 +71,6 @@ def update_charon_with_local_jobs_status(quiet=False, config=None, config_file_p
             # instead of passing all these variable one-by-one, all by different permutation,
             # pass this object only, and use those parts that are needed in the actual function there
             sample_env = SampleEnv(workflow, project_name, project_id, project_base_path, sample_id, engine, slurm_job_id,process_id)
-            mail_ngi_info(sample_env,"Eljen II Rakoczi Feco")
             piper_exit_code = get_exit_code(workflow_name=workflow,
                                             project_base_path=project_base_path,
                                             project_name=project_name,
@@ -98,13 +97,7 @@ def update_charon_with_local_jobs_status(quiet=False, config=None, config_file_p
                                                                    e))
                 LOG.error(error_text)
                 if not config.get('quiet'):
-                    mail_analysis(project_name=project_name,
-                                sample_name=sample_id,
-                                engine_name=engine,
-                                level="ERROR",
-                                info_text=error_text,
-                                workflow=workflow,
-                                recipient=config.recipient)
+                    mail_ngi_log_message(sample_env,"ERROR",error_text)
                 continue
             try:
                 if piper_exit_code == 0:
@@ -123,13 +116,7 @@ def update_charon_with_local_jobs_status(quiet=False, config=None, config_file_p
                                                                         set_status))
                     LOG.info(info_text)
                     if not config.get('quiet'):
-                        mail_analysis(project_name=project_name,
-                                    sample_name=sample_id,
-                                    engine_name=engine,
-                                    level="INFO",
-                                    info_text=info_text,
-                                    workfow=workflow,
-                                    recipient=config.recipient)
+                        mail_ngi_log_message(sample_env,"INFO",info_text)
                     charon_session.sample_update(projectid=project_id,
                                                  sampleid=sample_id,
                                                  **{sample_status_field: set_status})
@@ -165,13 +152,7 @@ def update_charon_with_local_jobs_status(quiet=False, config=None, config_file_p
                                   '{} in Charon.'.format(workflow, label, set_status))
                     LOG.error(error_text)
                     if not config.get('quiet'):
-                        mail_analysis(project_name=project_name,
-                                    sample_name=sample_id,
-                                    engine_name=engine,
-                                    level="ERROR",
-                                    info_text=error_text,
-                                    workflow=workflow,
-                                    recipient=config.recipient)
+                        mail_ngi_log_message(sample_env,"ERROR",error_text)
                     if workflow == "merge_process_variantcall":
                         sample_status_field = "analysis_status"
                         seqrun_status_field = "alignment_status"
@@ -214,12 +195,7 @@ def update_charon_with_local_jobs_status(quiet=False, config=None, config_file_p
                                            '"{}")'.format(slurm_job_id, exit_code_file_path))
                         LOG.error(error_text)
                         if not config.get('quiet'):
-                            mail_analysis(project_name=project_name,
-                                        sample_name=sample_id,
-                                        engine_name=engine, level="ERROR",
-                                        info_text=error_text,
-                                        workflow=workflow,
-                                        recipient=config.recipient)
+                            mail_ngi_log_message(sample_env,"ERROR",error_text)
                         if workflow == "merge_process_variantcall":
                             sample_status_field = "analysis_status"
                             seqrun_status_field = "alignment_status"
@@ -266,25 +242,19 @@ def update_charon_with_local_jobs_status(quiet=False, config=None, config_file_p
                                           'for {}: {}'.format(label, e))
                             LOG.error(error_text)
                             if not config.get('quiet'):
-                                mail_analysis(project_name=project_name, sample_name=sample_id,
-                                              engine_name=engine, level="ERROR",
-                                              workflow=workflow, info_text=error_text)
+                                mail_ngi_log_message(sample_env,"ERROR",error_text)
             except CharonError as e:
                 error_text = ('Unable to update Charon for {}: '
                               '{}'.format(label, e))
                 LOG.error(error_text)
                 if not config.get('quiet'):
-                    mail_analysis(project_name=project_name, sample_name=sample_id,
-                                  engine_name=engine, level="ERROR",
-                                  workflow=workflow, info_text=error_text)
+                    mail_ngi_log_message(sample_env,"ERROR",error_text)
             except OSError as e:
                 error_text = ('Permissions error when trying to update Charon '
                               '"{}" status for "{}": {}'.format(workflow, label, e))
                 LOG.error(error_text)
                 if not config.get('quiet'):
-                    mail_analysis(project_name=project_name, sample_name=sample_id,
-                                  engine_name=engine, level="ERROR",
-                                  workflow=workflow, info_text=error_text)
+                    mail_ngi_log_message(sample_env,"ERROR",error_text)
         session.commit()
 
 
