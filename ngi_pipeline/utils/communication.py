@@ -3,6 +3,7 @@ import traceback
 
 from email.mime.text import MIMEText
 
+from ngi_pipeline.utils.classes import with_ngi_config
 
 def mail(recipient, subject, text, origin="ngi_pipeline"):
     msg = MIMEText(text)
@@ -13,9 +14,21 @@ def mail(recipient, subject, text, origin="ngi_pipeline"):
     s.sendmail('funk_002@nestor1.uppmax.uu.se', recipient, msg.as_string()) 
     s.quit()
 
+@with_ngi_config
+def mail_ngi_info(se, message, config=None, config_file_path=None ):
+    recipient = config.get('mail')['recipient']
+    mail_analysis(  project_name = se.project_name,
+                    sample_name = se.sample_id,
+                    engine_name = se.engine,
+                    level = "INFO",
+                    info_text = message,
+                    workflow = se.workflow,
+                    recipient = recipient) 
+    
+
 def mail_analysis(project_name, sample_name=None, engine_name=None,
                   level="ERROR", info_text=None, workflow=None,
-                  recipient="ngi_pipeline_operators@scilifelab.se",
+                  recipient="szilveszter.juhos@scilifelab.se",
                   subject=None, origin="ngi_pipeline"):
     file_name, line_no = traceback.extract_stack(limit=2)[-2][:2]
     if level.upper() == "WARN":

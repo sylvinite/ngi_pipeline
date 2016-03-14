@@ -9,7 +9,7 @@ import time
 from ngi_pipeline.conductor.classes import NGIProject
 from ngi_pipeline.database.classes import CharonSession, CharonError
 from ngi_pipeline.log.loggers import minimal_logger
-from ngi_pipeline.utils.communication import mail_analysis
+from ngi_pipeline.utils.communication import mail_analysis, mail_ngi_info
 from ngi_pipeline.engines.piper_ngi.database import SampleAnalysis, get_db_session
 from ngi_pipeline.engines.piper_ngi.utils import create_exit_code_file_path, \
                                                  create_project_obj_from_analysis_log, \
@@ -27,10 +27,31 @@ from ngi_pipeline.utils.classes import with_ngi_config
 
 LOG = minimal_logger(__name__)
 
+class SampleEnv:
+    workflow = None
+    project_name = None
+    project_id = None
+    project_base_path = None
+    sample_id = None
+    engine = None
+    slurm_job_id = None
+    process_id = None
+
+    def __init__(self, workflow, project_name, project_id, project_base_path, sample_id, engine, slurm_job_id, process_id):
+        self.workflow = workflow
+        self.project_name = project_name
+        self.project_id = project_id
+        self.project_base_path = project_base_path
+        self.sample_id = sample_id
+        self.engine = engine
+        self.slurm_job_id = slurm_job_id
+        self.process_id = project_id
+
 @with_ngi_config
 def update_charon_with_local_jobs_status(quiet=False, config=None, config_file_path=None):
     """Check the status of all locally-tracked jobs and update Charon accordingly.
     """
+
     if quiet and not config.get("quiet"):
         config['quiet'] = True
     LOG.info("Updating Charon with the status of all locally-tracked jobs...")
@@ -47,6 +68,10 @@ def update_charon_with_local_jobs_status(quiet=False, config=None, config_file_p
             # Only one of these id fields (slurm, pid) will have a value
             slurm_job_id = sample_entry.slurm_job_id
             process_id = sample_entry.process_id
+            # instead of passing all these variable one-by-one, all by different permutation,
+            # pass this object only, and use those parts that are needed in the actual function there
+            sample_env = SampleEnv(workflow, project_name, project_id, project_base_path, sample_id, engine, slurm_job_id,process_id)
+            mail_ngi_info(sample_env,"Eljen II Rakoczi Feco")
             piper_exit_code = get_exit_code(workflow_name=workflow,
                                             project_base_path=project_base_path,
                                             project_name=project_name,
@@ -74,11 +99,12 @@ def update_charon_with_local_jobs_status(quiet=False, config=None, config_file_p
                 LOG.error(error_text)
                 if not config.get('quiet'):
                     mail_analysis(project_name=project_name,
-                                  sample_name=sample_id,
-                                  engine_name=engine,
-                                  level="ERROR",
-                                  info_text=error_text,
-                                  workflow=workflow)
+                                sample_name=sample_id,
+                                engine_name=engine,
+                                level="ERROR",
+                                info_text=error_text,
+                                workflow=workflow,
+                                recipient=config.recipient)
                 continue
             try:
                 if piper_exit_code == 0:
@@ -98,11 +124,12 @@ def update_charon_with_local_jobs_status(quiet=False, config=None, config_file_p
                     LOG.info(info_text)
                     if not config.get('quiet'):
                         mail_analysis(project_name=project_name,
-                                      sample_name=sample_id,
-                                      engine_name=engine,
-                                      level="INFO",
-                                      info_text=info_text,
-                                      workflow=workflow)
+                                    sample_name=sample_id,
+                                    engine_name=engine,
+                                    level="INFO",
+                                    info_text=info_text,
+                                    workfow=workflow,
+                                    recipient=config.recipient)
                     charon_session.sample_update(projectid=project_id,
                                                  sampleid=sample_id,
                                                  **{sample_status_field: set_status})
@@ -139,11 +166,12 @@ def update_charon_with_local_jobs_status(quiet=False, config=None, config_file_p
                     LOG.error(error_text)
                     if not config.get('quiet'):
                         mail_analysis(project_name=project_name,
-                                      sample_name=sample_id,
-                                      engine_name=engine,
-                                      level="ERROR",
-                                      info_text=error_text,
-                                      workflow=workflow)
+                                    sample_name=sample_id,
+                                    engine_name=engine,
+                                    level="ERROR",
+                                    info_text=error_text,
+                                    workflow=workflow,
+                                    recipient=config.recipient)
                     if workflow == "merge_process_variantcall":
                         sample_status_field = "analysis_status"
                         seqrun_status_field = "alignment_status"
@@ -187,10 +215,11 @@ def update_charon_with_local_jobs_status(quiet=False, config=None, config_file_p
                         LOG.error(error_text)
                         if not config.get('quiet'):
                             mail_analysis(project_name=project_name,
-                                          sample_name=sample_id,
-                                          engine_name=engine, level="ERROR",
-                                          info_text=error_text,
-                                          workflow=workflow)
+                                        sample_name=sample_id,
+                                        engine_name=engine, level="ERROR",
+                                        info_text=error_text,
+                                        workflow=workflow,
+                                        recipient=config.recipient)
                         if workflow == "merge_process_variantcall":
                             sample_status_field = "analysis_status"
                             seqrun_status_field = "alignment_status"
@@ -496,6 +525,8 @@ def kill_running_sample_analysis(workflow_subtask, project_id, sample_id):
             LOG.info('...sample run "{}" is not currently under analysis.'.format(sample_run_name))
     return True
 
+def mail_info():
+    print("bakker")
 
 def get_exit_code(workflow_name, project_base_path, project_name, project_id,
                   sample_id, libprep_id=None, seqrun_id=None):

@@ -91,3 +91,7 @@ paths: # Hard code paths here if you are that kind of a person
 
     #log: /proj/a2010002/data/log
     #store_dir: /proj/a2010002/archive
+mail:
+    recipient: szilveszter.juhos@scilifelab.se
+
+
