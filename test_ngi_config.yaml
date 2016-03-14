@@ -1,0 +1,93 @@
+# This file should be placed under $HOME/.ngiconfig/ngi_config.yaml
+# or its path exported as the environment variable NGI_CONFIG
+
+database:
+    # SQLite file to know where things are happening (state machine to back up Charon for network failure)
+    # -usually it is at /proj/a2014205/ngi_resources/record_tracking_database_nestor.sql
+    # -if you are trying to work without one, it is going to create an empty schema
+    record_tracking_db_path: /home/szilva/glob/private/sb/tracking/record_tracking_database.sql
+
+environment:
+    project_id: a2014205
+    ngi_scripts_dir: /proj/a2014205/software/ngi_pipeline/scripts
+    conda_env: NGI
+slurm:
+    extra_params:
+        "--qos": "seqver"
+piper:
+    # Also can be set as an environmental variable $PIPER_QSCRIPTS_DIR
+    path_to_piper_qscripts: /proj/a2010002/software/piper/qscripts
+    sample:
+        required_autosomal_coverage: 28.4
+    load_modules:
+        - java/sun_jdk1.7.0_25
+        - R/2.15.0
+
+supported_genomes:
+    #"GRCh37": "/apus/data/uppnex/reference/Homo_sapiens/GRCh37/concat/Homo_sapiens.GRCh37.57.dna.concat.fa"
+    "GRCh37": /proj/a2014205/piper_references/gatk_bundle/2.8/b37/human_g1k_v37.fasta
+    "GRCm38": "/apus/data/uppnex/reference/Mus_musculus/GRCm38/concat/Mus_musculus.GRCm38.69.dna.concat.fa"
+    "rn4": None
+    "saccer2": None
+    "dm3": None
+    "tair9": None
+    "xentro2": None
+    "ws210": None
+    "canfam3": None
+
+project:
+    INBOX: /proj/a2010002/archive
+
+analysis:
+    workflows:
+        NGI:
+            analysis_engine: ngi_pipeline.engines.piper_ngi
+        mate_pair:
+            analysis_engine: ngi_pipeline.engines.de_novo_pipeline
+        RNA:
+            analysis_engine: ngi_pipeline.engines.bcbio_ngi
+    best_practice_analysis:
+        whole_genome_reseq:
+            analysis_engine: ngi_pipeline.engines.piper_ngi
+        IGN:
+            analysis_engine: ngi_pipeline.engines.piper_ngi
+        qc:
+            analysis_engine: ngi_pipeline.engines.qc_ngi
+    top_dir: /home/szilva/glob/sb/topdir
+    sthlm_root: 
+    upps_root: 
+    base_root:
+    #top_dir: /proj/a2014205/nobackup/NGI/analysis_ready
+
+qc:
+    load_modules:
+        - bioinfo-tools
+    fastqc:
+        load_modules:
+            - FastQC
+        threads: 16
+    fastq_screen:
+        config_path: "/proj/a2014205/ngi_resources/fastq_screen.nestor.conf"
+        load_modules:
+            - bowtie2
+            - fastq_screen
+        subsample_reads: 200000
+        threads: 1
+
+logging:
+    # default log level for development
+    level: DEBUG
+    log_file: /home/szilva/dev/ngi_pipeline/ngi_pipeline.log
+
+
+paths: # Hard code paths here if you are that kind of a person
+    binaries:
+        #bowtie2:
+        #fastqc:
+        #fastq_screen:
+    references:
+
+
+
+    #log: /proj/a2010002/data/log
+    #store_dir: /proj/a2010002/archive
