@@ -40,8 +40,10 @@ def mail_ngi_log_message(se, log_level, message, config=None, config_file_path=N
 
 def mail_analysis(project_name, sample_name=None, engine_name=None,
                   level="ERROR", info_text=None, workflow=None,
-                  recipient="szilveszter.juhos@scilifelab.se",
+                  recipient="ngi_pipeline_operators@scilifelab.se",
                   subject=None, origin="ngi_pipeline"):
+
+
     file_name, line_no = traceback.extract_stack(limit=2)[-2][:2]
     if level.upper() == "WARN":
         text = "This analysis has produced a warning:"
@@ -72,4 +74,8 @@ def mail_analysis(project_name, sample_name=None, engine_name=None,
     text += "\nLine: {}".format(line_no)
     if info_text:
         text = text + "\n\nAdditional information:\n\n{}\n".format(info_text)
-    mail(recipient=recipient, subject=subject, text=text, origin=origin)
+    print recipient
+    print origin
+    print subject
+    print text
+#    mail(recipient=recipient, subject=subject, text=text, origin=origin)
