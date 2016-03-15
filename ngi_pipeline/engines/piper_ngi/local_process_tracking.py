@@ -496,9 +496,6 @@ def kill_running_sample_analysis(workflow_subtask, project_id, sample_id):
             LOG.info('...sample run "{}" is not currently under analysis.'.format(sample_run_name))
     return True
 
-def mail_info():
-    print("bakker")
-
 def get_exit_code(workflow_name, project_base_path, project_name, project_id,
                   sample_id, libprep_id=None, seqrun_id=None):
     exit_code_file_path = create_exit_code_file_path(workflow_name,
