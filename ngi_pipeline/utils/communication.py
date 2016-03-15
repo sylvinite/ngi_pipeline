@@ -20,7 +20,15 @@ def mail_ngi_log_message(se, log_level, message, config=None, config_file_path=N
     It is reading recipient from the config object, and the project characteristics from the se a.k.a. "sample environment" object. 
     See SampleEnv for details about sample environment.
     """
-    recipient = config.get('mail')['recipient']
+    # we are expecting the mail recipient to be configured, but have to default to 
+    # "ngi_pipeline_operators@scilifelab.se" if it is missing
+    # Actually I would be happier have it as a compulsory config item, since we are
+    # planning deploy this to other places where this email is not available or not appropiate
+    try:
+        recipient = config.get('mail')['recipient']
+    except TypeError:
+        recipient = "ngi_pipeline_operators@scilifelab.se"
+
     mail_analysis(  project_name = se.project_name,
                     sample_name = se.sample_id,
                     engine_name = se.engine,
