@@ -71,7 +71,7 @@ def update_charon_with_local_jobs_status(quiet=False, config=None, config_file_p
             # instead of passing all these variable one-by-one, all by different permutation,
             # pass this object only, and use those parts that are needed in the actual function there
             sample_env = SampleEnv(workflow, project_name, project_id, project_base_path, sample_id, engine, slurm_job_id,process_id)
-            mail_ngi_log_message(sample_env,"INFO","Test message, ignore")
+            # mail_ngi_log_message(sample_env,"INFO","Test message, ignore")
             piper_exit_code = get_exit_code(workflow_name=workflow,
                                             project_base_path=project_base_path,
                                             project_name=project_name,
