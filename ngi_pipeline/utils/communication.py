@@ -74,8 +74,4 @@ def mail_analysis(project_name, sample_name=None, engine_name=None,
     text += "\nLine: {}".format(line_no)
     if info_text:
         text = text + "\n\nAdditional information:\n\n{}\n".format(info_text)
-    print recipient
-    print origin
-    print subject
-    print text
-#    mail(recipient=recipient, subject=subject, text=text, origin=origin)
+    mail(recipient=recipient, subject=subject, text=text, origin=origin)
