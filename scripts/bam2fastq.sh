@@ -59,14 +59,14 @@ fi
 # 2. run RevertSam to restore original qualities (if available)
 # 3. run SamToFastq to produce paired fastq files
 samtools bamshuf -Ou "${IN}" "$SNIC_TMP/shuf.tmp" | \
-java -Xmx12G -jar "${PICARD_HOME}"/picard.jar RevertSam \
+java -Xmx15G -jar "${PICARD_HOME}"/picard.jar RevertSam \
   INPUT=/dev/stdin \
   OUTPUT=/dev/stdout \
   REMOVE_ALIGNMENT_INFORMATION=true \
   REMOVE_DUPLICATE_INFORMATION=true \
   SORT_ORDER=unsorted \
   RESTORE_ORIGINAL_QUALITIES=true \
-|java -Xmx12G -jar "${PICARD_HOME}"/picard.jar SamToFastq \
+|java -Xmx15G -jar "${PICARD_HOME}"/picard.jar SamToFastq \
   INPUT=/dev/stdin \
   F=>(gzip -c > "$SNIC_TMP/${F1}") \
   F2=>(gzip -c > "$SNIC_TMP/${F2}") \
