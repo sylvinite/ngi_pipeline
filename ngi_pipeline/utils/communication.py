@@ -4,6 +4,9 @@ import traceback
 from email.mime.text import MIMEText
 
 from ngi_pipeline.utils.classes import with_ngi_config
+from ngi_pipeline.log.loggers import minimal_logger
+
+LOG = minimal_logger(__name__)
 
 def mail(recipient, subject, text, origin="ngi_pipeline"):
     msg = MIMEText(text)
@@ -15,34 +18,18 @@ def mail(recipient, subject, text, origin="ngi_pipeline"):
     s.quit()
 
 @with_ngi_config
-def mail_ngi_log_message(se, log_level, message, config=None, config_file_path=None ):
-    """Wrapper around mail_analysis reporting log messages by mail. 
-    It is reading recipient from the config object, and the project characteristics from the se a.k.a. "sample environment" object. 
-    See SampleEnv for details about sample environment.
-    """
-    # we are expecting the mail recipient to be configured, but have to default to 
-    # "ngi_pipeline_operators@scilifelab.se" if it is missing
-    # Actually I would be happier have it as a compulsory config item, since we are
-    # planning deploy this to other places where this email is not available or not appropiate
-    try:
-        recipient = config.get('mail')['recipient']
-    except TypeError:
-        recipient = "ngi_pipeline_operators@scilifelab.se"
-
-    mail_analysis(  project_name = se.project_name,
-                    sample_name = se.sample_id,
-                    engine_name = se.engine,
-                    level = log_level,
-                    info_text = message,
-                    workflow = se.workflow,
-                    recipient = recipient) 
-
-
 def mail_analysis(project_name, sample_name=None, engine_name=None,
                   level="ERROR", info_text=None, workflow=None,
                   recipient="ngi_pipeline_operators@scilifelab.se",
-                  subject=None, origin="ngi_pipeline"):
+                  subject=None, origin="ngi_pipeline",
+                  config=None, config_file_path=None ):
 
+    # check for mail recipient among the config values
+    # it is OK, if it is not configured, we are defaulting to ngi_pipeline_operators@scilifelab.se
+    try:
+        recipient = config.get('mail')['recipient']
+    except TypeError:
+        LOG.info("no mail recipient is defined in config file " + config_file_path + "; defaulting to " + recipient)
 
     file_name, line_no = traceback.extract_stack(limit=2)[-2][:2]
     if level.upper() == "WARN":
