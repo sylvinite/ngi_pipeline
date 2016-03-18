@@ -9,7 +9,7 @@ import time
 from ngi_pipeline.conductor.classes import NGIProject
 from ngi_pipeline.database.classes import CharonSession, CharonError
 from ngi_pipeline.log.loggers import minimal_logger
-from ngi_pipeline.utils.communication import mail_analysis, mail_ngi_log_message
+from ngi_pipeline.utils.communication import mail_analysis
 from ngi_pipeline.engines.piper_ngi.database import SampleAnalysis, get_db_session
 from ngi_pipeline.engines.piper_ngi.utils import create_exit_code_file_path, \
                                                  create_project_obj_from_analysis_log, \
@@ -26,26 +26,6 @@ from ngi_pipeline.utils.classes import with_ngi_config
 
 
 LOG = minimal_logger(__name__)
-
-class SampleEnv:
-    workflow = None
-    project_name = None
-    project_id = None
-    project_base_path = None
-    sample_id = None
-    engine = None
-    slurm_job_id = None
-    process_id = None
-
-    def __init__(self, workflow, project_name, project_id, project_base_path, sample_id, engine, slurm_job_id, process_id):
-        self.workflow = workflow
-        self.project_name = project_name
-        self.project_id = project_id
-        self.project_base_path = project_base_path
-        self.sample_id = sample_id
-        self.engine = engine
-        self.slurm_job_id = slurm_job_id
-        self.process_id = project_id
 
 @with_ngi_config
 def update_charon_with_local_jobs_status(quiet=False, config=None, config_file_path=None):
@@ -68,10 +48,13 @@ def update_charon_with_local_jobs_status(quiet=False, config=None, config_file_p
             # Only one of these id fields (slurm, pid) will have a value
             slurm_job_id = sample_entry.slurm_job_id
             process_id = sample_entry.process_id
-            # instead of passing all these variable one-by-one, all by different permutation,
-            # pass this object only, and use those parts that are needed in the actual function there
-            sample_env = SampleEnv(workflow, project_name, project_id, project_base_path, sample_id, engine, slurm_job_id,process_id)
-            # mail_ngi_log_message(sample_env,"INFO","Test message, ignore")
+            #mail_analysis(sample_env,"INFO","Test message, ignore")
+            mail_analysis(project_name=project_name,
+                         sample_name=sample_id,
+                         engine_name=engine,
+                         level="INFO",
+                         info_text=info_text,
+                         workflow=workflow)
             piper_exit_code = get_exit_code(workflow_name=workflow,
                                             project_base_path=project_base_path,
                                             project_name=project_name,
@@ -98,7 +81,12 @@ def update_charon_with_local_jobs_status(quiet=False, config=None, config_file_p
                                                                    e))
                 LOG.error(error_text)
                 if not config.get('quiet'):
-                    mail_ngi_log_message(sample_env,"ERROR",error_text)
+                    mail_analysis(project_name=project_name,
+                                  sample_name=sample_id,
+                                  engine_name=engine,
+                                  level="ERROR",
+                                  info_text=error_text,
+                                  workflow=workflow)
                 continue
             try:
                 if piper_exit_code == 0:
@@ -117,7 +105,12 @@ def update_charon_with_local_jobs_status(quiet=False, config=None, config_file_p
                                                                         set_status))
                     LOG.info(info_text)
                     if not config.get('quiet'):
-                        mail_ngi_log_message(sample_env,"INFO",info_text)
+                        mail_analysis(project_name=project_name,
+-                                      sample_name=sample_id,
+-                                      engine_name=engine,
+-                                      level="INFO",
+-                                      info_text=info_text,
+-                                      workflow=workflow)
                     charon_session.sample_update(projectid=project_id,
                                                  sampleid=sample_id,
                                                  **{sample_status_field: set_status})
@@ -136,7 +129,7 @@ def update_charon_with_local_jobs_status(quiet=False, config=None, config_file_p
                         piper_qc_dir = os.path.join(project_base_path, "ANALYSIS",
                                                     project_id, "piper_ngi",
                                                     "02_preliminary_alignment_qc")
-                        update_coverage_for_sample_seqruns(project_id, sample_id,
+                        update_coverage_for_sample_seqruns(sample_env,project_id, sample_id,
                                                            piper_qc_dir)
                     elif workflow == "genotype_concordance":
                         piper_gt_dir = os.path.join(project_base_path, "ANALYSIS",
@@ -153,7 +146,12 @@ def update_charon_with_local_jobs_status(quiet=False, config=None, config_file_p
                                   '{} in Charon.'.format(workflow, label, set_status))
                     LOG.error(error_text)
                     if not config.get('quiet'):
-                        mail_ngi_log_message(sample_env,"ERROR",error_text)
+                        mail_analysis(project_name=project_name,
+                                      sample_name=sample_id,
+                                      engine_name=engine,
+                                      level="ERROR",
+                                      info_text=error_text,
+                                      workflow=workflow)
                     if workflow == "merge_process_variantcall":
                         sample_status_field = "analysis_status"
                         seqrun_status_field = "alignment_status"
@@ -196,7 +194,11 @@ def update_charon_with_local_jobs_status(quiet=False, config=None, config_file_p
                                            '"{}")'.format(slurm_job_id, exit_code_file_path))
                         LOG.error(error_text)
                         if not config.get('quiet'):
-                            mail_ngi_log_message(sample_env,"ERROR",error_text)
+                            mail_analysis(project_name=project_name,
+                                          sample_name=sample_id,
+                                          engine_name=engine, level="ERROR",
+                                          info_text=error_text,
+                                          workflow=workflow)
                         if workflow == "merge_process_variantcall":
                             sample_status_field = "analysis_status"
                             seqrun_status_field = "alignment_status"
@@ -243,19 +245,34 @@ def update_charon_with_local_jobs_status(quiet=False, config=None, config_file_p
                                           'for {}: {}'.format(label, e))
                             LOG.error(error_text)
                             if not config.get('quiet'):
-                                mail_ngi_log_message(sample_env,"ERROR",error_text)
+                                mail_analysis(project_name=project_name, 
+                                              sample_name=sample_id,
+                                              engine_name=engine, 
+                                              level="ERROR",
+                                              workflow=workflow, 
+                                              info_text=error_text)
             except CharonError as e:
                 error_text = ('Unable to update Charon for {}: '
                               '{}'.format(label, e))
                 LOG.error(error_text)
                 if not config.get('quiet'):
-                    mail_ngi_log_message(sample_env,"ERROR",error_text)
+                    mail_analysis(project_name=project_name, 
+                                  sample_name=sample_id,
+                                  engine_name=engine, 
+                                  level="ERROR", 
+                                  workflow=workflow, 
+                                  info_text=error_text)
             except OSError as e:
                 error_text = ('Permissions error when trying to update Charon '
                               '"{}" status for "{}": {}'.format(workflow, label, e))
                 LOG.error(error_text)
                 if not config.get('quiet'):
-                    mail_ngi_log_message(sample_env,"ERROR",error_text)
+                    mail_analysis(project_name=project_name, 
+                                  sample_name=sample_id,
+                                  engine_name=engine, 
+                                  level="ERROR", 
+                                  workflow=workflow, 
+                                  info_text=error_text)
         session.commit()
 
 
@@ -292,8 +309,7 @@ def update_gtc_for_sample(project_id, sample_id, piper_gtc_path, config=None, co
                                  **status_dict)
 
 @with_ngi_config
-def update_coverage_for_sample_seqruns(project_id, sample_id, piper_qc_dir,
-                                       config=None, config_file_path=None):
+def update_coverage_for_sample_seqruns(se, piper_qc_dir, config=None, config_file_path=None):
     """Find all the valid seqruns for a particular sample, parse their
     qualimap output files, and update Charon with the mean autosomal
     coverage for each.
@@ -304,13 +320,13 @@ def update_coverage_for_sample_seqruns(project_id, sample_id, piper_qc_dir,
     :raises OSError: If the qc path specified is missing or otherwise inaccessible
     :raises ValueError: If arguments are incorrect
     """
-    seqruns_by_libprep = get_finished_seqruns_for_sample(project_id, sample_id)
+    seqruns_by_libprep = get_finished_seqruns_for_sample(se.project_id, se.sample_id)
 
     charon_session = CharonSession()
     for libprep_id, seqruns in seqruns_by_libprep.iteritems():
         for seqrun_id in seqruns:
-            label = "{}/{}/{}/{}".format(project_id, sample_id, libprep_id, seqrun_id)
-            ma_coverage = parse_mean_coverage_from_qualimap(piper_qc_dir, sample_id, seqrun_id)
+            label = "{}/{}/{}/{}".format(se.project_id, se.sample_id, libprep_id, seqrun_id)
+            ma_coverage = parse_mean_coverage_from_qualimap(piper_qc_dir, se.sample_id, seqrun_id)
             LOG.info('Updating project/sample/libprep/seqrun "{}" in '
                      'Charon with mean autosomal coverage "{}"'.format(label, ma_coverage))
             try:
