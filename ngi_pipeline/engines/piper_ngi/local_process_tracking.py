@@ -47,13 +47,6 @@ def update_charon_with_local_jobs_status(quiet=False, config=None, config_file_p
             # Only one of these id fields (slurm, pid) will have a value
             slurm_job_id = sample_entry.slurm_job_id
             process_id = sample_entry.process_id
-            # test mail for now
-            mail_analysis(project_name=project_name,
-                                  sample_name=sample_id,
-                                  engine_name=engine,
-                                  level="INFO",
-                                  info_text="Test mail ignore",
-                                  workflow=workflow)
             piper_exit_code = get_exit_code(workflow_name=workflow,
                                             project_base_path=project_base_path,
                                             project_name=project_name,
