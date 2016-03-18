@@ -31,7 +31,6 @@ LOG = minimal_logger(__name__)
 def update_charon_with_local_jobs_status(quiet=False, config=None, config_file_path=None):
     """Check the status of all locally-tracked jobs and update Charon accordingly.
     """
-
     if quiet and not config.get("quiet"):
         config['quiet'] = True
     LOG.info("Updating Charon with the status of all locally-tracked jobs...")
@@ -48,13 +47,13 @@ def update_charon_with_local_jobs_status(quiet=False, config=None, config_file_p
             # Only one of these id fields (slurm, pid) will have a value
             slurm_job_id = sample_entry.slurm_job_id
             process_id = sample_entry.process_id
-            #mail_analysis(sample_env,"INFO","Test message, ignore")
+            # test mail for now
             mail_analysis(project_name=project_name,
-                         sample_name=sample_id,
-                         engine_name=engine,
-                         level="INFO",
-                         info_text=info_text,
-                         workflow=workflow)
+                                  sample_name=sample_id,
+                                  engine_name=engine,
+                                  level="INFO",
+                                  info_text="Test mail ignore",
+                                  workflow=workflow)
             piper_exit_code = get_exit_code(workflow_name=workflow,
                                             project_base_path=project_base_path,
                                             project_name=project_name,
@@ -106,11 +105,11 @@ def update_charon_with_local_jobs_status(quiet=False, config=None, config_file_p
                     LOG.info(info_text)
                     if not config.get('quiet'):
                         mail_analysis(project_name=project_name,
--                                      sample_name=sample_id,
--                                      engine_name=engine,
--                                      level="INFO",
--                                      info_text=info_text,
--                                      workflow=workflow)
+                                      sample_name=sample_id,
+                                      engine_name=engine,
+                                      level="INFO",
+                                      info_text=info_text,
+                                      workflow=workflow)
                     charon_session.sample_update(projectid=project_id,
                                                  sampleid=sample_id,
                                                  **{sample_status_field: set_status})
@@ -129,7 +128,7 @@ def update_charon_with_local_jobs_status(quiet=False, config=None, config_file_p
                         piper_qc_dir = os.path.join(project_base_path, "ANALYSIS",
                                                     project_id, "piper_ngi",
                                                     "02_preliminary_alignment_qc")
-                        update_coverage_for_sample_seqruns(sample_env,project_id, sample_id,
+                        update_coverage_for_sample_seqruns(project_id, sample_id,
                                                            piper_qc_dir)
                     elif workflow == "genotype_concordance":
                         piper_gt_dir = os.path.join(project_base_path, "ANALYSIS",
@@ -245,34 +244,25 @@ def update_charon_with_local_jobs_status(quiet=False, config=None, config_file_p
                                           'for {}: {}'.format(label, e))
                             LOG.error(error_text)
                             if not config.get('quiet'):
-                                mail_analysis(project_name=project_name, 
-                                              sample_name=sample_id,
-                                              engine_name=engine, 
-                                              level="ERROR",
-                                              workflow=workflow, 
-                                              info_text=error_text)
+                                mail_analysis(project_name=project_name, sample_name=sample_id,
+                                              engine_name=engine, level="ERROR",
+                                              workflow=workflow, info_text=error_text)
             except CharonError as e:
                 error_text = ('Unable to update Charon for {}: '
                               '{}'.format(label, e))
                 LOG.error(error_text)
                 if not config.get('quiet'):
-                    mail_analysis(project_name=project_name, 
-                                  sample_name=sample_id,
-                                  engine_name=engine, 
-                                  level="ERROR", 
-                                  workflow=workflow, 
-                                  info_text=error_text)
+                    mail_analysis(project_name=project_name, sample_name=sample_id,
+                                  engine_name=engine, level="ERROR",
+                                  workflow=workflow, info_text=error_text)
             except OSError as e:
                 error_text = ('Permissions error when trying to update Charon '
                               '"{}" status for "{}": {}'.format(workflow, label, e))
                 LOG.error(error_text)
                 if not config.get('quiet'):
-                    mail_analysis(project_name=project_name, 
-                                  sample_name=sample_id,
-                                  engine_name=engine, 
-                                  level="ERROR", 
-                                  workflow=workflow, 
-                                  info_text=error_text)
+                    mail_analysis(project_name=project_name, sample_name=sample_id,
+                                  engine_name=engine, level="ERROR",
+                                  workflow=workflow, info_text=error_text)
         session.commit()
 
 
@@ -309,7 +299,8 @@ def update_gtc_for_sample(project_id, sample_id, piper_gtc_path, config=None, co
                                  **status_dict)
 
 @with_ngi_config
-def update_coverage_for_sample_seqruns(se, piper_qc_dir, config=None, config_file_path=None):
+def update_coverage_for_sample_seqruns(project_id, sample_id, piper_qc_dir,
+                                       config=None, config_file_path=None):
     """Find all the valid seqruns for a particular sample, parse their
     qualimap output files, and update Charon with the mean autosomal
     coverage for each.
@@ -320,13 +311,13 @@ def update_coverage_for_sample_seqruns(se, piper_qc_dir, config=None, config_fil
     :raises OSError: If the qc path specified is missing or otherwise inaccessible
     :raises ValueError: If arguments are incorrect
     """
-    seqruns_by_libprep = get_finished_seqruns_for_sample(se.project_id, se.sample_id)
+    seqruns_by_libprep = get_finished_seqruns_for_sample(project_id, sample_id)
 
     charon_session = CharonSession()
     for libprep_id, seqruns in seqruns_by_libprep.iteritems():
         for seqrun_id in seqruns:
-            label = "{}/{}/{}/{}".format(se.project_id, se.sample_id, libprep_id, seqrun_id)
-            ma_coverage = parse_mean_coverage_from_qualimap(piper_qc_dir, se.sample_id, seqrun_id)
+            label = "{}/{}/{}/{}".format(project_id, sample_id, libprep_id, seqrun_id)
+            ma_coverage = parse_mean_coverage_from_qualimap(piper_qc_dir, sample_id, seqrun_id)
             LOG.info('Updating project/sample/libprep/seqrun "{}" in '
                      'Charon with mean autosomal coverage "{}"'.format(label, ma_coverage))
             try:
@@ -511,6 +502,7 @@ def kill_running_sample_analysis(workflow_subtask, project_id, sample_id):
         else:
             LOG.info('...sample run "{}" is not currently under analysis.'.format(sample_run_name))
     return True
+
 
 def get_exit_code(workflow_name, project_base_path, project_name, project_id,
                   sample_id, libprep_id=None, seqrun_id=None):
