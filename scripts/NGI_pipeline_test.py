@@ -238,9 +238,9 @@ def generate_random_instrument():
 
 
 if __name__ == '__main__':
-    parser = argparse.ArgumentParser("""This script generates a test suite for NGI-pipeline and piper testing. It needs as input two fastq files (read 1 and read 2) and creates as many FC as specified. The enviorment variables need to point to cahron-dev. It runs in two modalities, create and delete. The former creates the folder structure and the corresponding charon-dev entries, the latter deletes entries in charon-dev.""")
+    parser = argparse.ArgumentParser("""This script generates a test suite for NGI-pipeline and piper testing. It needs as input two fastq files (read 1 and read 2) and creates as many FC as specified. The enviorment variables need to point to charon-dev. It runs in two modalities, create and delete. The former creates the folder structure and the corresponding charon-dev entries, the latter deletes entries in charon-dev.""")
     # general options
-    parser.add_argument('--facility', help="facility sequencing the project (stkholm, uppsala)", type=str, default="stockholm",
+    parser.add_argument('--facility', help="facility sequencing the project (stockholm, uppsala)", type=str, default="stockholm",
         choices=("stockholm", "uppsala"))
     parser.add_argument("-t", "--token", dest="token", default=os.environ.get('CHARON_API_TOKEN'),
             help="Charon API Token. Will be read from the env variable CHARON_API_TOKEN if not provided")
@@ -269,7 +269,7 @@ if __name__ == '__main__':
         sys.exit(-1)
 
     if 'dev' not in args.url:
-        print( "Something tells me that you not using charon-dev.... {}".format(args.url))
+        print( "Something tells me that you are not using charon-dev.... {}".format(args.url))
         sys.exit(-1)
 
 
