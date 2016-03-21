@@ -108,7 +108,7 @@ def create_project(project_name, fastq1, fastq2, facility, FC, symlinks, token, 
     print "PATH_TO_FC={}".format(os.getcwd())
     print "PATH_TO_DATA=<path/to/data>"
     for FC in FCs:
-        print "python $PATH_TO_NGI/scripts/ngi_pipeline_start.py organize $PATH_TO_FC/{}".format(FC)
+        print "python $PATH_TO_NGI/scripts/ngi_pipeline_start.py organize flowcell $PATH_TO_FC/{}".format(FC)
     print "python $PATH_TO_NGI/scripts/ngi_pipeline_start.py analyze $PATH_TO_DATA/DATA/{}".format(project_identifier)
 
 
