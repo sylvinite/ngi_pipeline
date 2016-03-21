@@ -305,7 +305,7 @@ def update_duplication_rates_for_sample(project_id, sample_id, piper_qc_dir,
     
     file_path=os.join(piper_qc_dir,'05_processed_alignments', "{}.metrics".format(sample_id))
     if os.path.isfile(file_path):
-        dup_pc=parse_deduplication_percentage()
+        dup_pc=parse_deduplication_percentage(file_path)
         try:
             charon_session.sample_update(projectid=project_id,
                                          sampleid=sample_id,
@@ -313,7 +313,7 @@ def update_duplication_rates_for_sample(project_id, sample_id, piper_qc_dir,
         except CharonError as e:
             error_text = ('Could not update project/sample/"{}" '
                           'in Charon with mean autosomal coverage '
-                          '"{}": {}'.format("{}/{}".format(project_id, sampleid, ma_coverage, e))
+                          '"{}": {}'.format("{}/{}".format(project_id, sampleid, ma_coverage, e)))
             LOG.error(error_text)
             if not config.get('quiet'):
                 mail_analysis(project_name=project_id, sample_name=sample_id,
@@ -554,5 +554,3 @@ def get_exit_code(workflow_name, project_base_path, project_name, project_id,
     else:
         return None
 
-@with_ngi_config
-def run_multiqc(project_id,config=None, config_file_path=None):
