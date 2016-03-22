@@ -25,7 +25,7 @@ def mail_analysis(project_name, sample_name=None, engine_name=None,
                   config=None, config_file_path=None ):
 
     # check for mail recipient among the config values
-    # it is OK, if it is not configured, we are defaulting to ngi_pipeline_operators@scilifelab.se
+    # if it is not configured, we are defaulting to ngi_pipeline_operators@scilifelab.se
     try:
         recipient = config.get('mail')['recipient']
     except TypeError:
