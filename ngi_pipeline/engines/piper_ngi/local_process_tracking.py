@@ -313,7 +313,7 @@ def update_duplication_rates_for_sample(project_id, sample_id, project_base_path
                                          sampleid=sample_id,
                                          duplication_pc=dup_pc)
             LOG.info('Updating sample "{}" in '
-                     'Charon with mean duplication_percentage"{}"'.format(sampleid, dup_pc))
+                     'Charon with mean duplication_percentage"{}"'.format(sample_id, dup_pc))
         except CharonError as e:
             error_text = ('Could not update project/sample/"{}" '
                           'in Charon with duplication rate'

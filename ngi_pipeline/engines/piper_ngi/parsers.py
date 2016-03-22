@@ -165,7 +165,7 @@ def parse_deduplication_percentage(deduplication_file):
                 try:
                     headers=f.readline()
                     values=f.readline()
-                    duplication_rate=values.split()[7]
+                    duplication_rate=values.split()[headers.split().index("PERCENT_DUPLICATION")]
                     duplication_percentage=float(duplication_rate)*100
                 except:
                     LOG.error("Unable to parse deduplication rate")
