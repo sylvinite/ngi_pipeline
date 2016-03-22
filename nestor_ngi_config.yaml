@@ -99,3 +99,10 @@ test_data:
                 flowcell: /proj/a2014205/nobackup/NGI/test_data/whole_genome_reseq/150424_ST-E00214_0031_BH2WY7CCXX
                 #project: /proj/a2014205/nobackup/NGI/test_data/whole_genome_reseq/DATA/P0000
                 vcf: /proj/a2014205/nobackup/NGI/test_data/whole_genome_reseq/vcf/
+mail:
+    # For testing you can change the default recipient here.
+    # By default (when this value is not set) mails are sent to
+    # "ngi_pipeline_operators@scilifelab.se" (see ngi_pipeline/utils/communication.py for details)
+    # If you do not want to have mails, use the "quiet" option like
+    #  scripts/print_running_jobs.py -q
+    recipient: ngi_pipeline_operators@scilifelab.se
