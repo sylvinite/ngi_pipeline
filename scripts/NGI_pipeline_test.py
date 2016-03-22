@@ -13,7 +13,7 @@ import shutil
 def main(args):
     if hasattr(args, 'project_id'):
         # we are in delete mode
-        print "deleting project {} from charon".format(args.project_id)
+        print "deleting project {} from charon-dev".format(args.project_id)
         cleanCharon(args.project_id,args.url, args.token)
         print "  Done"
     elif hasattr(args, 'project_name'):
@@ -224,7 +224,7 @@ def create_fake_FC():
 
 
 def generate_random_chars(chars=0):
-    return ''.join(random.choice('ABCEFGHILMNOPQRSTUVZ') for i in xrange(chars))
+    return ''.join([random.choice('ABCEFGHILMNOPQRSTUVZ') for i in xrange(chars)])
 
 def generate_random_numbers(numbers=0):
     return ''.join(str(random.randint(0,9)) for i in xrange(numbers))
