@@ -18,14 +18,16 @@ analysis:
             analysis_engine: ngi_pipeline.engines.qc_ngi
     # top_dir is the directory used by the pipeline as a starting point to build up the analysis run
     # see ngi_pipeline/utils/filesystem.py for details.
-    top_dir: /proj/a2014205/nobackup/NGI/analysis_ready
+    # for nestor the default is /proj/a2014205/nobackup/NGI/analysis_ready
+    top_dir: /base/to/proj/a2014205/nobackup/NGI/analysis_ready
     sthlm_root: a2014205 
     upps_root: a2015179
-    base_root: /proj
+    # for nestor it is simply /proj
+    base_root: /base/to/proj
 
 database:
     # SQLite file to know what/where/how things are happening (state machine to back up Charon for network failure)
-    # -usually it is at /proj/a2014205/ngi_resources/record_tracking_database_nestor.sql
+    # -at nestor it is at /proj/a2014205/ngi_resources/record_tracking_database_nestor.sql
     # -if you are trying to work without one, it is going to create an empty schema that is
     # sqlite> .fullschema
     # CREATE TABLE sampleanalysis (
@@ -42,20 +44,26 @@ database:
     # );
     # Compulsory to define: to make sure you are not overwriting the production version below, it is commented out, 
     # forcing you to edit the config file
-    #record_tracking_db_path: /proj/a2014205/ngi_resources/record_tracking_database_nestor.sql
+    #record_tracking_db_path: /base/to/proj/a2014205/ngi_resources/record_tracking_database.sql
 
 environment:
     project_id: a2014205
-    ngi_scripts_dir: /proj/a2014205/software/ngi_pipeline/scripts
+    # directory containing scripts like ngi_pipeline_start.py, print_running_jobs.py etc
+    # on nestor the production code at /proj/a2014205/software/ngi_pipeline/scripts
+    ngi_scripts_dir:    /dir/to/ngi_scripts
     conda_env: NGI
+    # Flowcell directories; the path string must contain the strings either /a2014205/ or /a2015179/
+    # see ngi_pipeline/ngi_pipeline/conductor/flowcell.py:setup_analysis_directory_structure() for details
+    # On nestor the default values should be /proj/a2014205/archive /proj/a2015179/archive
     flowcell_inbox: 
-            - /proj/a2014205/archive
-            - /proj/a2015179/archive
+            - /dir/to/projects/a2014205/archive
+            - /dir/to/projects/a2015179/archive
 
 logging:
     # the log file itself is compulsory to be defined, or you will get a nasty exception
     # to make sure you are defining it, and not overwriting the production one below, it is left commented out
-    #log_file: /proj/a2014205/ngi_resources/ngi_pipeline.log
+    # default location is /proj/a2014205/ngi_resources/ngi_pipeline.log
+    #log_file: /base/to/proj/ngi_pipeline.log
 
 paths: # Hard code paths here if you are that kind of a person
     binaries:
@@ -64,13 +72,14 @@ paths: # Hard code paths here if you are that kind of a person
         #fastq_screen:
     references:
 
-    #log: /proj/a2010002/data/log
-    #store_dir: /proj/a2010002/archive
+    #log: /base/to/proj/a2010002/data/log
+    #store_dir: /base/to/proj/a2010002/archive
 
 piper:
     # The engine we are usually runnig - further engines should be configured also like this.
     # Also can be set as an environmental variable $PIPER_QSCRIPTS_DIR
-    path_to_piper_qscripts: /proj/a2014205/software/piper/qscripts
+    # nestor default location is /proj/a2014205/software/piper/qscripts
+    path_to_piper_qscripts: /base/to/proj/piper/qscripts
     load_modules:
         - java/sun_jdk1.7.0_25
         - R/2.15.0
@@ -145,6 +154,4 @@ mail:
     # "ngi_pipeline_operators@scilifelab.se" (see ngi_pipeline/utils/communication.py for details)
     # If you do not want to have mails, use the "quiet" option like
     #  scripts/print_running_jobs.py -q
-    recipient: ngi_pipeline_operators@scilifelab.se
-
-
+    recipient: user@scilifelab.se
