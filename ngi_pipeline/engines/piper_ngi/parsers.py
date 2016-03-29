@@ -155,3 +155,20 @@ def parse_genotype_concordance(genotype_concordance_file):
                                        gt_entry.overall_genotype_concordance))
             continue
     return samples_gtc_dict
+
+def parse_deduplication_percentage(deduplication_file):
+
+    duplication_percentage=0
+    with open(deduplication_file, 'r') as f:
+        for line in iter(f.readline, ''):
+            if "## METRICS CLASS" in line and "picard.sam.DuplicationMetrics" in line:
+                try:
+                    headers=f.readline()
+                    values=f.readline()
+                    duplication_rate=values.split()[headers.split().index("PERCENT_DUPLICATION")]
+                    duplication_percentage=float(duplication_rate)*100
+                except:
+                    LOG.error("Unable to parse deduplication rate")
+                    continue
+
+    return duplication_percentage
