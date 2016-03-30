@@ -147,6 +147,10 @@ def workflow_dna_variantcalling(qscripts_dir_path, setup_xml_path, global_config
         scatter_gather = 23
         num_threads = 1
         job_scatter_gather_directory = os.path.join(output_dir, "scatter_gather")
+    # disable GATK phone home if the license file is present
+    gatk_key = config.get("piper", {}).get("gatk_key", None)
+    if gatk_key and os.path.exists(gatk_key):
+        cl_string += " --gatk_key {gatk_key}"
     return cl_string.format(**locals())
 
 
@@ -170,6 +174,10 @@ def workflow_genotype_concordance(qscripts_dir_path, setup_xml_path,
     scatter_gather = 1
     if output_dir:
         cl_string += " --output_directory {output_dir}"
+    # disable GATK phone home if the license file is present
+    gatk_key = config.get("piper", {}).get("gatk_key", None)
+    if gatk_key and os.path.exists(gatk_key):
+        cl_string += " --gatk_key {gatk_key}"
     cl_string += " --alignment_and_qc"
     cl_string += " --retry_failed 2"
     cl_string += " --genotypes {}".format(genotype_file)
