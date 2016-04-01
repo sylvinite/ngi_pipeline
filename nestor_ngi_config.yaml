@@ -35,6 +35,7 @@ logging:
 
 
 paths: # Hard code paths here if you are that kind of a person
+    lmod_path: "/usr/lib/lmod/lmod/libexec/lmod"
     binaries:
         #bowtie2:
         #fastqc:
