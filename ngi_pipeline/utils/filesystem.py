@@ -40,7 +40,7 @@ def load_modules(modules_list, config=None, config_file_path=None):
     error_msgs = []
     for module in modules_list:
         # Yuck
-        lmod_location=config['paths'].get('lmod_path', "/usr/lib/lmod/lmod/libexec/lmod")
+        lmod_location=os.environ.get('LMOD_CMD', "/usr/lib/lmod/lmod/libexec/lmod")
         cl = "{lmod} python load {module}".format(lmod=lmod_location,
                                                   module=module)
         p = subprocess.Popen(shlex.split(cl), stdout=subprocess.PIPE,
