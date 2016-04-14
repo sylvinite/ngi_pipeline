@@ -63,7 +63,7 @@ def create_database_populate_schema(location):
     if not os.path.exists( os.path.dirname(location) ):
         try:
             os.makedirs( os.path.dirname(location)) 
-        except OperationalError:
+        except (OperationalError, OSError):
             pass 
     # Create the tables & sqlite file
     Base.metadata.create_all(engine)
