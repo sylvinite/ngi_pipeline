@@ -28,7 +28,7 @@ def main(args):
                     args.url
                     )
     else:
-        print "something strange going on..."
+        print "Something strange is going on..."
         return 1
     return 0
     
@@ -101,16 +101,16 @@ def create_project(project_name, fastq1, fastq2, facility, FC, symlinks, token, 
             
             sample_number += 1
     # now save everything to charon
-    print "updaiting charon-dev"
+    print "Updating charon-dev"
     writeProjectData(charon_data, token, url, facility)
-    print "now run the following:"
-    print "PATH_TO_NGI=<path/to>/ngi_pipeline>"
+    print "Now run the following:"
+    print "PATH_TO_NGI=<path/to/ngi_pipeline>"
     print "PATH_TO_FC={}".format(os.getcwd())
-    print "PATH_TO_DATA=<path/to/data>"
+    print "PATH_TO_DATA=<path/to/DATA>"
     for FC in FCs:
         print "python $PATH_TO_NGI/scripts/ngi_pipeline_start.py organize flowcell $PATH_TO_FC/{}".format(FC)
-    print "python $PATH_TO_NGI/scripts/ngi_pipeline_start.py analyze $PATH_TO_DATA/DATA/{}".format(project_identifier)
-
+    print "python $PATH_TO_NGI/scripts/ngi_pipeline_start.py analyze project $PATH_TO_DATA/DATA/{}".format(project_identifier)
+    print "python $PATH_TO_NGI/scripts/ngi_pipeline_start.py qc project $PATH_TO_DATA/DATA/{}".format(project_identifier)
 
 
 

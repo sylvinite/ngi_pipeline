@@ -63,6 +63,9 @@ def create_database_populate_schema(location):
     if not os.path.exists( os.path.dirname(location) ):
         try:
             os.makedirs( os.path.dirname(location)) 
+        except (OSError):
+            LOG.info('Failed to create database directory at "{}", continuing without local database'.format(os.path.dirname(location)))
+            pass 
     # Create the tables & sqlite file
     Base.metadata.create_all(engine)
     return engine
