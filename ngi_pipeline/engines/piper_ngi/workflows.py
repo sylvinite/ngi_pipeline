@@ -19,7 +19,8 @@ PIPER_CL_TEMPLATE = ("piper -S {workflow_qscript_path}"
                      " -jobRunner {job_runner}"
                      " --job_walltime {job_walltime}"
                      " --disableJobReport"
-                     " -run")
+                     " -run"
+                     " --skip_recalibration")
 
 
 def get_subtasks_for_level(level):
