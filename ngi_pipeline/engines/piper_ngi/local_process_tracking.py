@@ -362,7 +362,9 @@ def update_coverage_for_sample_seqruns(project_id, sample_id, piper_qc_dir,
     for libprep_id, seqruns in seqruns_by_libprep.iteritems():
         for seqrun_id in seqruns:
             label = "{}/{}/{}/{}".format(project_id, sample_id, libprep_id, seqrun_id)
+            genome_results_file_path=glob.glob(os.path.join(piper_qc_dir, "{}.{}*.qc".format(sample_id, seqrun_id.split('_')[-1]),"genome_results.txt"))[0]
             ma_coverage = parse_mean_coverage_from_qualimap(piper_qc_dir, sample_id, seqrun_id)
+            reads = parse_qualimap_reads(genome_results_file_path)
             LOG.info('Updating project/sample/libprep/seqrun "{}" in '
                      'Charon with mean autosomal coverage "{}"'.format(label, ma_coverage))
             try:
@@ -370,6 +372,7 @@ def update_coverage_for_sample_seqruns(project_id, sample_id, piper_qc_dir,
                                              sampleid=sample_id,
                                              libprepid=libprep_id,
                                              seqrunid=seqrun_id,
+                                             total_reads=reads,
                                              mean_autosomal_coverage=ma_coverage)
             except CharonError as e:
                 error_text = ('Could not update project/sample/libprep/seqrun "{}" '
