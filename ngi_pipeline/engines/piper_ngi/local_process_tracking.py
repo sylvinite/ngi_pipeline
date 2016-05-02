@@ -16,7 +16,8 @@ from ngi_pipeline.engines.piper_ngi.utils import create_exit_code_file_path, \
                                                  get_finished_seqruns_for_sample
 from ngi_pipeline.engines.piper_ngi.parsers import parse_genotype_concordance, \
                                                    parse_mean_coverage_from_qualimap, \
-                                                   parse_deduplication_percentage
+                                                   parse_deduplication_percentage,\
+                                                   parse_qualimap_coverage
 from ngi_pipeline.utils.slurm import get_slurm_job_status, \
                                      kill_slurm_job_by_id
 from ngi_pipeline.utils.parsers import STHLM_UUSNP_SEQRUN_RE, \
@@ -124,7 +125,7 @@ def update_charon_with_local_jobs_status(quiet=False, config=None, config_file_p
                                                     "02_preliminary_alignment_qc")
                         update_coverage_for_sample_seqruns(project_id, sample_id,
                                                            piper_qc_dir)
-                        update_duplication_rates_for_sample(project_id, sample_id,
+                        update_sample_duplication_and_coverage(project_id, sample_id,
                                                            project_base_path)
                     elif workflow == "genotype_concordance":
                         piper_gt_dir = os.path.join(project_base_path, "ANALYSIS",
@@ -295,7 +296,7 @@ def update_gtc_for_sample(project_id, sample_id, piper_gtc_path, config=None, co
                                  **status_dict)
 
 @with_ngi_config
-def update_duplication_rates_for_sample(project_id, sample_id, project_base_path,
+def update_sample_duplication_and_coverage(project_id, sample_id, project_base_path,
                                        config=None, config_file_path=None):
     """Update Charon with the duplication rates for said sample.
 
@@ -304,28 +305,37 @@ def update_duplication_rates_for_sample(project_id, sample_id, project_base_path
 
     """
     
-    file_path=os.path.join(project_base_path, 'ANALYSIS', project_id, 'piper_ngi', '05_processed_alignments', "{}.metrics".format(sample_id))
-    if os.path.isfile(file_path):
-        dup_pc=parse_deduplication_percentage(file_path)
-        try:
-            charon_session = CharonSession()
-            charon_session.sample_update(projectid=project_id,
-                                         sampleid=sample_id,
-                                         duplication_pc=dup_pc)
-            LOG.info('Updating sample "{}" in '
-                     'Charon with mean duplication_percentage"{}"'.format(sample_id, dup_pc))
-        except CharonError as e:
-            error_text = ('Could not update project/sample/"{}" '
-                          'in Charon with duplication rate'
-                          '"{}": {}'.format("{}/{}".format(project_id, sampleid, ma_coverage, e)))
-            LOG.error(error_text)
-            if not config.get('quiet'):
-                mail_analysis(project_name=project_id, sample_name=sample_id,
-                              engine_name="piper_ngi", level="ERROR", info_text=error_text)
+    dup_file_path=os.path.join(project_base_path, 'ANALYSIS', project_id, 'piper_ngi', '05_processed_alignments', "{}.metrics".format(sample_id))
+    cov_file_path=os.path.join(project_base_path, 'ANALYSIS', project_id, 'piper_ngi', '06_final_alignment_qc', "{}.clean.dedup.qc".format(sample_id),"genome_results.txt")
+
+    try:
+        dup_pc=parse_deduplication_percentage(dup_file_path)
+    except:
+        dup_pc=0
+        LOG.error("Cannot find {}.metrics file for duplication rate at {}. Continuing.".format(sample_id, dup_file_path))
+    try:
+        cov=parse_qualimap_coverage(cov_file_path)
+    except:
+        cov=0
+        LOG.error("Cannot find genome_results.txt file for sample coverage at {}. Continuing.".format(cov_file_path))
+    try:
+        charon_session = CharonSession()
+        charon_session.sample_update(projectid=project_id,
+                                     sampleid=sample_id,
+                                     duplication_pc=dup_pc,
+                                     total_autosomal_coverage=cov)
+        LOG.info('Updating sample "{}" in '
+                 'Charon with mean duplication_percentage"{}" and autosomal coverage "{}"'.format(sample_id, dup_pc, cov))
+    except CharonError as e:
+        error_text = ('Could not update project/sample "{}/{}" '
+                    'in Charon with duplication rate : {}'
+                      'and coverage {}'.format("{}/{}".format(project_id, sampleid, dup_pc, cov)))
+        LOG.error(error_text)
+        if not config.get('quiet'):
+            mail_analysis(project_name=project_id, sample_name=sample_id,
+                          engine_name="piper_ngi", level="ERROR", info_text=error_text)
 
 
-    else:
-        LOG.error("Cannot find {}.metrics file for duplication rate at {}. Continuing.".format(sample_id, file_path))
 
 
 
