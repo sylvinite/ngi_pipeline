@@ -17,6 +17,7 @@ from ngi_pipeline.engines.piper_ngi.utils import create_exit_code_file_path, \
 from ngi_pipeline.engines.piper_ngi.parsers import parse_genotype_concordance, \
                                                    parse_mean_coverage_from_qualimap, \
                                                    parse_deduplication_percentage,\
+                                                   parse_qualimap_reads,\
                                                    parse_qualimap_coverage
 from ngi_pipeline.utils.slurm import get_slurm_job_status, \
                                      kill_slurm_job_by_id
@@ -306,7 +307,7 @@ def update_sample_duplication_and_coverage(project_id, sample_id, project_base_p
     """
     
     dup_file_path=os.path.join(project_base_path, 'ANALYSIS', project_id, 'piper_ngi', '05_processed_alignments', "{}.metrics".format(sample_id))
-    cov_file_path=os.path.join(project_base_path, 'ANALYSIS', project_id, 'piper_ngi', '06_final_alignment_qc', "{}.clean.dedup.qc".format(sample_id),"genome_results.txt")
+    genome_results_file_path=os.path.join(project_base_path, 'ANALYSIS', project_id, 'piper_ngi', '06_final_alignment_qc', "{}.clean.dedup.qc".format(sample_id),"genome_results.txt")
 
     try:
         dup_pc=parse_deduplication_percentage(dup_file_path)
@@ -314,15 +315,18 @@ def update_sample_duplication_and_coverage(project_id, sample_id, project_base_p
         dup_pc=0
         LOG.error("Cannot find {}.metrics file for duplication rate at {}. Continuing.".format(sample_id, dup_file_path))
     try:
-        cov=parse_qualimap_coverage(cov_file_path)
-    except:
+        cov=parse_qualimap_coverage(genome_results_file_path)
+        reads=parse_qualimap_reads(genome_results_file_path)
+    except Exception as e:
         cov=0
-        LOG.error("Cannot find genome_results.txt file for sample coverage at {}. Continuing.".format(cov_file_path))
+        reads=0
+        LOG.error("Cannot find genome_results.txt file for sample coverage at {}. Continuing.".format(genome_results_file_path))
     try:
         charon_session = CharonSession()
         charon_session.sample_update(projectid=project_id,
                                      sampleid=sample_id,
                                      duplication_pc=dup_pc,
+                                     total_sequenced_reads=reads,
                                      total_autosomal_coverage=cov)
         LOG.info('Updating sample "{}" in '
                  'Charon with mean duplication_percentage"{}" and autosomal coverage "{}"'.format(sample_id, dup_pc, cov))

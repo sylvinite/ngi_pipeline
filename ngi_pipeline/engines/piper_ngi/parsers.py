@@ -20,6 +20,18 @@ def parse_results_for_workflow(workflow_name, *args, **kwargs):
         raise NotImplementedError(error_msg)
     return parser_function(*args, **kwargs)
 
+def parse_qualimap_reads(genome_results_file):
+    globals_section= False
+    with open(genome_results_file, 'r') as f:
+        for line in f:
+            if line.startswith('>>>>>>> Globals'):
+                globals_section= True
+                continue
+            if globals_section:
+                if 'number of reads' in line:
+                    return int(line.split('=')[-1].strip().replace(',',''))
+
+    
 
 def parse_qualimap_coverage(genome_results_file):
     autosomal_cov_length = 0
