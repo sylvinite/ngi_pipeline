@@ -317,7 +317,7 @@ def update_sample_duplication_and_coverage(project_id, sample_id, project_base_p
     try:
         cov=parse_qualimap_coverage(genome_results_file_path)
         reads=parse_qualimap_reads(genome_results_file_path)
-    except Exception as e:
+    except IOError as e:
         cov=0
         reads=0
         LOG.error("Cannot find genome_results.txt file for sample coverage at {}. Continuing.".format(genome_results_file_path))
@@ -364,9 +364,14 @@ def update_coverage_for_sample_seqruns(project_id, sample_id, piper_qc_dir,
             label = "{}/{}/{}/{}".format(project_id, sample_id, libprep_id, seqrun_id)
             genome_results_file_path=glob.glob(os.path.join(piper_qc_dir, "{}.{}*.qc".format(sample_id, seqrun_id.split('_')[-1]),"genome_results.txt"))[0]
             ma_coverage = parse_mean_coverage_from_qualimap(piper_qc_dir, sample_id, seqrun_id)
-            reads = parse_qualimap_reads(genome_results_file_path)
+            try:
+                reads = parse_qualimap_reads(genome_results_file_path)
+            except IOError as e :
+                reads=0
+                LOG.error("Cannot find the genome_results.txt file to get the number of reads in {}".format(genome_results_file_path))
+
             LOG.info('Updating project/sample/libprep/seqrun "{}" in '
-                     'Charon with mean autosomal coverage "{}"'.format(label, ma_coverage))
+                     'Charon with mean autosomal coverage "{}" and total reads {}'.format(label, ma_coverage, reads))
             try:
                 charon_session.seqrun_update(projectid=project_id,
                                              sampleid=sample_id,
