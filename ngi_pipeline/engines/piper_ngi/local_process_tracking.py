@@ -362,13 +362,15 @@ def update_coverage_for_sample_seqruns(project_id, sample_id, piper_qc_dir,
     for libprep_id, seqruns in seqruns_by_libprep.iteritems():
         for seqrun_id in seqruns:
             label = "{}/{}/{}/{}".format(project_id, sample_id, libprep_id, seqrun_id)
-            genome_results_file_path=glob.glob(os.path.join(piper_qc_dir, "{}.{}*.qc".format(sample_id, seqrun_id.split('_')[-1]),"genome_results.txt"))[0]
+            genome_results_file_paths=glob.glob(os.path.join(piper_qc_dir, "{}.{}*.qc".format(sample_id, seqrun_id.split('_')[-1]),"genome_results.txt"))
             ma_coverage = parse_mean_coverage_from_qualimap(piper_qc_dir, sample_id, seqrun_id)
-            try:
-                reads = parse_qualimap_reads(genome_results_file_path)
-            except IOError as e :
-                reads=0
-                LOG.error("Cannot find the genome_results.txt file to get the number of reads in {}".format(genome_results_file_path))
+
+            reads=0
+            for path in genome_results_file_paths:
+                try:
+                    reads += parse_qualimap_reads(genome_results_file_path)
+                except IOError as e :
+                    LOG.error("Cannot find the genome_results.txt file to get the number of reads in {}".format(genome_results_file_path))
 
             LOG.info('Updating project/sample/libprep/seqrun "{}" in '
                      'Charon with mean autosomal coverage "{}" and total reads {}'.format(label, ma_coverage, reads))
