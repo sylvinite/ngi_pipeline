@@ -368,9 +368,9 @@ def update_coverage_for_sample_seqruns(project_id, sample_id, piper_qc_dir,
             reads=0
             for path in genome_results_file_paths:
                 try:
-                    reads += parse_qualimap_reads(genome_results_file_path)
+                    reads += parse_qualimap_reads(path)
                 except IOError as e :
-                    LOG.error("Cannot find the genome_results.txt file to get the number of reads in {}".format(genome_results_file_path))
+                    LOG.error("Cannot find the genome_results.txt file to get the number of reads in {}".format(path))
 
             LOG.info('Updating project/sample/libprep/seqrun "{}" in '
                      'Charon with mean autosomal coverage "{}" and total reads {}'.format(label, ma_coverage, reads))
