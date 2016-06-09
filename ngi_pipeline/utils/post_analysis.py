@@ -10,7 +10,7 @@ def run_multiqc(base_path, project_id, project_name):
     project_path=os.path.join(base_path, 'ANALYSIS', project_id)
     result_path=os.path.join(base_path, 'ANALYSIS', project_id, 'multiqc')
     safe_makedir(result_path)
-    command=['multiqc', project_path, '-o', result_path, '-i', project_name, '-n', project_name, '-q']
+    command=['multiqc', project_path, '-o', result_path, '-i', project_name, '-n', project_name, '-q', '-f']
     multiqc_stdout=''
     multiqc_stderr=''
     try:
