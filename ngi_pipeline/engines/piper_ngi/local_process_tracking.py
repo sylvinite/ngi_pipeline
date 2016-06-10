@@ -26,6 +26,7 @@ from ngi_pipeline.utils.parsers import STHLM_UUSNP_SEQRUN_RE, \
 from sqlalchemy.exc import IntegrityError, OperationalError
 from ngi_pipeline.utils.charon import recurse_status_for_sample
 from ngi_pipeline.utils.classes import with_ngi_config
+from ngi_pipeline.utils.post_analysis import run_multiqc
 
 
 LOG = minimal_logger(__name__)
@@ -115,6 +116,14 @@ def update_charon_with_local_jobs_status(quiet=False, config=None, config_file_p
                                               config=config)
                     # Job is only deleted if the Charon status update succeeds
                     session.delete(sample_entry)
+                    #run MultiQC
+                    LOG.info("Running MultiQC on project {}".format(project_name))
+                    try:
+                        run_multiqc(project_base_path, project_id, project_name)
+                    except Exception as e:
+                        LOG.error(e)
+
+
                     if workflow == "merge_process_variantcall":
                         # Parse seqrun output results / update Charon
                         # This is a semi-optional step -- failure here will send an
@@ -128,6 +137,8 @@ def update_charon_with_local_jobs_status(quiet=False, config=None, config_file_p
                                                            piper_qc_dir)
                         update_sample_duplication_and_coverage(project_id, sample_id,
                                                            project_base_path)
+
+                        
                     elif workflow == "genotype_concordance":
                         piper_gt_dir = os.path.join(project_base_path, "ANALYSIS",
                                                     project_id, "piper_ngi",
