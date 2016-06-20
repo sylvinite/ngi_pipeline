@@ -14,11 +14,15 @@ def handle_seqrun_status(analysis_object, seqrun, charon_reported_status):
     elif charon_sr.get('alignment_status') == 'FAILED' and not analysis_object.restart_failed_jobs:
         LOG.info("seqrun {}/{}/{}/{} analysis has failed, but no restart_failed flag was given, skipping.".format(analysis_object.project.project_id, sample.name, libprep.name, seqrun.name))
         return False
+    else:
+        return True
 
 def handle_libprep_status(analysis_object, libprep, charon_reported_status):
     if charon_reported_status == 'FAILED':
         LOG.info("libprep {}/{}/{} is marked as failed, skipping all of its seqruns.".format(analysis_object.project.project_id, sample.name, libprep.name))
         return False
+    else:
+        return True
 
 def handle_sample_status(analysis_object, sample, charon_reported_status):
     """ returns true of false wether the sample should be analyzed"""
@@ -54,3 +58,5 @@ def handle_sample_status(analysis_object, sample, charon_reported_status):
                               engine_name=analysis_module.__name__,
                               level="ERROR", info_text=error_text)
             return False 
+    else:
+        return True

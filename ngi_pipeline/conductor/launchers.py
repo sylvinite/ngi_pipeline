@@ -31,7 +31,7 @@ def launch_analysis(projects_to_analyze, restart_failed_jobs=False,
                     restart_finished_jobs=restart_finished_jobs,
                     restart_running_jobs=restart_running_jobs,
                     keep_existing_data=keep_existing_data, no_qc=no_qc,
-                    exec_mode=exec_mode, quiet=quiet, manuali=manual,
+                    exec_mode=exec_mode, quiet=quiet, manual=manual,
                     config=config, config_file_path=config_file_path,
                     generate_bqsr_bam=generate_bqsr_bam, log=LOG)
         #update charon with the current analysis status
