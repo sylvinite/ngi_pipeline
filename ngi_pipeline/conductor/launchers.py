@@ -27,11 +27,13 @@ def launch_analysis(projects_to_analyze, restart_failed_jobs=False,
     """
     charon_session = CharonSession()
     for project in projects_to_analyze:
-        analysis=NGIAnalysis(project, restart_failed_jobs,
-                    restart_finished_jobs, restart_running_jobs,
-                    keep_existing_data, no_qc, exec_mode,
-                    quiet, manual, config, config_file_path,
-                    generate_bqsr_bam, LOG)
+        analysis=NGIAnalysis(project=project, restart_failed_jobs=restart_failed_jobs,
+                    restart_finished_jobs=restart_finished_jobs,
+                    restart_running_jobs=restart_running_jobs,
+                    keep_existing_data=keep_existing_data, no_qc=no_qc,
+                    exec_mode=exec_mode, quiet=quiet, manuali=manual,
+                    config=config, config_file_path=config_file_path,
+                    generate_bqsr_bam=generate_bqsr_bam, log=LOG)
         #update charon with the current analysis status
         analysis.engine.local_process_tracking.update_charon_with_local_jobs_status(config=config)
         try:
