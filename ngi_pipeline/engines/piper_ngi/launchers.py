@@ -12,6 +12,7 @@ import time
 import datetime
 
 
+from ngi_pipeline.engines.utils import handle_sample_status, handle_libprep_status, handle_seqrun_status
 from ngi_pipeline.utils.communication import mail_analysis
 from ngi_pipeline.conductor.classes import NGIProject, NGIAnalysis
 from ngi_pipeline.database.classes import CharonSession, CharonError
@@ -61,38 +62,9 @@ def analyze(analysis_object, level='sample', config=None, config_file_path=None)
             charon_reported_status = charon_session.sample_get(analysis_object.project.project_id,
                                                                sample).get('analysis_status')
             # Check Charon to ensure this hasn't already been processed
-            if charon_reported_status == "UNDER_ANALYSIS":
-                if not analysis_object.restart_running_jobs:
-                    error_text = ('Charon reports seqrun analysis for project "{}" '
-                                  '/ sample "{}" does not need processing (already '
-                                  '"{}")'.format(analysis_object.project, sample, charon_reported_status))
-                    LOG.error(error_text)
-                    if not analysis_object.config.get('quiet'):
-                        mail_analysis(project_name=analysis_object.project.name, sample_name=sample.name,
-                                      engine_name=analysis_module.__name__,
-                                      level="ERROR", info_text=error_text)
-                    continue
-            elif charon_reported_status == "ANALYZED":
-                if not analysis_object.restart_finished_jobs:
-                    error_text = ('Charon reports seqrun analysis for project "{}" '
-                                  '/ sample "{}" does not need processing (already '
-                                  '"{}")'.format(analysis_object.project, sample, charon_reported_status))
-                    LOG.error(error_text)
-                    if not analysis_object.config.get('quiet') and not analysis_object.config.get('manual'):
-                        mail_analysis(project_name=analysis_object.project.name, sample_name=sample.name,
-                                      engine_name=analysis_module.__name__,
-                                      level="ERROR", info_text=error_text)
-                    continue
-            elif charon_reported_status == "FAILED":
-                if not analysis_object.restart_failed_jobs:
-                    error_text = ('FAILED:  Project "{}" / sample "{}" Charon reports '
-                                  'FAILURE, manual investigation needed!'.format(analysis_object.project, sample))
-                    LOG.error(error_text)
-                    if not analysis_object.config.get('quiet'):
-                        mail_analysis(project_name=analysis_object.project.name, sample_name=sample.name,
-                                      engine_name=analysis_module.__name__,
-                                      level="ERROR", info_text=error_text)
-                    continue
+            do_analyze=handle_sample_status(analysis_object, sample, charon_reported_status)
+            if not do_analyze :
+                continue
         except CharonError as e:
             LOG.error(e)
             continue

@@ -6,6 +6,7 @@ from ngi_pipeline.engines.rna_ngi.local_process_tracking import record_project_j
 from ngi_pipeline.log.loggers import minimal_logger
 from ngi_pipeline.utils.communication import mail_analysis
 from ngi_pipeline.utils.classes import with_ngi_config
+from ngi_pipeline.engines.utils import handle_sample_status, handle_libprep_status, handle_seqrun_status
 from ngi_pipeline.database.classes import CharonSession, CharonError
 from ngi_pipeline.utils.filesystem import load_modules, execute_command_line, \
                                           safe_makedir, do_symlink
@@ -27,57 +28,22 @@ def analyze(analysis_object, config=None, config_file_path=None):
                 charon_reported_status = charon_session.sample_get(analysis_object.project.project_id,
                                                                    sample).get('analysis_status')
                 # Check Charon to ensure this hasn't already been processed
-                if charon_reported_status == "UNDER_ANALYSIS":
-                    if not analysis_object.restart_running_jobs:
-                        error_text = ('Charon reports seqrun analysis for project "{}" '
-                                      '/ sample "{}" does not need processing (already '
-                                      '"{}")'.format(analysis_object.project, sample, charon_reported_status))
-                        LOG.error(error_text)
-                        if not analysis_object.config.get('quiet'):
-                            mail_analysis(project_name=analysis_object.project.name, sample_name=sample.name,
-                                          engine_name=analysis_module.__name__,
-                                          level="ERROR", info_text=error_text)
-                        continue
-                elif charon_reported_status == "ANALYZED":
-                    if not analysis_object.restart_finished_jobs:
-                        error_text = ('Charon reports seqrun analysis for project "{}" '
-                                      '/ sample "{}" does not need processing (already '
-                                      '"{}")'.format(analysis_object.project, sample, charon_reported_status))
-                        LOG.error(error_text)
-                        if not analysis_object.config.get('quiet') and not analysis_object.config.get('manual'):
-                            mail_analysis(project_name=analysis_object.project.name, sample_name=sample.name,
-                                          engine_name=analysis_module.__name__,
-                                          level="ERROR", info_text=error_text)
-                        continue
-                elif charon_reported_status == "FAILED":
-                    if not analysis_object.restart_failed_jobs:
-                        error_text = ('FAILED:  Project "{}" / sample "{}" Charon reports '
-                                      'FAILURE, manual investigation needed!'.format(analysis_object.project, sample))
-                        LOG.error(error_text)
-                        if not analysis_object.config.get('quiet'):
-                            mail_analysis(project_name=analysis_object.project.name, sample_name=sample.name,
-                                          engine_name=analysis_module.__name__,
-                                          level="ERROR", info_text=error_text)
-                        continue
+                do_analyze=handle_sample_status(analysis_object, sample, charon_reported_status)
+                if not do_analyze :
+                    continue
             except CharonError as e:
                 LOG.error(e)
 
             for libprep in sample:
-                charon_lp=charon_session.libprep_get(analysis_object.project.project_id, sample.name, libprep.name)
-                if charon_lp.get('qc') == 'FAILED':
-                    LOG.info("libprep {}/{}/{} is marked as failed, skipping all of its seqruns.".format(analysis_object.project.project_id, sample.name, libprep.name))
+                charon_lp_status=charon_session.libprep_get(analysis_object.project.project_id, sample.name, libprep.name).get('qc')
+                do_analyze=handle_libprep_status(analysis_object, libprep, charon_lp_status)
+                if not do_analyze :
                     continue
                 else:
                     for seqrun in libprep:
-                        charon_sr=charon_session.seqrun_get(analysis_object.project.project_id, sample.name, libprep.name, seqrun.name)
-                        if charon_sr.get('alignment_status') == 'RUNNING' and not analysis_object.restart_running_jobs:
-                            LOG.info("seqrun {}/{}/{}/{} is being analyzed and no restart_running flag was given, skipping.".format(analysis_object.project.project_id, sample.name, libprep.name, seqrun.name))
-                            continue
-                        elif charon_sr.get('alignment_status') == 'DONE' and not analysis_object.restart_finished_jobs:
-                            LOG.info("seqrun {}/{}/{}/{} has been analyzed and no restart_analyzed flag was given, skipping.".format(analysis_object.project.project_id, sample.name, libprep.name, seqrun.name))
-                            continue
-                        elif charon_sr.get('alignment_status') == 'FAILED' and not analysis_object.restart_failed_jobs:
-                            LOG.info("seqrun {}/{}/{}/{} analysis has failed, but no restart_failed flag was given, skipping.".format(analysis_object.project.project_id, sample.name, libprep.name, seqrun.name))
+                        charon_sr_status=charon_session.seqrun_get(analysis_object.project.project_id, sample.name, libprep.name, seqrun.name).get('alignment_status')
+                        do_analyze=handle_seqrun_status(analysis_object, seqrun, charon_sr_status)
+                        if not do_analyze :
                             continue
                         else:
                             seqrun.being_analyzed=True
