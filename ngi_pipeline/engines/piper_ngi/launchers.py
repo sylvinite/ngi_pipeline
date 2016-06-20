@@ -431,17 +431,16 @@ def sbatch_piper_sample(command_line_list, workflow_name, project, sample,
     with open(sbatch_outfile, 'w') as f:
         f.write("\n".join(sbatch_text_list))
     LOG.info("Queueing sbatch file {} for job {}".format(sbatch_outfile, job_identifier))
-    slurm_job_id=7777777
     # Queue the sbatch file
-    #p_handle = execute_command_line("sbatch {}".format(sbatch_outfile),
-    #                                stdout=subprocess.PIPE,
-    #                                stderr=subprocess.PIPE)
-    #p_out, p_err = p_handle.communicate()
-    #try:
-    #    slurm_job_id = re.match(r'Submitted batch job (\d+)', p_out).groups()[0]
-    #except AttributeError:
-    #    raise RuntimeError('Could not submit sbatch job for workflow "{}": '
-    #                       '{}'.format(job_identifier, p_err))
+    p_handle = execute_command_line("sbatch {}".format(sbatch_outfile),
+                                    stdout=subprocess.PIPE,
+                                    stderr=subprocess.PIPE)
+    p_out, p_err = p_handle.communicate()
+    try:
+        slurm_job_id = re.match(r'Submitted batch job (\d+)', p_out).groups()[0]
+    except AttributeError:
+        raise RuntimeError('Could not submit sbatch job for workflow "{}": '
+                           '{}'.format(job_identifier, p_err))
     # Detail which seqruns we've started analyzing so we can update statuses later
     record_analysis_details(project, job_identifier)
     return int(slurm_job_id)
