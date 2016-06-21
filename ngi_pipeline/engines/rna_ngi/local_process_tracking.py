@@ -9,6 +9,16 @@ import os
 
 LOG = minimal_logger(__name__)
 
+def remove_analysis(projectid):
+    job_id=None
+    with get_session() as db_session:
+        job=db_session.query(ProjectAnalysis).filter(ProjectAnalysis.project_id==projectid).one()
+        job_id=job.job_id
+        db_session.delete(job)
+        db_session.commit()
+    return job_id
+    
+
 
 @with_ngi_config
 def update_charon_with_local_jobs_status(quiet=False, config=None, config_file_path=None):

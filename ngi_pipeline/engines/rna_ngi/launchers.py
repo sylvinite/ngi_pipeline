@@ -2,7 +2,7 @@
 import os
 import glob
 
-from ngi_pipeline.engines.rna_ngi.local_process_tracking import record_project_job
+from ngi_pipeline.engines.rna_ngi.local_process_tracking import record_project_job, remove_analysis
 from ngi_pipeline.log.loggers import minimal_logger
 from ngi_pipeline.utils.communication import mail_analysis
 from ngi_pipeline.utils.classes import with_ngi_config
@@ -55,12 +55,19 @@ def analyze(analysis_object, config=None, config_file_path=None):
         if not fastq_files:
             LOG.error("No fastq files obtained for the analysis fo project {}, please check the Charon status.".format(analysis_object.project.name))
         else :
+            if analysis_object.restart_running_jobs:
+                stop_ongoing_analysis(analysis_object)
             fastq_dir=preprocess_analysis(analysis_object, fastq_files)
             sbatch_path=write_batch_job(analysis_object, reference_genome, fastq_dir)
             job_id=start_analysis(sbatch_path)
             analysis_path=os.path.join(analysis_object.project.base_path, "ANALYSIS", analysis_object.project.project_id, 'rna_ngi')
             record_project_job(analysis_object.project, job_id, analysis_path)
         
+
+def stop_ongoing_analysis(analysis_object):
+    job_id=remove_analysis(analysis_object.project.project_id)
+    os.killpg(job_id, 9)
+
 
 def start_analysis(sbatch_path):
     cl=["bash", sbatch_path]
