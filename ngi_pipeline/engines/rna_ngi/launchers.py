@@ -21,6 +21,13 @@ def analyze(analysis_object, config=None, config_file_path=None):
     charon_session = CharonSession()
     charon_pj=charon_session.project_get(analysis_object.project.project_id)
     reference_genome=charon_pj.get('reference')
+    if charon_pj.get("sequencing_facility") == "NGI-S":
+        analysis_object.sequencing_facility="sthlm"
+    elif charon_pj.get("sequencing_facility") == "NGI-U":
+        analysis_object.sequencing_facility="upps"
+    else:
+        LOG.error("charon project not registered with stockholm or uppsala. Which config file should we use for the RNA pipeline ?")
+        raise RuntimeError
     fastq_files=[]
     if reference_genome and reference_genome != 'other':
         for sample in analysis_object.project:
@@ -96,7 +103,7 @@ def write_batch_job(analysis_object, reference, fastq_dir_path, config=None, con
     sbatch_file_path=os.path.join(sbatch_dir_path, 'rna_ngi.sh')
     fastq_glob_path=os.path.join(fastq_dir_path, '*_R{1,2}_*.fastq.gz')
     main_nexflow_path=config['analysis']['best_practice_analysis']['RNA-seq']['ngi_nf_path']
-    nf_conf=config['analysis']['best_practice_analysis']['RNA-seq']['ngi_conf']
+    nf_conf=config['analysis']['best_practice_analysis']['RNA-seq']['{}_ngi_conf'.format(analysis_object.sequencing_facility)]
     analysis_log_path=os.path.join(analysis_path, 'nextflow_output.log')
     exit_code_path=os.path.join(analysis_path, 'nextflow_exit_code.out')
     LOG.info("Writing sbatch file to {}".format(sbatch_file_path))
