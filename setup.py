@@ -1,8 +1,8 @@
 #!/usr/bin/env python
 import glob
-
+from ngi_pipeline import __version__
 from setuptools import setup, find_packages
-from .ngi_pipeline/version import __version__
+
 
 try:
     with open("requirements.txt", "r") as f:
