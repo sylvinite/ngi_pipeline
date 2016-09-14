@@ -5,13 +5,13 @@ from ngi_pipeline.log.loggers import minimal_logger
 LOG = minimal_logger(__name__)
 
 def handle_seqrun_status(analysis_object, seqrun, charon_reported_status):
-    if charon_sr.get('alignment_status') == 'RUNNING' and not analysis_object.restart_running_jobs:
+    if charon_reported_status == 'RUNNING' and not analysis_object.restart_running_jobs:
         LOG.info("seqrun {}/{}/{}/{} is being analyzed and no restart_running flag was given, skipping.".format(analysis_object.project.project_id, sample.name, libprep.name, seqrun.name))
         return False
-    elif charon_sr.get('alignment_status') == 'DONE' and not analysis_object.restart_finished_jobs:
+    elif charon_reported_status == 'DONE' and not analysis_object.restart_finished_jobs:
         LOG.info("seqrun {}/{}/{}/{} has been analyzed and no restart_analyzed flag was given, skipping.".format(analysis_object.project.project_id, sample.name, libprep.name, seqrun.name))
         return False
-    elif charon_sr.get('alignment_status') == 'FAILED' and not analysis_object.restart_failed_jobs:
+    elif charon_reported_status == 'FAILED' and not analysis_object.restart_failed_jobs:
         LOG.info("seqrun {}/{}/{}/{} analysis has failed, but no restart_failed flag was given, skipping.".format(analysis_object.project.project_id, sample.name, libprep.name, seqrun.name))
         return False
     else:

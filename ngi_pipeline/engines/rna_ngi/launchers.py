@@ -1,6 +1,7 @@
-
+import re
 import os
 import glob
+import shutil
 
 from ngi_pipeline.engines.rna_ngi.local_process_tracking import record_project_job, remove_analysis
 from ngi_pipeline.log.loggers import minimal_logger
@@ -82,6 +83,32 @@ def start_analysis(sbatch_path):
     return handle.pid
 
 
+def merge_fastq_files(dest_dir, fastq_files):
+    LOG.info("Merging files...")
+    sample_pattern=re.compile("^(.+)_S[0-9]+_.+_R([1-2])_")
+    while fastq_files:
+        tomerge=[]
+        tomerge.append(fastq_files.pop())
+        fq_bn=os.path.basename(tomerge[0])
+        sample_name=sample_pattern.match(fq_bn).group(1)
+        read_nb=sample_pattern.match(fq_bn).group(2)
+        for fq in fastq_files:
+            if sample_name in os.path.basename(fq) and "_R{}_".format(read_nb) in os.path.basename(fq):
+                tomerge.append(fq)
+                fastq_files.remove(fq)
+
+        outfile=os.path.join(dest_dir, "{}_R{}.fastq.gz".format(sample_name, read_nb))
+        LOG.info("merging {} as {}".format(", ".join(tomerge), outfile))
+        with open(outfile, 'wb') as wfp:
+            for fn in tomerge:
+                with open(fn, 'rb') as rfp:
+                    shutil.copyfileobj(rfp, wfp)
+
+
+
+
+
+
 
 def preprocess_analysis(analysis_object, fastq_files):
     analysis_path=os.path.join(analysis_object.project.base_path, "ANALYSIS", analysis_object.project.project_id, 'rna_ngi')
@@ -91,7 +118,7 @@ def preprocess_analysis(analysis_object, fastq_files):
     LOG.info("cleaning subfolder {}".format(convenience_dir_path))
     for link in glob.glob(os.path.join(convenience_dir_path, '*')):
         os.unlink(link)
-    do_symlink(fastq_files, convenience_dir_path)
+    merge_fastq_files(convenience_dir_path, fastq_files)
     return convenience_dir_path
 
 
