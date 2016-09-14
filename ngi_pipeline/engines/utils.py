@@ -37,6 +37,8 @@ def handle_sample_status(analysis_object, sample, charon_reported_status):
                               engine_name=analysis_module.__name__,
                               level="ERROR", info_text=error_text)
             return False 
+        else:
+            return True
     elif charon_reported_status == "ANALYZED":
         if not analysis_object.restart_finished_jobs:
             error_text = ('Charon reports seqrun analysis for project "{}" '
@@ -48,6 +50,8 @@ def handle_sample_status(analysis_object, sample, charon_reported_status):
                               engine_name=analysis_module.__name__,
                               level="ERROR", info_text=error_text)
             return False 
+        else:
+            return True
     elif charon_reported_status == "FAILED":
         if not analysis_object.restart_failed_jobs:
             error_text = ('FAILED:  Project "{}" / sample "{}" Charon reports '
@@ -58,5 +62,7 @@ def handle_sample_status(analysis_object, sample, charon_reported_status):
                               engine_name=analysis_module.__name__,
                               level="ERROR", info_text=error_text)
             return False 
+        else:
+            return True
     else:
         return True
