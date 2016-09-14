@@ -21,7 +21,7 @@ def mail(recipient, subject, text, origin="seqmaster@scilifelab.se"):
 def mail_analysis(project_name, sample_name=None, engine_name=None,
                   level="ERROR", info_text=None, workflow=None,
                   recipient="ngi_pipeline_operators@scilifelab.se",
-                  subject=None, origin="seqmaster@scilifelab.se",
+                  subject=None, origin="ngi_pipeline@scilifelab.se",
                   config=None, config_file_path=None ):
 
     # check for mail recipient among the config values
