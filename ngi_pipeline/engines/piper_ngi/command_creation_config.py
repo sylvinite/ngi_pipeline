@@ -38,6 +38,7 @@ def build_piper_cl(project, workflow_name, setup_xml_path, exit_code_path,
     piper_rootdir = config.get("piper", {}).get("path_to_piper_rootdir")
     piper_global_config_path = \
                     (os.environ.get("PIPER_GLOB_CONF_XML") or
+                     os.environ.get("PIPER_CONF") or
                      config.get("piper", {}).get("path_to_piper_globalconfig") or
                      (os.path.join(piper_rootdir, "globalConfig.xml") if
                      piper_rootdir else None))
@@ -49,6 +50,7 @@ def build_piper_cl(project, workflow_name, setup_xml_path, exit_code_path,
     # QScripts directory
     try:
         piper_qscripts_dir = (os.environ.get("PIPER_QSCRIPTS_DIR") or
+                              os.environ.get("PIPER_QSCRIPTS") or
                               config['piper']['path_to_piper_qscripts'])
     except KeyError:
         raise ValueError('Could not find Piper QScripts directory in config file or '

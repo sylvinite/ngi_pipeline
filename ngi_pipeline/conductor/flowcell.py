@@ -197,15 +197,16 @@ def setup_analysis_directory_structure(fc_dir, projects_to_analyze,
     if not restrict_to_projects: restrict_to_projects = []
     if not restrict_to_samples: restrict_to_samples = []
     config["quiet"] = quiet # Hack because I enter here from a script sometimes
-    pattern="(.+(?:{}|{}))\/.+".format(config["analysis"]["sthlm_root"], config["analysis"]["upps_root"])
+    #Checks flowcell path to establish which group owns it
+    pattern=".+({}|{})\/.+".format(config["analysis"]["sthlm_root"], config["analysis"]["upps_root"])
     matches=re.match(pattern, fc_dir)
     if matches:
-        flowcell_root=matches.group(1)
+        flowcell_uppnexid=matches.group(1)
     else:
         LOG.error("cannot guess which project the flowcell {} belongs to".format(fc_dir))
         raise RuntimeError
 
-    analysis_top_dir = os.path.abspath(os.path.join(flowcell_root,config["analysis"]["top_dir"]))
+    analysis_top_dir = os.path.abspath(os.path.join(config["analysis"]["base_root"],flowcell_uppnexid,config["analysis"]["top_dir"]))
     try:
         safe_makedir(analysis_top_dir)
     except OSError as e:
