@@ -232,9 +232,8 @@ def update_charon_with_local_jobs_status(quiet=False, config=None, config_file_p
                             sample_status_field = seqrun_status_field = "genotype_status"
                             recurse_status = "UNDER_ANALYSIS"
                         try:
-                            charon_status = \
-                                    charon_session.sample_get(projectid=project_id,
-                                                              sampleid=sample_id).get(sample_status_field)
+                            remote_sample=charon_session.sample_get(projectid=project_id, sampleid=sample_id)
+                            charon_status = remote_sample.get(sample_status_field)
                             if charon_status and not charon_status == set_status:
                                 LOG.warn('Tracking inconsistency for {}: Charon status '
                                          'for field "{}" is "{}" but local process tracking '
@@ -441,12 +440,16 @@ def record_process_sample(project, sample, workflow_subtask, analysis_module_nam
         if workflow_subtask == "merge_process_variantcall":
             sample_status_field = "analysis_status"
             sample_status_value = "UNDER_ANALYSIS"
+            sample_data_status_field = "status"
+            sample_data_status_value = "STALE"
             seqrun_status_field = "alignment_status"
             seqrun_status_value = "RUNNING"
             extra_args = {"mean_autosomal_coverage": 0}
         elif workflow_subtask == "genotype_concordance":
             sample_status_field = seqrun_status_field = "genotype_status"
             sample_status_value = seqrun_status_value = "UNDER_ANALYSIS"
+            sample_data_status_field = "status"
+            sample_data_status_value = "STALE"
         else:
             raise ValueError('Charon field for workflow "{}" unknown; '
                              'cannot update Charon.'.format(workflow_subtask))
@@ -455,7 +458,8 @@ def record_process_sample(project, sample, workflow_subtask, analysis_module_nam
                      '{}/{} key : {} value : {}'.format(project, sample, sample_status_field, sample_status_value))
             CharonSession().sample_update(projectid=project.project_id,
                                           sampleid=sample.name,
-                                          **{sample_status_field: sample_status_value})
+                                          **{sample_status_field: sample_status_value,
+                                              sample_data_status_field: sample_data_status_value})
             project_obj = create_project_obj_from_analysis_log(project.name,
                                                                project.project_id,
                                                                project.base_path,
