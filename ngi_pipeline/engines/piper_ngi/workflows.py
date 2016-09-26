@@ -12,7 +12,7 @@ LOG = minimal_logger(__name__)
 
 PIPER_CL_TEMPLATE = ("piper -S {workflow_qscript_path}"
                      " --xml_input {setup_xml_path}"
-                     " --global_config {global_config_path}"
+                     " --global_config $PIPER_GLOB_CONF_XML"
                      " --number_of_threads {num_threads}"
                      " --scatter_gather {scatter_gather}"
                      " --job_scatter_gather_directory {job_scatter_gather_directory}"
