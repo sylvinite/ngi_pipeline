@@ -41,7 +41,7 @@ def get_subtasks_for_level(level):
 
 
 @with_ngi_config
-def return_cl_for_workflow(workflow_name, qscripts_dir_path, setup_xml_path, global_config_path,
+def return_cl_for_workflow(workflow_name, qscripts_dir_path, setup_xml_path, 
                            output_dir=None, exec_mode="local", genotype_file=None,
                            config=None, config_file_path=None, generate_bqsr_bam=False):
     """Return an executable-ready Piper command line.
@@ -49,7 +49,6 @@ def return_cl_for_workflow(workflow_name, qscripts_dir_path, setup_xml_path, glo
     :param str workflow_name: The name of the Piper workflow to be run.
     :param str qscripts_dir_path: The path to the directory containing the qscripts
     :param str setup_xml_path: The path to the project-level setup XML file
-    :param dict global_config_path: The parsed Piper-specific globalConfig file.
     :param str output_dir: The directory to which to write output files
     :param str exec_mode: "local" or "sbatch"
     :param str genotype_file: The path to the genotype file (only relevant for genotype workflow)
@@ -69,7 +68,6 @@ def return_cl_for_workflow(workflow_name, qscripts_dir_path, setup_xml_path, glo
     LOG.info('Building command line for workflow "{}"'.format(workflow_name))
     return workflow_function(qscripts_dir_path=qscripts_dir_path,
                              setup_xml_path=setup_xml_path,
-                             global_config_path=global_config_path,
                              config=config, exec_mode=exec_mode,
                              genotype_file=genotype_file,
                              output_dir=output_dir,
@@ -79,8 +77,6 @@ def return_cl_for_workflow(workflow_name, qscripts_dir_path, setup_xml_path, glo
 #    """Return the command line for basic DNA Alignment.
 #
 #    :param strs qscripts_dir_path: The path to the Piper qscripts directory.
-#    :param str setup_xml_path: The path to the setup.xml file.
-#    :param dict global_config_path: The path to the Piper-specific globalConfig file.
 #
 #    :returns: The Piper command to be executed.
 #    :rtype: str
@@ -94,7 +90,6 @@ def workflow_merge_process_variantcall(*args, **kwargs):
 
     :param str qscripts_dir_path: The path to the Piper qscripts directory.
     :param str setup_xml_path: The path to the setup.xml file.
-    :param str global_config_path: The path to the Piper-specific globalConfig file.
 
     :returns: The Piper command to be executed.
     :rtype: str
@@ -110,13 +105,12 @@ def workflow_merge_process_variantcall(*args, **kwargs):
     return "{} {}".format(cl_string, " ".join(cl_args))
 
 
-def workflow_dna_variantcalling(qscripts_dir_path, setup_xml_path, global_config_path,
+def workflow_dna_variantcalling(qscripts_dir_path, setup_xml_path,
                                 config, exec_mode, output_dir=None, *args, **kwargs):
     """Return the command line for DNA Variant Calling.
 
     :param strs qscripts_dir_path: The path to the Piper qscripts directory.
     :param str setup_xml_path: The path to the setup.xml file.
-    :param str global_config_path: The path to the Piper-specific globalConfig file.
     :param dict config: The parsed ngi_pipeline config file
     :param str output_dir: The path to the desired output directory
 
@@ -156,13 +150,12 @@ def workflow_dna_variantcalling(qscripts_dir_path, setup_xml_path, global_config
 
 
 def workflow_genotype_concordance(qscripts_dir_path, setup_xml_path,
-                                  global_config_path, genotype_file,
+                                  genotype_file,
                                   config, output_dir=None, *args, **kwargs):
     """Return the command line for genotype concordance checking.
 
     :param str qscripts_dir_path: The path to the Piper qscripts directory.
     :param str setup_xml_path: The path to the setup.xml file
-    :param str global_config_path: The path to the Piper-specific globalConfig file.
     :param str genotype_file: The path to the genotype VCF file
     :param dict config: The parsed ngi_pipeline config file
     :param str output_dir: The path to the desired output directory
