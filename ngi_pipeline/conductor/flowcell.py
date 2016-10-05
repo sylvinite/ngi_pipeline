@@ -360,9 +360,9 @@ def setup_analysis_directory_structure(fc_dir, projects_to_analyze,
                         seqrun_dst_dir = os.path.join(project_obj.base_path, project_obj.dirname,
                                                       sample_obj.dirname, libprep_obj.dirname,
                                                       seqrun_obj.dirname)
-                        LOG.info("Symlinking fastq files from {} to {}...".format(src_sample_dir, seqrun_dir))
+                        LOG.info("Symlinking fastq files from {} to {}...".format(src_sample_dir, seqrun_dst_dir))
                         try:
-                            do_symlink(src_fastq_files, seqrun_dir)
+                            do_symlink(src_fastq_files, seqrun_dst_dir)
                         except OSError:
                             error_text = ('Could not symlink files for project/sample'
                                           'libprep/seqrun {}/{}/{}/{}'.format(project_obj,
