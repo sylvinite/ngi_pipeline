@@ -4,8 +4,10 @@ from ngi_pipeline.utils.classes import with_ngi_config
 from ngi_pipeline.database.classes import CharonSession, CharonError
 from ngi_pipeline.engines.rna_ngi.database import get_session, ProjectAnalysis
 from ngi_pipeline.utils.charon import recurse_status_for_sample
+from ngi_pipeline.utils.communication import mail_analysis
 
 import os
+import shutil
 
 LOG = minimal_logger(__name__)
 
@@ -38,6 +40,12 @@ def update_charon_with_local_jobs_status(quiet=False, config=None, config_file_p
                     exit_code=exit_file.read()
                     if exit_code=='0':
                         update_analysis(job.project_id, True)
+                        #clean work dir and merged fastqs
+                        nextflow_work_path=os.path.join(job.project_base_path, "ANALYSIS", job.project_id, 'rna_ngi', 'work')
+                        shutil.rmtree(nextflow_work_path)
+                        merged_path=os.path.join(job.project_base_path, "ANALYSIS", job.project_id, 'rna_ngi', 'fastqs')
+                        shutil.rmtree(merged_path)
+
                     else:
                         update_analysis(job.project_id, False)
             else:
@@ -53,6 +61,7 @@ def update_charon_with_local_jobs_status(quiet=False, config=None, config_file_p
 
 def update_analysis(project_id, status):
     charon_session=CharonSession()
+    mail_analysis(project_id, engine_name='rna_ngi', level='INFO' if status else 'ERROR')
     new_sample_status='ANALYZED' if status else 'FAILED'
     new_seqrun_status='DONE' if status else 'FAILED'
     for sample in charon_session.project_get_samples(project_id).get("samples", {}):
