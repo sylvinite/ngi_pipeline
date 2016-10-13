@@ -5,7 +5,7 @@ from ngi_pipeline.utils.filesystem import execute_command_line, safe_makedir
 
 import os
 
-def run_multiqc(base_path, project_id, project_name):
+def run_multiqc(base_path, project_id, project_name, wait=False):
 
     project_path=os.path.join(base_path, 'ANALYSIS', project_id)
     result_path=os.path.join(base_path, 'ANALYSIS', project_id, 'multiqc')
@@ -15,10 +15,11 @@ def run_multiqc(base_path, project_id, project_name):
     multiqc_stderr=''
     try:
         handle=execute_command_line(command)
-        (multiqc_stdout, multiqc_stderr)=handle.communicate()
-        if multiqc_stdout or multiqc_stderr:
-            combined_output="{}\n{}".format(multiqc_stdout, multiqc_stderr)
-            raise Exception(combined_output)
+        if wait:
+            (multiqc_stdout, multiqc_stderr)=handle.communicate()
+            if multiqc_stdout or multiqc_stderr:
+                combined_output="{}\n{}".format(multiqc_stdout, multiqc_stderr)
+                raise Exception(combined_output)
 
     except:
         raise
