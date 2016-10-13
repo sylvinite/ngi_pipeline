@@ -4,6 +4,7 @@ from ngi_pipeline.utils.classes import with_ngi_config
 from ngi_pipeline.database.classes import CharonSession, CharonError
 from ngi_pipeline.engines.rna_ngi.database import get_session, ProjectAnalysis
 from ngi_pipeline.utils.charon import recurse_status_for_sample
+from ngi_pipeline.utils.communication import mail_analysis
 
 import os
 import shutil
@@ -60,6 +61,7 @@ def update_charon_with_local_jobs_status(quiet=False, config=None, config_file_p
 
 def update_analysis(project_id, status):
     charon_session=CharonSession()
+    mail_analysis(project_id, engine_name='rna_ngi', level='INFO' if status else 'ERROR')
     new_sample_status='ANALYZED' if status else 'FAILED'
     new_seqrun_status='DONE' if status else 'FAILED'
     for sample in charon_session.project_get_samples(project_id).get("samples", {}):
