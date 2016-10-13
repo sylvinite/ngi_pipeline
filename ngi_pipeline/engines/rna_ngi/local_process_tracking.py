@@ -6,6 +6,7 @@ from ngi_pipeline.engines.rna_ngi.database import get_session, ProjectAnalysis
 from ngi_pipeline.utils.charon import recurse_status_for_sample
 
 import os
+import shutil
 
 LOG = minimal_logger(__name__)
 
@@ -38,6 +39,12 @@ def update_charon_with_local_jobs_status(quiet=False, config=None, config_file_p
                     exit_code=exit_file.read()
                     if exit_code=='0':
                         update_analysis(job.project_id, True)
+                        #clean work dir and merged fastqs
+                        nextflow_work_path=os.path.join(job.project_base_path, "ANALYSIS", job.project_id, 'rna_ngi', 'work')
+                        shutil.rmtree(nextflow_work_path)
+                        merged_path=os.path.join(job.project_base_path, "ANALYSIS", job.project_id, 'rna_ngi', 'fastqs')
+                        shutil.rmtree(merged_path)
+
                     else:
                         update_analysis(job.project_id, False)
             else:
