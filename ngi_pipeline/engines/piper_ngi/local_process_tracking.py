@@ -383,6 +383,8 @@ def update_coverage_for_sample_seqruns(project_id, sample_id, piper_qc_dir,
                     reads += parse_qualimap_reads(path)
                 except IOError as e :
                     LOG.error("Cannot find the genome_results.txt file to get the number of reads in {}".format(path))
+                except :
+                    LOG.error("Error in handling the genome_results.txt file located at {}".format(path))
 
             LOG.info('Updating project/sample/libprep/seqrun "{}" in '
                      'Charon with mean autosomal coverage "{}" and total reads {}'.format(label, ma_coverage, reads))
