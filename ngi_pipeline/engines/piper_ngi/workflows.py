@@ -10,7 +10,8 @@ from ngi_pipeline.utils.slurm import slurm_time_to_seconds
 LOG = minimal_logger(__name__)
 
 
-PIPER_CL_TEMPLATE = ("piper -S {workflow_qscript_path}"
+PIPER_CL_TEMPLATE = ("piper {java_opts}"
+                     " -S {workflow_qscript_path}"
                      " --xml_input {setup_xml_path}"
                      " --global_config {global_config_path}"
                      " --number_of_threads {num_threads}"
@@ -125,6 +126,7 @@ def workflow_dna_variantcalling(qscripts_dir_path, setup_xml_path, global_config
     :rtype: str
     """
     cl_string = PIPER_CL_TEMPLATE
+    java_opts = ""
     workflow_qscript_path = os.path.join(qscripts_dir_path, "DNABestPracticeVariantCalling.scala")
     job_walltime = slurm_time_to_seconds(config.get("slurm", {}).get("time") or "4-00:00:00")
     if output_dir:
@@ -143,14 +145,16 @@ def workflow_dna_variantcalling(qscripts_dir_path, setup_xml_path, global_config
         job_runner = config.get("piper", {}).get("shell_jobrunner") or "ParallelShell --super_charge --ways_to_split 4"
         scatter_gather = 1
         job_scatter_gather_directory = os.path.join("$SNIC_TMP", "scatter_gather")
-        temp_directory = os.path.join("$SNIC_TMP", "tempdir")
+        temp_directory = os.path.join("$SNIC_TMP", "piper_tempdir")
+        java_opts = "-Djava.io.tmpdir={}".format(os.path.join("$SNIC_TMP", "java_tempdir"))
     else: # exec_mode == "local"
         # Start a local process that sbatches jobs
         job_runner = "Drmaa"
         scatter_gather = 23
         num_threads = 1
         job_scatter_gather_directory = os.path.join(output_dir, "scatter_gather")
-        temp_directory = os.path.join(output_dir, "tempdir")
+        temp_directory = os.path.join(output_dir, "piper_tempdir")
+        java_opts = "-Djava.io.tmpdir={}".format(os.path.join(output_dir, "java_tempdir"))
     # disable GATK phone home if the license file is present
     gatk_key = config.get("piper", {}).get("gatk_key", None)
     if gatk_key and os.path.exists(gatk_key):
@@ -171,6 +175,7 @@ def workflow_genotype_concordance(qscripts_dir_path, setup_xml_path,
     :param str output_dir: The path to the desired output directory
     """
     cl_string = PIPER_CL_TEMPLATE
+    java_opts = ""
     workflow_qscript_path = os.path.join(qscripts_dir_path, "DNABestPracticeVariantCalling.scala")
     job_walltime = slurm_time_to_seconds(config.get("slurm", {}).get("time") or "4-00:00:00")
     num_threads = int(config.get("piper", {}).get("threads") or 8)
