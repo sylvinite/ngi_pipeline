@@ -69,6 +69,7 @@ java -Xmx15G -jar "${PICARD_HOME}"/picard.jar RevertSam \
 |java -Xmx15G -jar "${PICARD_HOME}"/picard.jar SamToFastq \
   INPUT=/dev/stdin \
   OUTPUT_PER_RG=true \
+  RG_TAG=ID \
   OUTPUT_DIR=$SNIC_TMP \
   INCLUDE_NON_PF_READS=true \
   INCLUDE_NON_PRIMARY_ALIGNMENTS=false
