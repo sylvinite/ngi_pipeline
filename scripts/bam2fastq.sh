@@ -58,6 +58,7 @@ fi
 # 1. shuffle the input bam
 # 2. run RevertSam to restore original qualities (if available)
 # 3. run SamToFastq to produce paired fastq files (readgroup information)
+
 samtools bamshuf -Ou "${IN}" "$SNIC_TMP/shuf.tmp" | \
 java -Xmx15G -jar "${PICARD_HOME}"/picard.jar RevertSam \
   INPUT=/dev/stdin \
@@ -77,10 +78,10 @@ java -Xmx15G -jar "${PICARD_HOME}"/picard.jar RevertSam \
 # should we consider INTERLEAVE=true ?
 
 # compress 
-gzip -v *fastq
+gzip -v $SNIC_TMP/*fastq
 
 # copy the results back from the node to the output directory
 if [ ! -z "$SLURM_JOB_ID" ]
 then
-  cp -v "$SNIC_TMP/*fastq.gz" "`dirname ${IN}`"
+  cp -v $SNIC_TMP/*fastq.gz `dirname ${IN}`
 fi
