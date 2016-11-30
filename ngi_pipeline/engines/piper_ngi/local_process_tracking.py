@@ -38,6 +38,7 @@ def update_charon_with_local_jobs_status(quiet=False, config=None, config_file_p
     if quiet and not config.get("quiet"):
         config['quiet'] = True
     LOG.info("Updating Charon with the status of all locally-tracked jobs...")
+    multiqc_projects=set()
     with get_db_session() as session:
         charon_session = CharonSession()
         for sample_entry in session.query(SampleAnalysis).all():
@@ -116,12 +117,8 @@ def update_charon_with_local_jobs_status(quiet=False, config=None, config_file_p
                                               config=config)
                     # Job is only deleted if the Charon status update succeeds
                     session.delete(sample_entry)
-                    #run MultiQC
-                    LOG.info("Running MultiQC on project {}".format(project_name))
-                    try:
-                        run_multiqc(project_base_path, project_id, project_name)
-                    except Exception as e:
-                        LOG.error(e)
+                    #add project to MultiQC
+                    multiqc_projects.add((project_base_path, project_id, project_name))
 
 
                     if workflow == "merge_process_variantcall":
@@ -272,6 +269,11 @@ def update_charon_with_local_jobs_status(quiet=False, config=None, config_file_p
                                   engine_name=engine, level="ERROR",
                                   workflow=workflow, info_text=error_text)
         session.commit()
+    #Run Multiqc
+    for pj_tuple in multiqc_projects:
+        LOG.info("Running MultiQC on project {}".format(pj_tuple[1]))
+        run_multiqc(pj_tuple[0], pj_tuple[1], pj_tuple[2])
+        
 
 
 
@@ -381,6 +383,8 @@ def update_coverage_for_sample_seqruns(project_id, sample_id, piper_qc_dir,
                     reads += parse_qualimap_reads(path)
                 except IOError as e :
                     LOG.error("Cannot find the genome_results.txt file to get the number of reads in {}".format(path))
+                except :
+                    LOG.error("Error in handling the genome_results.txt file located at {}".format(path))
 
             LOG.info('Updating project/sample/libprep/seqrun "{}" in '
                      'Charon with mean autosomal coverage "{}" and total reads {}'.format(label, ma_coverage, reads))
