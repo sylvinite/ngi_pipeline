@@ -18,6 +18,7 @@ PIPER_CL_TEMPLATE = ("piper {java_opts}"
                      " --scatter_gather {scatter_gather}"
                      " --job_scatter_gather_directory {job_scatter_gather_directory}"
                      " --temp_directory {temp_directory}"
+                     " --run_directory {run_directory}"
                      " -jobRunner {job_runner}"
                      " --job_walltime {job_walltime}"
                      " --disableJobReport"
@@ -145,6 +146,7 @@ def workflow_dna_variantcalling(qscripts_dir_path, setup_xml_path, global_config
         job_runner = config.get("piper", {}).get("shell_jobrunner") or "ParallelShell --super_charge --ways_to_split 4"
         scatter_gather = 1
         job_scatter_gather_directory = os.path.join("$SNIC_TMP", "scatter_gather")
+        run_directory = os.path.join("$SNIC_TMP", "piper_rundir")
         temp_directory = os.path.join("$SNIC_TMP", "piper_tempdir")
         java_opts = "-Djava.io.tmpdir={}".format(os.path.join("$SNIC_TMP", "java_tempdir"))
     else: # exec_mode == "local"
@@ -154,6 +156,7 @@ def workflow_dna_variantcalling(qscripts_dir_path, setup_xml_path, global_config
         num_threads = 1
         job_scatter_gather_directory = os.path.join(output_dir, "scatter_gather")
         temp_directory = os.path.join(output_dir, "piper_tempdir")
+        run_directory = os.path.join(output_dir, "piper_rundir")
         java_opts = "-Djava.io.tmpdir={}".format(os.path.join(output_dir, "java_tempdir"))
     # disable GATK phone home if the license file is present
     gatk_key = config.get("piper", {}).get("gatk_key", None)
@@ -191,4 +194,5 @@ def workflow_genotype_concordance(qscripts_dir_path, setup_xml_path,
     cl_string += " --retry_failed 2"
     cl_string += " --genotypes {}".format(genotype_file)
     temp_directory = os.path.join(output_dir, "tempdir")
+    run_directory = os.path.join(output_dir, "rundir")
     return cl_string.format(**locals())
