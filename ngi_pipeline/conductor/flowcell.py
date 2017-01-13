@@ -203,7 +203,7 @@ def setup_analysis_directory_structure(fc_dir, projects_to_analyze,
     if matches:
         flowcell_uppnexid=matches.group(1)
     else:
-        LOG.error("cannot guess which project the flowcell {} belongs to".format(fc_dir))
+        LOG.error("cannot guess which project (sthlm/uppsala) the flowcell {} belongs to".format(fc_dir))
         raise RuntimeError
 
     analysis_top_dir = os.path.abspath(os.path.join(config["analysis"]["base_root"],flowcell_uppnexid,config["analysis"]["top_dir"]))
@@ -357,7 +357,7 @@ def setup_analysis_directory_structure(fc_dir, projects_to_analyze,
                     for seqrun_obj in libprep_obj:
                         src_fastq_files = [os.path.join(src_sample_dir, fastq_file) for
                                            fastq_file in seqrun_obj.fastq_files]
-                        seqrun_dst_dir = os.path.join(project_obj.base_path, project_obj.dirname,
+                        seqrun_dst_dir = os.path.join(project_obj.base_path, "DATA", project_obj.dirname,
                                                       sample_obj.dirname, libprep_obj.dirname,
                                                       seqrun_obj.dirname)
                         LOG.info("Symlinking fastq files from {} to {}...".format(src_sample_dir, seqrun_dst_dir))
