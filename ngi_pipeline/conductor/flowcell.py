@@ -203,7 +203,7 @@ def setup_analysis_directory_structure(fc_dir, projects_to_analyze,
     if matches:
         flowcell_uppnexid=matches.group(1)
     else:
-        LOG.error("cannot guess which project the flowcell {} belongs to".format(fc_dir))
+        LOG.error("cannot guess which project (sthlm/uppsala) the flowcell {} belongs to".format(fc_dir))
         raise RuntimeError
 
     analysis_top_dir = os.path.abspath(os.path.join(config["analysis"]["base_root"],flowcell_uppnexid,config["analysis"]["top_dir"]))
