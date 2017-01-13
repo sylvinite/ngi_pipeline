@@ -114,7 +114,7 @@ class CharonSession(requests.Session):
         return self.delete(self.construct_charon_url('project', projectid)).text
 
     # Sample
-    def sample_create(self, projectid, sampleid, analysis_status=None,
+    def sample_create(self, projectid, sampleid, status=None, analysis_status=None,
                       qc_status=None, genotype_status=None,
                       genotype_concordance=None, total_autosomal_coverage=None,
                       total_sequenced_reads=None, delivery_status=None):

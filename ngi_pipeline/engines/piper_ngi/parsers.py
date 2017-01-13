@@ -30,6 +30,7 @@ def parse_qualimap_reads(genome_results_file):
             if globals_section:
                 if 'number of reads' in line:
                     return int(line.split('=')[-1].strip().replace(',',''))
+    return 0
 
     
 
