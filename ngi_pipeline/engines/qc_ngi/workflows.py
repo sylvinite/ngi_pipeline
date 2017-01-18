@@ -80,44 +80,72 @@ def workflow_fastqc(input_files, output_dir, config):
                              'available on PATH; cannot proceed with FastQC '
                              'workflow.')
 
-    fastq_files = flatten(input_files) # FastQC cares not for your "read pairs"
+    ##### comment out this... because we care fastq_files = flatten(input_files) # FastQC cares not for your "read pairs"
     # Verify that we in fact need to run this on these files
     fastqc_output_file_tmpls = ("{}_fastqc.zip", "{}_fastqc.html")
     fastq_to_analyze = set()
-    for fastq_file in fastq_files:
-        # Get the basename withot extensions (.fastq, .fastq.gz)
+    for elt in input_files:
+        # This may be a read pair
+        if type(elt) is list:
+            # Changing list to tuple so we can use it in the set() (lists aren't hashable)
+            elt = tuple(elt)
+            # fastqc does not care on read pairs, but if the first is present the second one must be there
+            fastq_file = elt[0]
+        else:
+            fastq_file = elt
         m = re.match(r'([\w-]+).fastq', os.path.basename(fastq_file))
+        #fetch the FCid
+        fc_id = re.search('\d{4,6}_(?P<fcid>[A-Z0-9]{10})', fastq_file).groups()[0]
         if not m:
             # fastq file name doesn't match expected pattern -- just process it
-            fastq_to_analyze.add(fastq_file)
+            fastq_to_analyze.add(elt)
             continue
         else:
             fastq_file_base = m.groups()[0]
         for fastqc_output_file_tmpl in fastqc_output_file_tmpls:
             fastqc_output_file = \
-                    os.path.join(output_dir, fastqc_output_file_tmpl.format(fastq_file_base))
+                    os.path.join(output_dir, fc_id, fastqc_output_file_tmpl.format(fastq_file_base))
             if not os.path.exists(fastqc_output_file):
                 # Output file doesn't exist
-                fastq_to_analyze.add(fastq_file)
+                fastq_to_analyze.add(elt)
             elif os.path.getctime(fastq_file) > os.path.getctime(fastqc_output_file):
                 # Input file modified more recently than output file
-                fastq_to_analyze.add(fastq_file)
+                fastq_to_analyze.add(elt)
+
 
     num_threads = config.get("qc", {}).get("fastqc", {}).get("threads") or 1
     # Construct the command lines
     cl_list = []
-    if fastq_to_analyze:
-        safe_makedir(output_dir)
-        # Module loading
-        modules_to_load = get_all_modules_for_workflow("fastqc", config)
-        for module in modules_to_load:
-            cl_list.append("module load {}".format(module))
-        # Execute fastqc
+    # fastqc commands
+    for elt in fastq_to_analyze:
+        if type(elt) is list or type(elt) is tuple:
+            if len(elt) == 2:
+                # Read pair; fastqc really do not cares but I need this for the output dir
+                fastq_file = elt[0]
+            elif len(elt) == 1:
+                fastq_file = elt[0]
+            else:
+                LOG.error('Files passed as list but more than two elements; '
+                          'not a read pair? Skipping. ({})'.format(" ".join(elt)))
+                continue
+        else:
+            fastq_file = elt
+        #now I have the FCid
+        fc_id = re.search('\d{4,6}_(?P<fcid>[A-Z0-9]{10})', fastq_file).groups()[0]
+        output_dir_fc = os.path.join(output_dir, fc_id)
+        safe_makedir(output_dir_fc)
         cl_list.append('{fastqc_path} -t {num_threads} -o {output_dir} '
-                       '{fastq_files}'.format(output_dir=output_dir,
+                       '{fastq_files}'.format(output_dir=output_dir_fc,
                                               fastqc_path=fastqc_path,
                                               num_threads=num_threads,
-                                              fastq_files=" ".join(fastq_to_analyze)))
+                                              fastq_files=" ".join(elt)))
+
+    if cl_list:
+        # Module loading
+        modules_to_load = get_all_modules_for_workflow("fastqc", config)
+        mod_list = [ "module load {}".format(module) for module in modules_to_load ]
+        if mod_list:
+            cl_list = mod_list + cl_list
     if not cl_list:
         LOG.info("FastQC analysis not needed or input files were invalid.")
     return cl_list

@@ -200,16 +200,17 @@ def find_fastq_read_pairs(file_list):
     matches_dict = collections.defaultdict(list)
     for file_pathname in file_list:
         file_basename = os.path.basename(file_pathname)
+        fc_id = re.search('\d{4,6}_(?P<fcid>[A-Z0-9]{10})', file_pathname).groups()[0]
         try:
             # Check for a pair
             pair_base = file_format_pattern.match(file_basename).groups()[0]
-            matches_dict[pair_base].append(file_pathname)
+            matches_dict["{}_{}".format(pair_base,fc_id)].append(file_pathname)
         except AttributeError:
             LOG.warn("Warning: file doesn't match expected file format, "
-                      "cannot be paired: \"{}\"".format(file_fullname))
+                      "cannot be paired: \"{}\"".format(file_pathname))
             # File could not be paired, set by itself (?)
             file_basename_stripsuffix = suffix_pattern.split(file_basename)[0]
-            matches_dict[file_basename_stripsuffix].append(os.abspath(file_fullname))
+            matches_dict[file_basename_stripsuffix].append(os.abspath(file_pathname))
     return dict(matches_dict)
 
 
