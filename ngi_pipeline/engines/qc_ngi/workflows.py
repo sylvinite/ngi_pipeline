@@ -80,24 +80,17 @@ def workflow_fastqc(input_files, output_dir, config):
                              'available on PATH; cannot proceed with FastQC '
                              'workflow.')
 
+    fastq_files = flatten(input_files) # FastQC cares not for your "read pairs"
     # Verify that we in fact need to run this on these files
     fastqc_output_file_tmpls = ("{}_fastqc.zip", "{}_fastqc.html")
     fastq_to_analyze = set()
-    for elt in input_files:
-        # This may be a read pair
-        if type(elt) is list:
-            # Changing list to tuple so we can use it in the set() (lists aren't hashable)
-            elt = tuple(elt)
-            # fastqc does not care on read pairs, but if the first is present the second one must be there
-            fastq_file = elt[0]
-        else:
-            fastq_file = elt
+    for fastq_file in fastq_files:
         m = re.match(r'([\w-]+).fastq', os.path.basename(fastq_file))
         #fetch the FCid
         fc_id = re.search('\d{4,6}_(?P<fcid>[A-Z0-9]{10})', fastq_file).groups()[0]
         if not m:
             # fastq file name doesn't match expected pattern -- just process it
-            fastq_to_analyze.add(elt)
+            fastq_to_analyze.add(fastq_file)
             continue
         else:
             fastq_file_base = '{}_{}'.format(m.groups()[0], fc_id)
@@ -106,49 +99,39 @@ def workflow_fastqc(input_files, output_dir, config):
                     os.path.join(output_dir, fastqc_output_file_tmpl.format(fastq_file_base))
             if not os.path.exists(fastqc_output_file):
                 # Output file doesn't exist
-                fastq_to_analyze.add(elt)
+                fastq_to_analyze.add(fastq_file)
             elif os.path.getctime(fastq_file) > os.path.getctime(fastqc_output_file):
                 # Input file modified more recently than output file
-                fastq_to_analyze.add(elt)
+                fastq_to_analyze.add(fastq_file)
 
 
     num_threads = config.get("qc", {}).get("fastqc", {}).get("threads") or 1
     # Construct the command lines
     cl_list = []
     # fastqc commands
-    safe_makedir(output_dir) #create the fastqc folder as fastqc wants it and I have to create soflinks
-    for elt in fastq_to_analyze:
-        original_fastq_files = []
-        if type(elt) is list or type(elt) is tuple:
-            if len(elt) > 2:
-                LOG.error('Files passed as list but more than two elements; '
-                          'not a read pair? Skipping. ({})'.format(" ".join(elt)))
-                continue
-            original_fastq_files = elt
-        else:
-            original_fastq_files = [elt]
+    for fastq_file in fastq_to_analyze:
         #when building the fastqc command soflink in the qc_ngi folder the fastq file processed being sure to avoid name collision (i.e., same sample run in two different FC but on the same lane number). Run fastqc on the softlink and delete the soflink straight away. In case the fastq file does not match the regex force the exectuion of fastqc... this is what we have been always doing.
-        for original_fastq_file in original_fastq_files:
-            fc_id = re.search('\d{4,6}_(?P<fcid>[A-Z0-9]{10})', original_fastq_file).groups()[0]
-            m = re.match(r'([\w-]+).(fastq.*)', os.path.basename(original_fastq_file))
-            if not m:
-                # fastq file name doesn't match expected pattern -- just process it
-                linked_fastq_file_basename =  os.path.basename(original_fastq_file)
-            else:
-                linked_fastq_file_basename = "{}_{}.{}".format( m.groups()[0], fc_id, m.groups()[1])
-            linked_fastq_file = os.path.join(output_dir, linked_fastq_file_basename)
+        fc_id = re.search('\d{4,6}_(?P<fcid>[A-Z0-9]{10})', fastq_file).groups()[0]
+        m = re.match(r'([\w-]+).(fastq.*)', os.path.basename(fastq_file))
+        if not m:
+            # fastq file name doesn't match expected pattern -- just process it
+            linked_fastq_file_basename =  os.path.basename(fastq_file)
+        else:
+            linked_fastq_file_basename = "{}_{}.{}".format( m.groups()[0], fc_id, m.groups()[1])
+        linked_fastq_file = os.path.join(output_dir, linked_fastq_file_basename)
             #add the command
-            cl_list.append('ln -s {original_file} {renamed_fastq_file}'.format(original_file=original_fastq_file,
+        cl_list.append('ln -s {original_file} {renamed_fastq_file}'.format(original_file=fastq_file,
                                                                                renamed_fastq_file=linked_fastq_file))
-            #now the fastq command (one per file)
-            cl_list.append('{fastqc_path} -t {num_threads} -o {output_dir} '
+        #now the fastq command (one per file)
+        cl_list.append('{fastqc_path} -t {num_threads} -o {output_dir} '
                        '{fastq_files}'.format(output_dir=output_dir,
                                               fastqc_path=fastqc_path,
                                               num_threads=num_threads,
                                               fastq_files=linked_fastq_file))
-            #remove the link to the fastq file
-            cl_list.append('rm {renamed_fastq_file}'.format(renamed_fastq_file=linked_fastq_file))
+        #remove the link to the fastq file
+        cl_list.append('rm {renamed_fastq_file}'.format(renamed_fastq_file=linked_fastq_file))
     if cl_list:
+        safe_makedir(output_dir) #create the fastqc folder as fastqc wants it and I have to create soflinks
         # Module loading
         modules_to_load = get_all_modules_for_workflow("fastqc", config)
         mod_list = [ "module load {}".format(module) for module in modules_to_load ]
@@ -189,56 +172,58 @@ def workflow_fastq_screen(input_files, output_dir, config):
     subsample_reads = config.get("qc", {}).get("fastq_screen", {}).get("subsample_reads")
 
     # Determine which files need processing
+    fastq_files = flatten(input_files) # Fastq_screen cares not for your "read pairs" anymore from version 1.5
+    # Verify that we in fact need to run this on these files
     fastq_screen_output_file_tmpls = ("{}_screen.png", "{}_screen.txt")
     fastq_to_analyze = set()
-    for elt in input_files:
-        # This may be a read pair
-        if type(elt) is list:
-            # Changing list to tuple so we can use it in the set() (lists aren't hashable)
-            elt = tuple(elt)
-            # fastq_screen uses the name of the first read of the pair for output files
-            fastq_file = elt[0]
+    for fastq_file in fastq_files:
+        m = re.match(r'([\w-]+).fastq', os.path.basename(fastq_file))
+        #fetch the FCid
+        fc_id = re.search('\d{4,6}_(?P<fcid>[A-Z0-9]{10})', fastq_file).groups()[0]
+        if not m:
+            # fastq file name doesn't match expected pattern -- just process it
+            fastq_to_analyze.add(fastq_file)
+            continue
         else:
-            fastq_file = elt
+            fastq_file_base = '{}_{}'.format(m.groups()[0], fc_id)
         for fastq_screen_output_file_tmpl in fastq_screen_output_file_tmpls:
             fastq_screen_output_file = \
-                    os.path.join(output_dir, fastq_screen_output_file_tmpl.format(fastq_file))
+                    os.path.join(output_dir, fastq_screen_output_file_tmpl.format(fastq_file_base))
             if not os.path.exists(fastq_screen_output_file):
                 # Output file doesn't exist
-                fastq_to_analyze.add(elt)
+                fastq_to_analyze.add(fastq_file)
             elif os.path.getctime(fastq_file) > os.path.getctime(fastq_screen_output_file):
                 # Input file modified more recently than output file
-                fastq_to_analyze.add(elt)
+                fastq_to_analyze.add(fastq_file)
 
     # Construct the command lines
     cl_list = []
     # fastq_screen commands
-    for elt in fastq_to_analyze:
-        #work on a soflink version
-        #remove the --paired as it does not exists any longer
-        #check how to run it properly
+    for fastq_file in fastq_to_analyze:
+        #when building the fastq_screen command soflink in the qc_ngi folder the fastq file processed being sure to avoid name collision (i.e., same sample run in two different FC but on the same lane number). Run fastq_screen on the softlink and delete the soflink straight away. In case the fastq file does not match the regex force the exectuion of fastq_screen... this is what we have been always doing.
+        fc_id = re.search('\d{4,6}_(?P<fcid>[A-Z0-9]{10})', fastq_file).groups()[0]
+        m = re.match(r'([\w-]+).(fastq.*)', os.path.basename(fastq_file))
+        if not m:
+            # fastq file name doesn't match expected pattern -- just process it
+            linked_fastq_file_basename =  os.path.basename(fastq_file)
+        else:
+            linked_fastq_file_basename = "{}_{}.{}".format( m.groups()[0], fc_id, m.groups()[1])
+        linked_fastq_file = os.path.join(output_dir, linked_fastq_file_basename)
+            #add the command
+        cl_list.append('ln -s {original_file} {renamed_fastq_file}'.format(original_file=fastq_file,
+                                                                               renamed_fastq_file=linked_fastq_file))
+        #now the fastq_screen command (one per file)
         cl = fastq_screen_path
         cl += " --aligner bowtie2"
         cl += " --outdir {}".format(output_dir)
         if subsample_reads: cl += " --subset {}".format(subsample_reads)
         if num_threads: cl += " --threads {}".format(num_threads)
         if fastq_screen_config_path: cl += " --conf {}".format(fastq_screen_config_path)
-        if type(elt) is list or type(elt) is tuple:
-            if len(elt) == 2:
-                # Read pair; run fastq_screen on these together
-                cl += (" --paired {}".format(" ".join(elt)))
-            elif len(elt) == 1:
-                cl += " " + elt[0]
-            else:
-                LOG.error('Files passed as list but more than two elements; '
-                          'not a read pair? Skipping. ({})'.format(" ".join(elt)))
-                continue
-        elif type(elt) is str or type(elt) is unicode:
-            cl += " " + elt
-        else:
-            LOG.error("Ignoring your weird input (not a string, not a list).")
-            continue
+        cl_list.append(linked_fastq_file)
         cl_list.append(cl)
+        #remove the link to the fastq file
+        cl_list.append('rm {renamed_fastq_file}'.format(renamed_fastq_file=linked_fastq_file))
+    
     if cl_list:
         safe_makedir(output_dir)
         # Module loading
