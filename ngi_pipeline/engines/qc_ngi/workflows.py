@@ -219,7 +219,7 @@ def workflow_fastq_screen(input_files, output_dir, config):
         if subsample_reads: cl += " --subset {}".format(subsample_reads)
         if num_threads: cl += " --threads {}".format(num_threads)
         if fastq_screen_config_path: cl += " --conf {}".format(fastq_screen_config_path)
-        cl_list.append(linked_fastq_file)
+        cl += " {}".format(linked_fastq_file)
         cl_list.append(cl)
         #remove the link to the fastq file
         cl_list.append('rm {renamed_fastq_file}'.format(renamed_fastq_file=linked_fastq_file))
