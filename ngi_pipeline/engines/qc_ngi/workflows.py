@@ -83,53 +83,26 @@ def workflow_fastqc(input_files, output_dir, config):
     fastq_files = flatten(input_files) # FastQC cares not for your "read pairs"
     # Verify that we in fact need to run this on these files
     fastqc_output_file_tmpls = ("{}_fastqc.zip", "{}_fastqc.html")
-    fastq_to_analyze = set()
-    for fastq_file in fastq_files:
-        m = re.match(r'([\w-]+).fastq', os.path.basename(fastq_file))
-        #fetch the FCid
-        fc_id = re.search('\d{4,6}_(?P<fcid>[A-Z0-9]{10})', fastq_file).groups()[0]
-        if not m:
-            # fastq file name doesn't match expected pattern -- just process it
-            fastq_to_analyze.add(fastq_file)
-            continue
-        else:
-            fastq_file_base = '{}_{}'.format(m.groups()[0], fc_id)
-        for fastqc_output_file_tmpl in fastqc_output_file_tmpls:
-            fastqc_output_file = \
-                    os.path.join(output_dir, fastqc_output_file_tmpl.format(fastq_file_base))
-            if not os.path.exists(fastqc_output_file):
-                # Output file doesn't exist
-                fastq_to_analyze.add(fastq_file)
-            elif os.path.getctime(fastq_file) > os.path.getctime(fastqc_output_file):
-                # Input file modified more recently than output file
-                fastq_to_analyze.add(fastq_file)
-
-
-    num_threads = config.get("qc", {}).get("fastqc", {}).get("threads") or 1
+    fastq_to_analyze = fastq_to_be_analysed(fastq_files, output_dir, fastqc_output_file_tmpls)
     # Construct the command lines
+    num_threads = config.get("qc", {}).get("fastqc", {}).get("threads") or 1
     cl_list = []
     # fastqc commands
-    for fastq_file in fastq_to_analyze:
-        #when building the fastqc command soflink in the qc_ngi folder the fastq file processed being sure to avoid name collision (i.e., same sample run in two different FC but on the same lane number). Run fastqc on the softlink and delete the soflink straight away. In case the fastq file does not match the regex force the exectuion of fastqc... this is what we have been always doing.
-        fc_id = re.search('\d{4,6}_(?P<fcid>[A-Z0-9]{10})', fastq_file).groups()[0]
-        m = re.match(r'([\w-]+).(fastq.*)', os.path.basename(fastq_file))
-        if not m:
-            # fastq file name doesn't match expected pattern -- just process it
-            linked_fastq_file_basename =  os.path.basename(fastq_file)
-        else:
-            linked_fastq_file_basename = "{}_{}.{}".format( m.groups()[0], fc_id, m.groups()[1])
-        linked_fastq_file = os.path.join(output_dir, linked_fastq_file_basename)
-            #add the command
-        cl_list.append('ln -s {original_file} {renamed_fastq_file}'.format(original_file=fastq_file,
-                                                                               renamed_fastq_file=linked_fastq_file))
+    for fastq_file_pair in fastq_to_analyze:
+        #when building the fastqc command soflink in the qc_ngi folder the fastq file processed being sure to avoid name collision (i.e., same sample run in two different FC but on the same lane number). Run fastqc on the softlink and delete the soflink straight away.
+        fastq_file_original   = fastq_file_pair[0]
+        fastq_file_softlinked = fastq_file_pair[1]
+        #add the command
+        cl_list.append('ln -s {original_file} {renamed_fastq_file}'.format(original_file=fastq_file_original,
+                                                                            renamed_fastq_file=fastq_file_softlinked))
         #now the fastq command (one per file)
         cl_list.append('{fastqc_path} -t {num_threads} -o {output_dir} '
                        '{fastq_files}'.format(output_dir=output_dir,
                                               fastqc_path=fastqc_path,
                                               num_threads=num_threads,
-                                              fastq_files=linked_fastq_file))
+                                              fastq_files=fastq_file_softlinked))
         #remove the link to the fastq file
-        cl_list.append('rm {renamed_fastq_file}'.format(renamed_fastq_file=linked_fastq_file))
+        cl_list.append('rm {renamed_fastq_file}'.format(renamed_fastq_file=fastq_file_softlinked))
     if cl_list:
         safe_makedir(output_dir) #create the fastqc folder as fastqc wants it and I have to create soflinks
         # Module loading
@@ -175,43 +148,17 @@ def workflow_fastq_screen(input_files, output_dir, config):
     fastq_files = flatten(input_files) # Fastq_screen cares not for your "read pairs" anymore from version 1.5
     # Verify that we in fact need to run this on these files
     fastq_screen_output_file_tmpls = ("{}_screen.png", "{}_screen.txt")
-    fastq_to_analyze = set()
-    for fastq_file in fastq_files:
-        m = re.match(r'([\w-]+).fastq', os.path.basename(fastq_file))
-        #fetch the FCid
-        fc_id = re.search('\d{4,6}_(?P<fcid>[A-Z0-9]{10})', fastq_file).groups()[0]
-        if not m:
-            # fastq file name doesn't match expected pattern -- just process it
-            fastq_to_analyze.add(fastq_file)
-            continue
-        else:
-            fastq_file_base = '{}_{}'.format(m.groups()[0], fc_id)
-        for fastq_screen_output_file_tmpl in fastq_screen_output_file_tmpls:
-            fastq_screen_output_file = \
-                    os.path.join(output_dir, fastq_screen_output_file_tmpl.format(fastq_file_base))
-            if not os.path.exists(fastq_screen_output_file):
-                # Output file doesn't exist
-                fastq_to_analyze.add(fastq_file)
-            elif os.path.getctime(fastq_file) > os.path.getctime(fastq_screen_output_file):
-                # Input file modified more recently than output file
-                fastq_to_analyze.add(fastq_file)
-
+    fastq_to_analyze = fastq_to_be_analysed(fastq_files, output_dir, fastq_screen_output_file_tmpls)
     # Construct the command lines
     cl_list = []
     # fastq_screen commands
-    for fastq_file in fastq_to_analyze:
-        #when building the fastq_screen command soflink in the qc_ngi folder the fastq file processed being sure to avoid name collision (i.e., same sample run in two different FC but on the same lane number). Run fastq_screen on the softlink and delete the soflink straight away. In case the fastq file does not match the regex force the exectuion of fastq_screen... this is what we have been always doing.
-        fc_id = re.search('\d{4,6}_(?P<fcid>[A-Z0-9]{10})', fastq_file).groups()[0]
-        m = re.match(r'([\w-]+).(fastq.*)', os.path.basename(fastq_file))
-        if not m:
-            # fastq file name doesn't match expected pattern -- just process it
-            linked_fastq_file_basename =  os.path.basename(fastq_file)
-        else:
-            linked_fastq_file_basename = "{}_{}.{}".format( m.groups()[0], fc_id, m.groups()[1])
-        linked_fastq_file = os.path.join(output_dir, linked_fastq_file_basename)
-            #add the command
-        cl_list.append('ln -s {original_file} {renamed_fastq_file}'.format(original_file=fastq_file,
-                                                                               renamed_fastq_file=linked_fastq_file))
+    for fastq_file_pair in fastq_to_analyze:
+        #when building the fastq_screen command soflink in the qc_ngi folder the fastq file processed being sure to avoid name collision (i.e., same sample run in two different FC but on the same lane number). Run fastq_screen on the softlink and delete the soflink straight away.
+        fastq_file_original   = fastq_file_pair[0]
+        fastq_file_softlinked = fastq_file_pair[1]
+        #add the command
+        cl_list.append('ln -s {original_file} {renamed_fastq_file}'.format(original_file=fastq_file_original,
+                                                                            renamed_fastq_file=fastq_file_softlinked))
         #now the fastq_screen command (one per file)
         cl = fastq_screen_path
         cl += " --aligner bowtie2"
@@ -219,11 +166,10 @@ def workflow_fastq_screen(input_files, output_dir, config):
         if subsample_reads: cl += " --subset {}".format(subsample_reads)
         if num_threads: cl += " --threads {}".format(num_threads)
         if fastq_screen_config_path: cl += " --conf {}".format(fastq_screen_config_path)
-        cl += " {}".format(linked_fastq_file)
+        cl += " {}".format(fastq_file_softlinked)
         cl_list.append(cl)
         #remove the link to the fastq file
-        cl_list.append('rm {renamed_fastq_file}'.format(renamed_fastq_file=linked_fastq_file))
-    
+        cl_list.append('rm {renamed_fastq_file}'.format(renamed_fastq_file=fastq_file_softlinked))
     if cl_list:
         safe_makedir(output_dir)
         # Module loading
@@ -234,6 +180,41 @@ def workflow_fastq_screen(input_files, output_dir, config):
     else:
         LOG.info("fastq_screen analysis not needed or input files were invalid.")
     return cl_list
+
+
+def fastq_to_be_analysed(fastq_files, analysis_dir, output_footers):
+    """Produces a list of couples, the first element is the file itself, the second is the name of the soflink to be created.
+    
+    :param list fastq_files: The list of fastq files to analyze
+    :param str analysis_dir: the folder where the analysis results will be stored
+    :param list output_footers: the list of footers that indicate analysis have been already run
+    :param dict config: The parsed system/pipeline configuration file
+
+    :returns: A list pairs, the first element being the fastq file to be analysed and the second being the renamed fastq file to avoid naming collisions problems
+    :rtype: list
+    """
+    #inititialise empty list
+    fastq_to_analyze = []
+    for fastq_file in fastq_files:
+        m = re.match(r'([\w-]+).(fastq.*)', os.path.basename(fastq_file))
+        #fetch the FCid
+        fc_id = os.path.dirname(fastq_file).split("_")[-1]
+        if not m:
+            # fastq file name doesn't match expected pattern -- let be serious.. we do NOT process it
+            continue
+        linked_fastq_file_base = '{}_{}'.format(m.groups()[0], fc_id)
+        linked_fastq_file_name = '{}_{}.{}'.format( m.groups()[0], fc_id, m.groups()[1])
+        linked_fastq_file_path = os.path.join(analysis_dir, linked_fastq_file_name)
+        for output_file_tmpl in output_footers:
+            output_file = os.path.join(analysis_dir, output_file_tmpl.format(linked_fastq_file_base))
+            if not os.path.exists(output_file):
+                # Output file doesn't exist
+                fastq_to_analyze.append([fastq_file, linked_fastq_file_path])
+            elif os.path.getctime(fastq_file) > os.path.getctime(output_file):
+                # Input file modified more recently than output file
+                fastq_to_analyze.append([fastq_file, linked_fastq_file_path])
+    return fastq_to_analyze
+
 
 
 def get_all_modules_for_workflow(binary_name, config):
