@@ -147,7 +147,7 @@ def workflow_fastq_screen(input_files, output_dir, config):
     # Determine which files need processing
     fastq_files = flatten(input_files) # Fastq_screen cares not for your "read pairs" anymore from version 1.5
     # Verify that we in fact need to run this on these files
-    fastq_screen_output_file_tmpls = ("{}_screen.png", "{}_screen.txt")
+    fastq_screen_output_file_tmpls = ["{}_screen.txt"]
     fastq_to_analyze = fastq_to_be_analysed(fastq_files, output_dir, fastq_screen_output_file_tmpls)
     # Construct the command lines
     cl_list = []
