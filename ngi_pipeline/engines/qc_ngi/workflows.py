@@ -210,9 +210,14 @@ def fastq_to_be_analysed(fastq_files, analysis_dir, output_footers):
             if not os.path.exists(output_file):
                 # Output file doesn't exist
                 fastq_to_analyze.append([fastq_file, linked_fastq_file_path])
+                #break the loop because I have enough evidence that I want to run this, and I do not want to run multiple times
+                break
             elif os.path.getctime(fastq_file) > os.path.getctime(output_file):
                 # Input file modified more recently than output file
                 fastq_to_analyze.append([fastq_file, linked_fastq_file_path])
+                #break the loop because I have enough evidence that I want to run this, and I do not want to run multiple times
+                break
+
     return fastq_to_analyze
 
 
