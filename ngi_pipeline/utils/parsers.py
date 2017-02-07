@@ -200,7 +200,7 @@ def find_fastq_read_pairs(file_list):
     matches_dict = collections.defaultdict(list)
     for file_pathname in file_list:
         file_basename = os.path.basename(file_pathname)
-        fc_id = re.search('\d{4,6}_(?P<fcid>[A-Z0-9]{10})', file_pathname).groups()[0]
+        fc_id = os.path.dirname(file_pathname).split("_")[-1]
         try:
             # Check for a pair
             pair_base = file_format_pattern.match(file_basename).groups()[0]
