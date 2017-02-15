@@ -129,7 +129,6 @@ def create_gt_files(config, xl_file_data, snps_data, xl_file_name):
             processed_samples.append(sample_id)
     return processed_samples
 
-
 def parse_xl_file(config, xl_file):
     genotype_data = {}
     data = pyexcel_xlsx.get_data(xl_file)
@@ -206,7 +205,6 @@ def parse_maf_snps_file(config):
                 snps_data[rs_position] = [chromosome, position, rs_position, reference, alternative]
     return snps_data
 
-
 @cli.command()
 @click.argument('sample')
 @click.option('--force', '-f', is_flag=True, default=False, help='If not specified, will keep existing vcf files and use them to check concordance. Otherwise overwrite')
@@ -225,8 +223,8 @@ def genotype_sample(context, sample, force):
             if error:
                 log.error('Sample has not been updated in Charon: {}'.format(sample))
                 log.error('Error says: {}'.format(error))
-            log.info('Sample name\t % concordance')
-            log.info('{}:\t {}'.format(sample, concordance))
+            print 'Sample name\t % concordance'
+            print '{}:\t {}'.format(sample, concordance)
 
 @click.pass_context
 def run_genotype_sample(context, sample, force=None):
@@ -268,8 +266,12 @@ def run_genotype_sample(context, sample, force=None):
         vcf_data = parse_vcf_file(sample, config)
         gt_data = parse_gt_file(sample, config)
         if len(vcf_data) != len(gt_data):
-            log.warning('VCF file and GT file contain differenct number of positions!! ({}, {})'.format(len(vcf_data), len(gt_data)))
-        concordance = check_concordance(sample, vcf_data, gt_data, config)
+            log.warning('VCF file and GT file contain different number of positions!! ({}, {})'.format(len(vcf_data), len(gt_data)))
+        if len(vcf_data) <= 30:
+            log.warning('VCF file contans only {} positions! Skipping concordance check'.format(len(vcf_data)))
+            concordance = 0.0
+        else:
+            concordance = check_concordance(sample, vcf_data, gt_data, config)
         return concordance
 
 @click.pass_context
@@ -362,13 +364,9 @@ def parse_gt_file(sample, config):
 
 def check_concordance(sample, vcf_data, gt_data, config):
     project = sample.split('_')[0]
-
-    header = 'Sample Chrom Pos A1_seq A2_seq A1_maf A2_maf'
-
     matches = []
     mismatches = []
-    snps_number = 0
-    lost = 0
+    lost = []
     for chromosome_position in vcf_data.keys():
         chromosome, position = chromosome_position.split()
         vcf_a1 = vcf_data[chromosome_position]['a1']
@@ -381,24 +379,33 @@ def check_concordance(sample, vcf_data, gt_data, config):
         gt_a2 = gt_data[chromosome_position]['a2']
         concordance = set([gt_a1, gt_a2]) == set([vcf_a1, vcf_a2])
         if concordance:
-            matches.append('{} {} {} {} {} {} {}'.format(sample, chromosome, position, vcf_a1, vcf_a2, gt_a1, gt_a2))
-            snps_number += 1
+            matches.append([chromosome, position, vcf_a1, vcf_a2, gt_a1, gt_a2])
         else:
-            mismatches.append('{} {} {} {} {} {} {}'.format(sample, chromosome, position, vcf_a1, vcf_a2, gt_a1, gt_a2))
             if gt_a1 != '0' and gt_a2 != '0':
-                snps_number += 1
+                mismatches.append([chromosome, position, vcf_a1, vcf_a2, gt_a1, gt_a2])
             else:
-                lost += 1
+                lost.append([chromosome, position, vcf_a1, vcf_a2, gt_a1, gt_a2])
+
+    # calculating concordance and round to 2 decimals
+    percent_matches=round((float(len(matches))/float(len(vcf_data) - len(lost))*100), 2)
+
+    # sort by chromosome and position
+    matches = sorted(matches, key=lambda x:(int(x[0]) if x[0] != 'X' else x[0], int(x[1])))
+    mismatches = sorted(mismatches, key=lambda x:(int(x[0]) if x[0] != 'X' else x[0], int(x[1])))
+    lost = sorted(lost, key=lambda x:(int(x[0]) if x[0] != 'X' else x[0], int(x[1])))
+
     # recording results
-    result = 'Matches:\n'
-    result += '\n'.join(matches)
-    result += '\nMismatches:\n'
-    result += '\n'.join(mismatches)
-    percent_matches=(float(len(matches))/float(snps_number))*100
+    result = '{}\n'.format(sample)
+    result += 'Chrom Pos A1_seq A2_seq A1_maf A2_maf\n'
+    result += 'Mismatches: {}\n'.format(len(mismatches))
+    result += '\n'.join([' '.join(mismatch) for mismatch in mismatches])
+    result += '\nLost: {}:\n'.format(len(lost))
+    result += '\n'.join([' '.join(lost_snp) for lost_snp in lost])
     result += '\n'
-    result += '\nLost snps: {}\n'.format(lost)
-    result += 'Total number of matches: {} / {}\n'.format(len(matches), snps_number)
+    result += '\nLost snps: {}\n'.format(len(lost))
+    result += 'Total number of matches: {} / {} / {}\n'.format(len(matches), len(vcf_data)-len(lost), len(vcf_data))
     result += 'Percent matches {}%\n'.format(percent_matches)
+
 
     # path should exist (if we came to this point), but checking anyway
     output_path = os.path.join(config.get('ANALYSIS_PATH'), project, 'piper_ngi/03_genotype_concordance')
@@ -406,41 +413,83 @@ def check_concordance(sample, vcf_data, gt_data, config):
         # create .conc file
         with open(os.path.join(output_path, '{}.conc'.format(sample)), 'w+') as conc_file:
             conc_file.write(result)
-        # create .conc.header file
-        with open(os.path.join(output_path, '{}.conc.header'.format(sample)), 'w+') as header_file:
-            header_file.write(header)
 
-    if len(matches) + len(mismatches) != len(vcf_data):
-        log.warning('CHECK RESULTS!! Numbers are incoherent. Total number: {}, matches: {}, mismatches: {}'.format(len(vcf_data), len(matches), len(mismatches)))
+    if len(matches) + len(mismatches) + len(lost) != len(vcf_data):
+        log.warning('CHECK RESULTS!! Numbers are incoherent. Total number: {}, matches: {}, mismatches: {}, lost: {}'.format(len(vcf_data), len(matches), len(mismatches), len(lost)))
 
+    # todo:
+    if len(lost) >= 30:
+        log.warning('Too few positions in VCF file!! Failed to caclulate concordance')
     return percent_matches
-
 
 def run_gatk(sample, config):
     project = sample.split('_')[0]
     ANALYSIS_PATH = config.get('ANALYSIS_PATH')
     # the path has been already checked, but checking again
     if os.path.exists(ANALYSIS_PATH):
-        bamfile = os.path.join(ANALYSIS_PATH, project, 'piper_ngi/05_processed_alignments/{}.clean.dedup.bam'.format(sample))
-        if not os.path.exists(bamfile):
-            log.error('bamfile does not exist! {}'.format(bamfile))
+        gvcf_file = os.path.join(ANALYSIS_PATH, project, 'piper_ngi/07_variant_calls/{}.clean.dedup.recal.bam.genomic.vcf.gz'.format(sample))
+        if not os.path.exists(gvcf_file):
+            log.error('GVCF file does not exist! {}'.format(gvcf_file))
             return None
         project = sample.split('_')[0]
         # the path has been already checked
         output_file = os.path.join(ANALYSIS_PATH, project, 'piper_ngi/03_genotype_concordance', "{sample}.vcf".format(sample=sample))
-        options = """-T UnifiedGenotyper  -I {bamfile} -R {gatk_ref_file} -o {sample}  -D {gatk_var_file} -L {interval_file} -out_mode EMIT_ALL_SITES """.format(
-                bamfile=bamfile,
-                sample=output_file,
+        options = """-T GenotypeGVCFs  --variant {gvcf_file} -R {gatk_ref_file} -o {output_file}  -L {interval_file} """.format(
+                gvcf_file=gvcf_file,
+                output_file=output_file,
                 interval_file=config.get('INTERVAL_FILE'),
-                gatk_ref_file=config.get('GATK_REF_FILE'),
-                gatk_var_file=config.get('GATK_VAR_FILE'))
+                gatk_ref_file=config.get('GATK_REF_FILE'))
         full_command = 'java -Xmx6g -jar {} {}'.format(config.get('GATK_PATH'), options)
         try:
             subprocess.call(full_command.split())
         except:
-            pass
-        else:
-            return output_file
+            return None
+        return output_file
+
+
+# #Select a sample and restrict the output vcf to a set of intervals:
+# java -Xmx2g -jar GenomeAnalysisTK.jar \
+#        -R ref.fasta \
+#        -T SelectVariants \
+#        --variant input.vcf \
+#        -o output.vcf \
+#        -L /path/to/my.interval_list \
+#        -sn SAMPLE_1_ACTG
+
+
+#
+# # java -Xmx6g -jar /sw/apps/bioinfo/GATK/3.5.0/GenomeAnalysisTK.jar -T GenotypeGVCFs --variant /proj/ngi2016003/nobackup/NGI/ANALYSIS/P4601/piper_ngi/07_variant_calls/P4601_171.clean.dedup.recal.bam.genomic.vcf.gz -R /sw/data/uppnex/reference/biodata/GATK/ftp.broadinstitute.org/bundle/2.8/b37/human_g1k_v37.fasta -o P4601_171.GenotypeGVCFs -L /lupus/proj/ngi2016003/software/script/gt_concordance/input/snps.interval_list
+# # java -jar GenomeAnalysisTK.jar \
+# # -T GenotypeGVCFs \
+# #   -R reference.fasta \
+# #   --variant P4601_252.clean.dedup.recal.bam.genomic.vcf.gz\
+# #  -o output.vcf
+
+# def run_gatk(sample, config):
+#     project = sample.split('_')[0]
+#     ANALYSIS_PATH = config.get('ANALYSIS_PATH')
+#     # the path has been already checked, but checking again
+#     if os.path.exists(ANALYSIS_PATH):
+#         bamfile = os.path.join(ANALYSIS_PATH, project, 'piper_ngi/05_processed_alignments/{}.clean.dedup.bam'.format(sample))
+#         if not os.path.exists(bamfile):
+#             log.error('bamfile does not exist! {}'.format(bamfile))
+#             return None
+#         project = sample.split('_')[0]
+#         # the path has been already checked
+#         output_file = os.path.join(ANALYSIS_PATH, project, 'piper_ngi/03_genotype_concordance', "{sample}.vcf".format(sample=sample))
+#         options = """-T UnifiedGenotyper  -I {bamfile} -R {gatk_ref_file} -o {sample}  -D {gatk_var_file} -L {interval_file} -out_mode EMIT_ALL_SITES """.format(
+#                 bamfile=bamfile,
+#                 sample=output_file,
+#                 interval_file=config.get('INTERVAL_FILE'),
+#                 gatk_ref_file=config.get('GATK_REF_FILE'),
+#                 gatk_var_file=config.get('GATK_VAR_FILE'))
+#         full_command = 'java -Xmx6g -jar {} {}'.format(config.get('GATK_PATH'), options)
+#         try:
+#             subprocess.call(full_command.split())
+#         except:
+#             pass
+#         else:
+#             return output_file
 
 def update_charon(sample, status, concordance=None):
     project_id = sample.split('_')[0]
@@ -492,21 +541,21 @@ def genotype_project(context, project, force):
 
         # print results
         if results:
-            log.info('Sample name\t % concordance')
-            for sample, concordance in results.items():
-                log.info('{}:\t {}'.format(sample, concordance))
+            print 'Sample name % concordance'
+            for sample, concordance in sorted(results.items(), key=lambda s:s[0]):
+                print '{} {}'.format(sample, concordance)
         # print failed
         if failed:
-            log.info('Failed to check concordance for samples: ')
+            print 'Failed to check concordance for samples: '
             for sample in failed:
-                log.info(sample)
+                print sample
 
 @cli.command()
 @click.argument('project')
 @click.option('--threshold', '-t', default=99, help='Threshold for concordance. Will print samples below this value', type=float)
-@click.option('--all', '-a', default=False, is_flag=True, help='If specified, will print ALL samples, both below and above the threshold')
+@click.option('--all', '-a', 'all_samples', default=False, is_flag=True, help='If specified, will print ALL samples, both below and above the threshold')
 @click.pass_context
-def fetch_charon(context, project, threshold, all):
+def fetch_charon(context, project, threshold, all_samples):
     """
     Will fetch samples of the specified project from Charon and print the concordance
     """
@@ -518,16 +567,23 @@ def fetch_charon(context, project, threshold, all):
         for sample in result.get('samples'):
             sample_id = sample.get('sampleid')
             concordance = float(sample.get('genotype_concordance'))
-            samples[sample_id] = concordance
+            status = sample.get('genotype_status')
+            # exclude samples which were not yet checked
+            if status is not None:
+                samples[sample_id] = (concordance, status)
+
         # print output
-        if not all:
-            log.info('Samples below threshold: {}%'.format(threshold))
-        for sample, concordance in samples.items():
+        if not all_samples:
+            print 'Samples below threshold: {}%'.format(threshold)
+
+        for sample_id in sorted(samples.keys()):
+            concordance, status = samples[sample_id]
+            print sample_id, concordance, status
             # if --all, we don't care about threshold
-            if all or concordance < threshold:
+            if all or concordance <= threshold:
                 # do not print 0%
-                # if concordance != 0:
-                    log.info('{}: \t {} %'.format(sample, concordance))
+                if concordance != 0:
+                    print '{} {} {} %'.format(sample, concordance, status)
     except Exception, e:
         log.error("Can't fetch Charon. Error says: {}".format(str(e)))
 
