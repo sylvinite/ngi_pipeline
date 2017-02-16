@@ -415,9 +415,8 @@ def check_concordance(sample, vcf_data, gt_data, config):
             conc_file.write(result)
 
     if len(matches) + len(mismatches) + len(lost) != len(vcf_data):
-        log.warning('CHECK RESULTS!! Numbers are incoherent. Total number: {}, matches: {}, mismatches: {}, lost: {}'.format(len(vcf_data), len(matches), len(mismatches), len(lost)))
+        log.warning('CHECK RESULTS!! Numbers are incoherent. Total number of positions: {}, matches: {}, mismatches: {}, lost: {}'.format(len(vcf_data), len(matches), len(mismatches), len(lost)))
 
-    # todo:
     if len(lost) >= 30:
         log.warning('Too few positions in VCF file!! Failed to caclulate concordance')
     return percent_matches
@@ -427,69 +426,26 @@ def run_gatk(sample, config):
     ANALYSIS_PATH = config.get('ANALYSIS_PATH')
     # the path has been already checked, but checking again
     if os.path.exists(ANALYSIS_PATH):
-        gvcf_file = os.path.join(ANALYSIS_PATH, project, 'piper_ngi/07_variant_calls/{}.clean.dedup.recal.bam.genomic.vcf.gz'.format(sample))
-        if not os.path.exists(gvcf_file):
-            log.error('GVCF file does not exist! {}'.format(gvcf_file))
+        bamfile = os.path.join(ANALYSIS_PATH, project, 'piper_ngi/05_processed_alignments/{}.clean.dedup.bam'.format(sample))
+        if not os.path.exists(bamfile):
+            log.error('bamfile does not exist! {}'.format(bamfile))
             return None
         project = sample.split('_')[0]
         # the path has been already checked
         output_file = os.path.join(ANALYSIS_PATH, project, 'piper_ngi/03_genotype_concordance', "{sample}.vcf".format(sample=sample))
-        options = """-T GenotypeGVCFs  --variant {gvcf_file} -R {gatk_ref_file} -o {output_file}  -L {interval_file} """.format(
-                gvcf_file=gvcf_file,
-                output_file=output_file,
+        options = """-T UnifiedGenotyper  -I {bamfile} -R {gatk_ref_file} -o {sample}  -D {gatk_var_file} -L {interval_file} -out_mode EMIT_ALL_SITES """.format(
+                bamfile=bamfile,
+                sample=output_file,
                 interval_file=config.get('INTERVAL_FILE'),
-                gatk_ref_file=config.get('GATK_REF_FILE'))
+                gatk_ref_file=config.get('GATK_REF_FILE'),
+                gatk_var_file=config.get('GATK_VAR_FILE'))
         full_command = 'java -Xmx6g -jar {} {}'.format(config.get('GATK_PATH'), options)
         try:
             subprocess.call(full_command.split())
         except:
-            return None
-        return output_file
-
-
-# #Select a sample and restrict the output vcf to a set of intervals:
-# java -Xmx2g -jar GenomeAnalysisTK.jar \
-#        -R ref.fasta \
-#        -T SelectVariants \
-#        --variant input.vcf \
-#        -o output.vcf \
-#        -L /path/to/my.interval_list \
-#        -sn SAMPLE_1_ACTG
-
-
-#
-# # java -Xmx6g -jar /sw/apps/bioinfo/GATK/3.5.0/GenomeAnalysisTK.jar -T GenotypeGVCFs --variant /proj/ngi2016003/nobackup/NGI/ANALYSIS/P4601/piper_ngi/07_variant_calls/P4601_171.clean.dedup.recal.bam.genomic.vcf.gz -R /sw/data/uppnex/reference/biodata/GATK/ftp.broadinstitute.org/bundle/2.8/b37/human_g1k_v37.fasta -o P4601_171.GenotypeGVCFs -L /lupus/proj/ngi2016003/software/script/gt_concordance/input/snps.interval_list
-# # java -jar GenomeAnalysisTK.jar \
-# # -T GenotypeGVCFs \
-# #   -R reference.fasta \
-# #   --variant P4601_252.clean.dedup.recal.bam.genomic.vcf.gz\
-# #  -o output.vcf
-
-# def run_gatk(sample, config):
-#     project = sample.split('_')[0]
-#     ANALYSIS_PATH = config.get('ANALYSIS_PATH')
-#     # the path has been already checked, but checking again
-#     if os.path.exists(ANALYSIS_PATH):
-#         bamfile = os.path.join(ANALYSIS_PATH, project, 'piper_ngi/05_processed_alignments/{}.clean.dedup.bam'.format(sample))
-#         if not os.path.exists(bamfile):
-#             log.error('bamfile does not exist! {}'.format(bamfile))
-#             return None
-#         project = sample.split('_')[0]
-#         # the path has been already checked
-#         output_file = os.path.join(ANALYSIS_PATH, project, 'piper_ngi/03_genotype_concordance', "{sample}.vcf".format(sample=sample))
-#         options = """-T UnifiedGenotyper  -I {bamfile} -R {gatk_ref_file} -o {sample}  -D {gatk_var_file} -L {interval_file} -out_mode EMIT_ALL_SITES """.format(
-#                 bamfile=bamfile,
-#                 sample=output_file,
-#                 interval_file=config.get('INTERVAL_FILE'),
-#                 gatk_ref_file=config.get('GATK_REF_FILE'),
-#                 gatk_var_file=config.get('GATK_VAR_FILE'))
-#         full_command = 'java -Xmx6g -jar {} {}'.format(config.get('GATK_PATH'), options)
-#         try:
-#             subprocess.call(full_command.split())
-#         except:
-#             pass
-#         else:
-#             return output_file
+            pass
+        else:
+            return output_file
 
 def update_charon(sample, status, concordance=None):
     project_id = sample.split('_')[0]
@@ -573,17 +529,15 @@ def fetch_charon(context, project, threshold, all_samples):
                 samples[sample_id] = (concordance, status)
 
         # print output
-        if not all_samples:
+        if not all_samples and samples:
             print 'Samples below threshold: {}%'.format(threshold)
-
-        for sample_id in sorted(samples.keys()):
-            concordance, status = samples[sample_id]
-            print sample_id, concordance, status
+        for sample in sorted(samples.keys()):
+            concordance, status = samples[sample]
             # if --all, we don't care about threshold
-            if all or concordance <= threshold:
+            if all_samples or concordance <= threshold:
                 # do not print 0%
                 if concordance != 0:
-                    print '{} {} {} %'.format(sample, concordance, status)
+                    print '{} {}% {}'.format(sample, concordance, status)
     except Exception, e:
         log.error("Can't fetch Charon. Error says: {}".format(str(e)))
 
