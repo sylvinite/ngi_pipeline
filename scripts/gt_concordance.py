@@ -269,6 +269,8 @@ def run_genotype_sample(context, sample, force=None):
             log.warning('VCF file and GT file contain different number of positions!! ({}, {})'.format(len(vcf_data), len(gt_data)))
         if len(vcf_data) <= 30:
             log.warning('VCF file contans only {} positions! Skipping concordance check'.format(len(vcf_data)))
+            # generate .conc files, but update charon as 0
+            check_concordance(sample, vcf_data, gt_data, config)
             concordance = 0.0
         else:
             concordance = check_concordance(sample, vcf_data, gt_data, config)
@@ -447,14 +449,17 @@ def run_gatk(sample, config):
         else:
             return output_file
 
-def update_charon(sample, status, concordance=None):
-    project_id = sample.split('_')[0]
+def update_charon(sample_id, status, concordance=None):
+    project_id = sample_id.split('_')[0]
     try:
         charon_session = CharonSession()
+        sample = charon_session.sample_get(project_id, sample_id)
         if concordance is None:
-            charon_session.sample_update(projectid=project_id, sampleid=sample,genotype_status=status)
+            if sample.get('genotype_status') != status:
+                charon_session.sample_update(projectid=project_id, sampleid=sample_id,genotype_status=status)
         else:
-            charon_session.sample_update(projectid=project_id, sampleid=sample,genotype_status=status, genotype_concordance=concordance)
+            if sample.get('genotype_status') != status or sample.get('genotype_concordance') != concordance:
+                charon_session.sample_update(projectid=project_id, sampleid=sample_id,genotype_status=status, genotype_concordance=concordance)
     except CharonError as e:
         return str(e)
 
