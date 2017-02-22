@@ -84,7 +84,7 @@ def parse_xl_files(context):
         # update charon
         updated_samples = []
         for sample in samples_to_update:
-            error = update_charon(sample, 'AVAILABLE')
+            error = update_gt_status_in_charon(sample, 'AVAILABLE')
             if error is None:
                 updated_samples.append(sample)
             else:
@@ -214,12 +214,12 @@ def genotype_sample(context, sample, force):
         concordance = run_genotype_sample(sample, force)
         if concordance is None:
             log.error('Failed to genotype sample: {}'.format(sample))
-            error = update_charon(sample, status='FAILED')
+            error = update_gt_status_in_charon(sample, status='FAILED')
             if error:
                 log.error('Sample has not been updated in Charon: {}'.format(sample))
                 log.error('Error says: {}'.format(error))
         else:
-            error = update_charon(sample, status='DONE', concordance=concordance)
+            error = update_gt_status_in_charon(sample, status='DONE', concordance=concordance)
             if error:
                 log.error('Sample has not been updated in Charon: {}'.format(sample))
                 log.error('Error says: {}'.format(error))
@@ -416,11 +416,16 @@ def check_concordance(sample, vcf_data, gt_data, config):
         with open(os.path.join(output_path, '{}.conc'.format(sample)), 'w+') as conc_file:
             conc_file.write(result)
 
+    # if numbers don't match, we return 0
     if len(matches) + len(mismatches) + len(lost) != len(vcf_data):
         log.warning('CHECK RESULTS!! Numbers are incoherent. Total number of positions: {}, matches: {}, mismatches: {}, lost: {}'.format(len(vcf_data), len(matches), len(mismatches), len(lost)))
+        percent_matches = 0
 
-    if len(lost) >= 30:
-        log.warning('Too few positions in VCF file!! Failed to caclulate concordance')
+    # if not enough positions, also return 0
+    if len(matches) + len(mismatches) < 30:
+        log.warning('Too few positions to calculate the concordance!')
+        percent_matches = 0
+
     return percent_matches
 
 def run_gatk(sample, config):
@@ -445,11 +450,11 @@ def run_gatk(sample, config):
         try:
             subprocess.call(full_command.split())
         except:
-            pass
-        else:
-            return output_file
+            return None
+        
+        return output_file
 
-def update_charon(sample_id, status, concordance=None):
+def update_gt_status_in_charon(sample_id, status, concordance=None):
     project_id = sample_id.split('_')[0]
     try:
         charon_session = CharonSession()
@@ -488,13 +493,13 @@ def genotype_project(context, project, force):
             sample = gt_file.split('.')[0]
             concordance = run_genotype_sample(sample, force)
             if concordance is None:
-                error = update_charon(sample, status='FAILED')
+                error = update_gt_status_in_charon(sample, status='FAILED')
                 if error:
                     log.error('Sample has not been updated in Charon: {}'.format(sample))
                     log.error('Error says: {}'.format(error))
                 failed.append(sample)
             else:
-                error = update_charon(sample, status='DONE', concordance=concordance)
+                error = update_gt_status_in_charon(sample, status='DONE', concordance=concordance)
                 if error:
                     log.error('Sample has not been updated in Charon: {}'.format(sample))
                     log.error('Error says: {}'.format(error))
