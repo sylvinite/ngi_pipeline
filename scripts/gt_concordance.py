@@ -451,7 +451,7 @@ def run_gatk(sample, config):
             subprocess.call(full_command.split())
         except:
             return None
-        
+
         return output_file
 
 def update_gt_status_in_charon(sample_id, status, concordance=None):
