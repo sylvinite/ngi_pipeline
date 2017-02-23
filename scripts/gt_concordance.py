@@ -28,9 +28,24 @@ def cli(context, config_file_path, config, custom_config=None):
             exit(1)
         with open(custom_config, 'r') as config_file:
             config = yaml.load(config_file) or {}
+            config = config.get('gt_concordance') or {}
     # if not, using ngi_pipeline config
     else:
         log.info('Using ngi_pipeline config file: {}'.format(os.path.abspath(config_file_path)))
+        gt_concordance_config = config.get('gt_concordance')
+        if gt_concordance_config is None:
+            log.error('NGI_CONFIG requires gt_concordance section!')
+            exit(1)
+        analysis_config = config.get('analysis')
+        if analysis_config is None:
+            log.error('NGI_CONFIG missing analysis section!')
+            exit(1)
+        ANALYSIS_PATH = os.path.join(analysis_config.get('base_root'), analysis_config.get('sthlm_root'), analysis_config.get('top_dir'), 'ANALYSIS')
+        if 'None' in ANALYSIS_PATH:
+            log.error('base_root, sthlm_root and top_dir must be specified! Check the config file')
+            exit(1)
+        gt_concordance_config['ANALYSIS_PATH'] = ANALYSIS_PATH
+        config = gt_concordance_config
     context.obj = config
 
 @cli.command()
