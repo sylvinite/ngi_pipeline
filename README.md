@@ -172,6 +172,6 @@ ANALYSIS_PATH: /proj/ngi2016003/nobackup/NGI/ANALYSIS
 GATK_PATH: /sw/apps/bioinfo/GATK/3.5.0/GenomeAnalysisTK.jar
 GATK_REF_FILE: /sw/data/uppnex/reference/biodata/GATK/ftp.broadinstitute.org/bundle/2.8/b37/human_g1k_v37.fasta
 GATK_VAR_FILE: /sw/data/uppnex/reference/biodata/GATK/ftp.broadinstitute.org/bundle/2.8/b37/dbsnp_138.b37.vcf
-INTERVAL_FILE: /lupus/proj/ngi2016003/software/script/gt_concordance/input/snps.interval_list
-SNPS_FILE: /lupus/proj/ngi2016003/software/script/gt_concordance/input/maf_snps.txt
+INTERVAL_FILE: /lupus/proj/ngi2016003/genotype_data/static/snps.interval_list
+SNPS_FILE: /lupus/proj/ngi2016003/genotype_data/static/maf_snps.txt
 ```
