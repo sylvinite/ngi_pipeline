@@ -35,7 +35,7 @@ class NGIAnalysis(object):
         try:
             return get_engine_for_bp(self.project, self.config, self.config_file_path)
         except (RuntimeError, CharonError) as e:
-            self.LOG.error('Cannot identify engine for project {} : {}'.format(self.project, e))
+            self.log.error('Cannot identify engine for project {} : {}'.format(self.project, e))
             return None
 
 
