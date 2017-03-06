@@ -14,6 +14,7 @@ import os
 import shutil
 import sys
 
+from ngi_pipeline import __version__
 from ngi_pipeline.conductor import flowcell
 from ngi_pipeline.conductor import launchers
 from ngi_pipeline.conductor.flowcell import organize_projects_from_flowcell, \
@@ -90,7 +91,8 @@ if __name__ == "__main__":
     subparsers = parser.add_subparsers(help="Choose the mode to run")
     parser.add_argument("-v", "--verbose", dest="quiet", action="store_false",
             help=("Send mails (INFO/WARN/ERROR); default False."))
-
+    parser.add_argument("-w", "--version", action='version', 
+            version='NGI Pipeline version {version}'.format(version=__version__), help="Displays current version number")
     # Add subparser for the server
     parser_server = subparsers.add_parser('server', help="Start ngi_pipeline server")
     parser_server.add_argument('-p', '--port', type=int,
