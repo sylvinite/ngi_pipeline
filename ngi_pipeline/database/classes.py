@@ -50,7 +50,7 @@ class CharonSession(requests.Session):
                     headers=self._api_token_dict, timeout=3))
 
         self._project_params = ('projectid', 'name', 'status', 'best_practice_analysis',
-                                'sequencing_facility', 'delivery_status')
+                                'sequencing_facility', 'delivery_status', 'delivery_token')
         self._project_reset_params = tuple(set(self._project_params) - \
                                            set(['projectid', 'name',
                                                 'best_practice_analysis',
@@ -96,7 +96,7 @@ class CharonSession(requests.Session):
         return self.get(self.construct_charon_url('samples', projectid)).json()
 
     def project_update(self, projectid, name=None, status=None, best_practice_analysis=None,
-                       sequencing_facility=None, delivery_status=None):
+                       sequencing_facility=None, delivery_status=None, delivery_token=None):
         l_dict = locals()
         data = { k: l_dict.get(k) for k in self._project_params if l_dict.get(k)}
         return self.put(self.construct_charon_url('project', projectid),
