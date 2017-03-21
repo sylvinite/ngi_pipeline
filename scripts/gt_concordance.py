@@ -1,3 +1,4 @@
+#!/usr/bin/env python
 import sys
 import os
 import re
@@ -404,8 +405,10 @@ def check_concordance(sample, vcf_data, gt_data, config):
                 lost.append([chromosome, position, vcf_a1, vcf_a2, gt_a1, gt_a2])
 
     # calculating concordance and round to 2 decimals
-    percent_matches=round((float(len(matches))/float(len(vcf_data) - len(lost))*100), 2)
-
+    if len(vcf_data) - len(lost)>0:
+        percent_matches=round((float(len(matches))/float(len(vcf_data) - len(lost))*100), 2)
+    else:
+        percent_matches=0
     # sort by chromosome and position
     matches = sorted(matches, key=lambda x:(int(x[0]) if x[0] != 'X' else x[0], int(x[1])))
     mismatches = sorted(mismatches, key=lambda x:(int(x[0]) if x[0] != 'X' else x[0], int(x[1])))
