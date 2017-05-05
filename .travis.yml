@@ -6,6 +6,7 @@ python:
 before_install:
     - pip install setuptools --upgrade
     - pip install pyexcel
+    - pip install ipython==5.3.0
 
 install:
     - python setup.py install
