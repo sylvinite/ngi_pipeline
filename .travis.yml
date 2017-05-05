@@ -5,15 +5,13 @@ python:
 
 before_install:
     - pip install setuptools --upgrade
-#    - pip install pyexcel
-#    - pip install ipython==5.3.0
     - pip install -r requirements.txt
 
 install:
     - pip install .
 
 script:
-    - echo "Dummy: Travis done."
+    - echo "Dummy call, Travis is done."
 
 notifications:
     email: false
